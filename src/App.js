@@ -9,6 +9,18 @@ const statusLabel = (p) => p === 100 ? "Completo" : p >= 50 ? "En proceso" : "In
 const statusBg = (p) => p === 100 ? "#ECFDF5" : p >= 50 ? "#FFFBEB" : "#FEF2F2";
 const API = "http://localhost:3001";
 
+const ESTADO_DESMARQUE = {
+  "DESMARCADO":                { color: "#0891B2", bg: "#E0F7FA", label: "Desmarcado" },
+  "INFORME EN DOM":            { color: "#7C3AED", bg: "#F5F3FF", label: "Informe en DOM" },
+  "NO CALIFICA":               { color: "#DC2626", bg: "#FEF2F2", label: "No Califica" },
+  "INFORME EN SERVIU":         { color: "#3D5A23", bg: "#ECFDF5", label: "Informe en SERVIU" },
+  "VISITA HECHA FALTA INFORME":{ color: "#C2693A", bg: "#FFF3E0", label: "Visita hecha falta informe" },
+  "EN DOM POR RETIRAR":        { color: "#C2185B", bg: "#FCE4EC", label: "En DOM por retirar" },
+  "POSTULANDO":                { color: "#059669", bg: "#ECFDF5", label: "Postulando" },
+  "APELAR SERVIU":             { color: "#B45309", bg: "#FFFBEB", label: "Apelar SERVIU" },
+  "NO VISITADO":               { color: "#555", bg: "#F5F5F5", label: "No Visitado" },
+};
+
 const PROGRAMAS = [
   {
     id: "habitabilidad",
@@ -660,6 +672,7 @@ function SolicitudesView({ solicitudes }) {
 // ─── DETALLE COMITÉ ───────────────────────────────────────────────────────────
 function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSavePersonas, onSaveSolicitudes, onDetail }) {
   const [search, setSearch] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
   const [showModalPersona, setShowModalPersona] = useState(false);
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId };
   const [form, setForm] = useState(EMPTY);
@@ -668,11 +681,13 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
   if (!comite) return null;
 
   const miembros = personas.filter(p => p.comiteId === comiteId);
-  const filtered = miembros.filter(p =>
-    p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    p.rut.includes(search) ||
-    (p.comuna || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = miembros.filter(p => {
+    const matchSearch = p.nombre.toLowerCase().includes(search.toLowerCase()) ||
+      p.rut.includes(search) ||
+      (p.comuna || "").toLowerCase().includes(search.toLowerCase());
+    const matchEstado = filtroEstado === "todos" || p.estado_desmarque === filtroEstado;
+    return matchSearch && matchEstado;
+  });
 
   const getSols = (id) => solicitudes.filter(s => s.personaId === id);
   const getDocPct = (id) => {
@@ -730,6 +745,21 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
         <button onClick={() => setShowModalPersona(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo integrante</button>
       </div>
 
+      {/* Filtros por estado si es comité desmarque */}
+      {comiteId === "comite_desmarque" && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+          {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
+            <button key={k} onClick={() => setFiltroEstado(k)}
+              style={{ padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
+                border:"2px solid "+(filtroEstado===k?c:"#ddd"),
+                background:filtroEstado===k?c:"#fff",
+                color:filtroEstado===k?"#fff":"#555" }}>
+              {l} {k!=="todos" ? "("+miembros.filter(p=>p.estado_desmarque===k).length+")" : "("+miembros.length+")"}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de" }}>
         <input placeholder="Buscar por nombre, RUT o comuna..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
       </div>
@@ -751,6 +781,10 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>RUT: {p.rut}{p.comuna ? " - " + p.comuna : ""}</div>
+                  {p.estado_desmarque && (() => {
+                    const est = ESTADO_DESMARQUE[p.estado_desmarque] || ESTADO_DESMARQUE["NO VISITADO"];
+                    return <span style={{ display:"inline-block", marginTop:4, background: est.bg, color: est.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>{est.label}</span>;
+                  })()}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
