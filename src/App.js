@@ -21,6 +21,19 @@ const ESTADO_DESMARQUE = {
   "NO VISITADO":               { color: "#555", bg: "#F5F5F5", label: "No Visitado" },
 };
 
+// Calcula estado desmarque automáticamente según documentos ingresados
+const calcularEstadoDesmarque = (sol, estadoActual) => {
+  if (!sol || sol.programaId !== "habitabilidad") return estadoActual;
+  // Si ya está en estado manual final, no cambiar
+  if (["NO CALIFICA","APELAR SERVIU","DESMARCADO"].includes(estadoActual)) return estadoActual;
+  const docs = sol.documentos || [];
+  const tieneCarta = docs.some(d => d.nombre && d.nombre.includes("Carta SERVIU") && d.entregado && d.valor);
+  const tieneMemo = docs.some(d => d.nombre && d.nombre.includes("Memo DOM") && d.entregado && d.valor);
+  if (tieneCarta) return "INFORME EN SERVIU";
+  if (tieneMemo) return "INFORME EN DOM";
+  return estadoActual || "NO VISITADO";
+};
+
 const PROGRAMAS = [
   {
     id: "habitabilidad",
@@ -269,6 +282,9 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
   const [progSel, setProgSel] = useState("");
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
+  const [showModalComprobante, setShowModalComprobante] = useState(false);
+  const [notaRechazo, setNotaRechazo] = useState("");
+  const [resultadoComp, setResultadoComp] = useState("");
   const fileRef = useRef();
 
   const persona = personas.find(p => p.id === personaId);
@@ -300,6 +316,13 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
     try {
       await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
       await cargarArchivos();
+      // Si es comité desmarque, preguntar si es comprobante SERVIU
+      if (persona.comiteId === "comite_desmarque") {
+        const esComp = window["confirm"]("¿Este archivo es el Comprobante SERVIU de desmarque?");
+        if (esComp) {
+          setShowModalComprobante(true);
+        }
+      }
     } catch (err) { alert("Error al subir el archivo."); }
     setSubiendo(false);
     e.target.value = "";
@@ -310,6 +333,18 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
     if (!ok) return;
     await fetch(API + "/archivos/" + encodeURIComponent(carpeta) + "/" + encodeURIComponent(nombre), { method: "DELETE" });
     await cargarArchivos();
+  };
+
+  const guardarResultadoComprobante = async () => {
+    if (!resultadoComp) return;
+    let nuevoEstado = resultadoComp;
+    const updPersona = { ...persona, estado_desmarque: nuevoEstado };
+    if (notaRechazo) updPersona.observaciones = notaRechazo;
+    await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: notaRechazo || persona.observaciones }).eq("id", persona.id);
+    onSavePersonas(personas.map(p => p.id === persona.id ? updPersona : p));
+    setShowModalComprobante(false);
+    setNotaRechazo("");
+    setResultadoComp("");
   };
 
   const yaInscritos = misSols.map(s => s.programaId);
@@ -332,9 +367,26 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
   };
 
   const toggleDoc = (solId, idx) => {
-    onSaveSolicitudes(solicitudes.map(s => s.id !== solId ? s : {
+    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s, documentos: s.documentos.map((d, i) => i === idx ? { ...d, entregado: !d.entregado } : d)
-    }));
+    });
+    onSaveSolicitudes(nuevasSols);
+  };
+
+  const setDocValor = async (solId, idx, valor) => {
+    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
+      ...s, documentos: s.documentos.map((d, i) => i !== idx ? d : { ...d, valor, entregado: valor.trim() !== "" })
+    });
+    onSaveSolicitudes(nuevasSols);
+    // Actualizar estado automático si es desmarque
+    if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","DESMARCADO"].includes(persona.estado_desmarque)) {
+      const sol = nuevasSols.find(s => s.id === solId);
+      const nuevoEstado = calcularEstadoDesmarque(sol, persona.estado_desmarque);
+      if (nuevoEstado !== persona.estado_desmarque) {
+        await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
+        onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
+      }
+    }
   };
 
   // Setea la opción especial de un documento (luz/agua/discapacidad)
@@ -371,6 +423,10 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
             {(persona.puntajeRSH || persona.integrantesFamiliares) && <div style={{ fontSize: 13, color: "#888" }}>{persona.puntajeRSH ? "RSH: " + persona.puntajeRSH : ""}{persona.integrantesFamiliares ? " - Grupo familiar: " + persona.integrantesFamiliares + " personas" : ""}</div>}
             {comite && <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 4, fontWeight: 600 }}>Comité: {comite.nombre}</div>}
+            {persona.estado_desmarque && (() => {
+              const est = ESTADO_DESMARQUE[persona.estado_desmarque] || ESTADO_DESMARQUE["NO VISITADO"];
+              return <span style={{ display:"inline-block", marginTop:6, background:est.bg, color:est.color, borderRadius:10, padding:"4px 14px", fontSize:13, fontWeight:800 }}>{est.label}</span>;
+            })()}
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 28, textAlign: "center" }}>
             <div><div style={{ fontSize: 28, fontWeight: 800, color: "#1e3a5f" }}>{misSols.length}</div><div style={{ fontSize: 11, color: "#aaa" }}>PROGRAMAS</div></div>
@@ -497,6 +553,20 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
                       </div>
                     )}
 
+                    {/* Input de número/valor para documentos de trámite */}
+                    {(doc.nombre && (doc.nombre.includes("Memo DOM") || doc.nombre.includes("Carta SERVIU") || doc.nombre.includes("Informe DOM") || doc.nombre.includes("fecha_visita"))) && (
+                      <div style={{ marginTop: 6 }}>
+                        <input
+                          type="text"
+                          placeholder={doc.nombre.includes("Informe DOM") ? "N° y fecha informe..." : doc.nombre.includes("Memo") ? "N° memo DOM..." : "N° y fecha carta SERVIU..."}
+                          value={doc.valor || ""}
+                          onChange={e => setDocValor(sol.id, i, e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, background:"#fff" }}
+                        />
+                      </div>
+                    )}
+
                     {/* Mensaje según opción seleccionada */}
                     {necesitaArchivo && !doc.entregado && (
                       <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
@@ -523,6 +593,41 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
           </div>
         );
       })}
+
+      {showModalComprobante && (
+        <Modal title="Resultado Comprobante SERVIU" onClose={() => { setShowModalComprobante(false); setNotaRechazo(""); setResultadoComp(""); }}>
+          <div style={{ fontSize: 14, color: "#444", marginBottom: 20 }}>¿Cuál es el resultado del Comprobante SERVIU para <strong>{persona.nombre}</strong>?</div>
+          <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
+            {[
+              { k: "DESMARCADO", label: "✅ Desmarcado", color: "#0891B2", bg: "#E0F7FA" },
+              { k: "APELAR SERVIU", label: "🟡 Apelar SERVIU", color: "#B45309", bg: "#FFFBEB" },
+              { k: "NO CALIFICA", label: "🔴 No Califica", color: "#DC2626", bg: "#FEF2F2" },
+            ].map(op => (
+              <div key={op.k} onClick={() => setResultadoComp(op.k)}
+                style={{ padding: "14px 18px", borderRadius: 10, border: "2px solid " + (resultadoComp === op.k ? op.color : "#e5e7eb"),
+                  background: resultadoComp === op.k ? op.bg : "#fff", cursor: "pointer", fontWeight: 700, color: op.color, fontSize: 15 }}>
+                {op.label}
+              </div>
+            ))}
+          </div>
+          {(resultadoComp === "APELAR SERVIU" || resultadoComp === "NO CALIFICA") && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 6 }}>
+                {resultadoComp === "APELAR SERVIU" ? "Medidas para apelar:" : "Razón de rechazo:"}
+              </div>
+              <textarea value={notaRechazo} onChange={e => setNotaRechazo(e.target.value)}
+                placeholder={resultadoComp === "APELAR SERVIU" ? "Ingrese las medidas para apelar..." : "Ingrese la razón de rechazo..."}
+                style={{ width: "100%", minHeight: 80, borderRadius: 8, border: "1.5px solid #ddd", padding: "10px 12px", fontSize: 13, resize: "vertical" }} />
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button onClick={() => { setShowModalComprobante(false); setNotaRechazo(""); setResultadoComp(""); }}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={guardarResultadoComprobante} disabled={!resultadoComp}
+              style={{ padding: "9px 20px", borderRadius: 8, background: resultadoComp ? "#1e3a5f" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: resultadoComp ? "pointer" : "not-allowed" }}>Guardar</button>
+          </div>
+        </Modal>
+      )}
 
       {showModal && (
         <Modal title="Asignar programa" onClose={() => setShowModal(false)}>
