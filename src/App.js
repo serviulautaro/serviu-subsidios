@@ -3466,7 +3466,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   // Valor extra guardado en doc.valor como JSON cuando hay múltiples campos
                   const valObj = (() => { try { return doc.valor ? JSON.parse(doc.valor) : {}; } catch { return { raw: doc.valor }; } })();
 
-                  const archivoOk = reqArch || esCedula || esAhorro ? archivos.some(a => {
+                  const archivoOk = reqArch || esCedula || esAhorro ? !!doc.archivo || archivos.some(a => {
                     const key = nomDoc.replace(/\s/g,'').slice(0,6);
                     return a.toLowerCase().includes(key.slice(0,5));
                   }) : true;
@@ -3477,7 +3477,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   const ahorroOk    = esAhorro  ? (archivoOk && !!(valObj.numeroCuenta || "").trim()) : true;
                   const rshOk       = esRsh     ? !!(valObj.porcentaje || doc.valor || "").toString().trim() : true;
                   const ingresoOk   = esIngreso ? !!(valObj.monto || doc.valor || "").toString().trim() : true;
-                  const requisitosOk = cedulaOk && ahorroOk && rshOk && ingresoOk;
+                  const archivoReqOk = reqArch || esCedula || esAhorro ? archivoOk : true;
+                  const requisitosOk = archivoReqOk && textoOk && cedulaOk && ahorroOk && rshOk && ingresoOk;
 
                   const bgColor    = doc.entregado ? "#ECFDF5" : requisitosOk ? "#FFFBEB" : "#FAFAFA";
                   const bordeColor = doc.entregado ? "#6EE7B7" : requisitosOk ? "#FCD34D" : "#e5e7eb";
@@ -3499,6 +3500,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
                   };
 
+                  const guardarArchivoDoc = async (file) => {
+                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
+                      ...s,
+                      documentos: s.documentos.map((d, j) => j === i ? { ...d, archivo: file.name } : d)
+                    });
+                    onSaveSolicitudes(nuevasSols);
+                    await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
+                  };
+
                   return (
                     <div key={i} style={{ borderRadius: 9, border: "1.5px solid " + bordeColor, background: bgColor, padding: "10px 14px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -3509,6 +3519,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           <div style={{ fontSize: 12, fontWeight: 600, color: doc.entregado ? "#065f46" : "#374151" }}>{doc.nombre}</div>
                           {!doc.obligatorio && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
                           {requisitosOk && !doc.entregado && <div style={{ fontSize: 10, color: "#D97706", fontWeight: 700 }}>✓ Listo para marcar VB</div>}
+                          {(reqArch || esCedula || esAhorro) && !archivoOk && !doc.entregado && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>Primero sube el archivo correspondiente</div>}
                         </div>
                         {!doc.entregado && requisitosOk && (
                           <button onClick={marcarVB} style={{ padding: "4px 12px", borderRadius: 6, background: "#059669", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓ VB</button>
@@ -3526,6 +3537,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 const file = e.target.files[0]; if (!file) return;
                                 const fd = new FormData(); fd.append("archivo", file);
                                 await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                await guardarArchivoDoc(file);
                                 await cargarArchivos();
                                 await marcarVB();
                                 e.target.value = "";
@@ -3542,6 +3554,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                   const file = e.target.files[0]; if (!file) return;
                                   const fd = new FormData(); fd.append("archivo", file);
                                   await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                  await guardarArchivoDoc(file);
                                   await cargarArchivos();
                                   if ((valObj.numeroCuenta || "").trim()) await marcarVB();
                                   e.target.value = "";
@@ -3597,9 +3610,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 const file = e.target.files[0]; if (!file) return;
                                 const fd = new FormData(); fd.append("archivo", file);
                                 await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                await guardarArchivoDoc(file);
                                 await cargarArchivos();
-                                const txtOkNow = reqTxt ? !!(doc.valor && doc.valor.trim()) : true;
-                                if (txtOkNow) await marcarVB();
                                 e.target.value = "";
                               }} />}
                             </label>
@@ -5777,8 +5789,16 @@ function SolicitudesView({ solicitudes, personas = [], onDetail }) {
   const personaSeleccionada = personas.find(p => p.id === personaSelId) || null;
   const personaIdsSeleccionados = idsRelacionados(personaSeleccionada);
   const term = normBuscar(search);
+  const buscaPorCedula = /[0-9]/.test(search) && rutBuscar(search).length >= 7;
+  const cedulaBusquedaValida = !buscaPorCedula || rutFormatoChilenoValido(search);
   const resultadosPersonas = term.length >= 2
-    ? personas.filter(p => normBuscar(`${p.nombre || ""} ${p.rut || ""}`).includes(term)).slice(0, 12)
+    ? personas.filter(p => {
+        if (buscaPorCedula) {
+          if (!cedulaBusquedaValida) return false;
+          return rutBuscar(p.rut) === rutBuscar(search);
+        }
+        return normBuscar(`${p.nombre || ""} ${p.rut || ""}`).includes(term);
+      }).slice(0, 12)
     : [];
 
   const solicitudesBase = personaSeleccionada
@@ -5826,7 +5846,7 @@ function SolicitudesView({ solicitudes, personas = [], onDetail }) {
             value={search}
             onChange={e => { setSearch(e.target.value); if (personaSelId) setPersonaSelId(null); }}
             placeholder="Escribe nombre o cédula/RUT"
-            style={{ padding: "11px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, background: "#fff" }}
+            style={{ padding: "11px 14px", borderRadius: 8, border: "1px solid " + (buscaPorCedula && !cedulaBusquedaValida ? "#DC2626" : "#ddd"), fontSize: 14, background: "#fff" }}
           />
           <button onClick={limpiarPersona} style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid #ddd", background: "#f8fafc", color: "#555", fontWeight: 700, cursor: "pointer" }}>
             Limpiar
@@ -5835,6 +5855,18 @@ function SolicitudesView({ solicitudes, personas = [], onDetail }) {
 
         {!personaSeleccionada && term.length > 0 && term.length < 2 && (
           <div style={{ marginTop: 10, fontSize: 12, color: "#888" }}>Escribe al menos 2 caracteres para buscar.</div>
+        )}
+
+        {!personaSeleccionada && buscaPorCedula && !cedulaBusquedaValida && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "#DC2626", fontWeight: 700 }}>
+            La cédula ingresada no es válida para Chile. Debe tener dígito verificador correcto.
+          </div>
+        )}
+
+        {!personaSeleccionada && buscaPorCedula && cedulaBusquedaValida && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "#059669", fontWeight: 700 }}>
+            Cédula válida: {formatRut(search)}
+          </div>
         )}
 
         {!personaSeleccionada && resultadosPersonas.length > 0 && (
