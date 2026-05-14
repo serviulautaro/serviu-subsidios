@@ -5966,18 +5966,34 @@ function SolicitudesView({ solicitudes, personas = [], onDetail }) {
 }
 
 // ─── DETALLE COMITÉ ───────────────────────────────────────────────────────────
-function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSavePersonas, onSaveSolicitudes, onDetail }) {
+function DetalleComite({ comiteId, comites, personas, solicitudes, programasCustom = [], onBack, onSavePersonas, onSaveSolicitudes, onDetail, currentUser, registrarAuditoria }) {
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [showModalPersona, setShowModalPersona] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [claveInput, setClaveInput] = useState("");
   const [claveError, setClaveError] = useState(false);
+  const [personaMover, setPersonaMover] = useState(null);
+  const [comiteDestinoMover, setComiteDestinoMover] = useState("");
+  const [motivoMovimiento, setMotivoMovimiento] = useState("");
+  const [moviendoPersona, setMoviendoPersona] = useState(false);
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId };
   const [form, setForm] = useState(EMPTY);
 
   const comite = comites.find(c => c.id === comiteId);
   if (!comite) return null;
+
+  const todosProgramas = [...PROGRAMAS, ...(programasCustom || [])];
+  const comitesDestino = [
+    { id: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
+    ...COMITES_FIJOS.map(c => ({
+      id: c.codigo,
+      nombre: c.nombre,
+      tipo: c.tipo,
+      programaId: c.tipo === "URBANO" ? "csp_urbano" : "csp_rural",
+    })),
+    ...(comites || []),
+  ].filter((c, idx, arr) => c.id !== comiteId && arr.findIndex(x => x.id === c.id) === idx);
 
   const miembros = personas.filter(p => p.comiteId === comiteId);
   const filtered = miembros.filter(p => {
@@ -6012,20 +6028,90 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
     setShowModalPersona(false);
   };
 
-  const eliminarPersona = (e, id) => {
-    e.stopPropagation();
-    setPendingDeleteId(id);
+  const confirmarEliminarPersona = () => {
+    setPendingDeleteId(null);
     setClaveInput("");
     setClaveError(false);
   };
 
-  const confirmarEliminarPersona = () => {
-    if (claveInput === "196560") {
-      onSavePersonas(personas.filter(x => x.id !== pendingDeleteId));
-      setPendingDeleteId(null);
-    } else {
-      setClaveError(true);
+  const abrirMover = (e, persona) => {
+    e.stopPropagation();
+    setPersonaMover(persona);
+    setComiteDestinoMover("");
+    setMotivoMovimiento("");
+  };
+
+  const moverPersona = async () => {
+    const motivo = motivoMovimiento.trim();
+    if (!personaMover || !comiteDestinoMover) return;
+    if (motivo.length < 8) {
+      alert("Debe escribir una razón clara del cambio antes de mover al solicitante.");
+      return;
     }
+    const destino = comitesDestino.find(c => c.id === comiteDestinoMover);
+    if (!destino) return;
+    setMoviendoPersona(true);
+    const origenNombre = comite?.nombre || personaMover.comite || personaMover.comiteId || "Sin comité anterior";
+    const usuario = currentUser?.nombre || "Usuario no identificado";
+    const nota = `[${today()}] Cambio de comité/programa: ${origenNombre} -> ${destino.nombre}. Motivo: ${motivo}. Usuario: ${usuario}`;
+    const observaciones = [personaMover.observaciones, nota].filter(Boolean).join("\n");
+    const tipoDestino = destino.tipo || (destino.programaId === "csp_urbano" ? "URBANO" : destino.programaId === "csp_rural" ? "RURAL" : "");
+    const personaActualizada = {
+      ...personaMover,
+      comiteId: destino.id,
+      comite: destino.nombre,
+      tipo_comite: tipoDestino,
+      observaciones,
+    };
+
+    const { supabase: sb } = await import("./supabaseClient");
+    await sb.from("personas").update({
+      comite_id: destino.id,
+      comite: destino.nombre,
+      tipo_comite: tipoDestino,
+      observaciones,
+    }).eq("id", personaMover.id);
+
+    const programaDestino = todosProgramas.find(p => p.id === destino.programaId);
+    let nuevasSolicitudes = solicitudes;
+    if (programaDestino && !solicitudes.some(s => s.personaId === personaMover.id && s.programaId === programaDestino.id)) {
+      const nuevaSol = {
+        id: uid(),
+        personaId: personaMover.id,
+        personaNombre: personaMover.nombre,
+        programaId: programaDestino.id,
+        fecha: today(),
+        comite: destino.nombre,
+        codigoComite: destino.id,
+        tipoComite: tipoDestino,
+        documentos: (programaDestino.documentos || []).map(d => ({
+          nombre: d.nombre,
+          obligatorio: d.obligatorio,
+          entregado: false,
+          tipo: d.tipo || null,
+          opciones: d.opciones || null,
+          opcionSeleccionada: null,
+          etiqueta: null,
+          valor: d.valor || "",
+        })),
+      };
+      nuevasSolicitudes = [...solicitudes, nuevaSol];
+      await onSaveSolicitudes(nuevasSolicitudes);
+    }
+
+    onSavePersonas(personas.map(p => p.id === personaMover.id ? personaActualizada : p));
+    await registrarAuditoria?.("mover_solicitante", "personas", personaMover.id, {
+      solicitante: personaMover.nombre,
+      desde: origenNombre,
+      hacia: destino.nombre,
+      programaDestino: programaDestino?.nombre || "",
+      motivo,
+    });
+    setPersonaMover(null);
+    setComiteDestinoMover("");
+    setMotivoMovimiento("");
+    setMoviendoPersona(false);
+    alert("Solicitante movido correctamente. La razón del cambio quedó guardada en observaciones.");
   };
 
   const completas = miembros.filter(p => {
@@ -6126,7 +6212,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
                   </div>
                 )}
                 <div style={{ background: sols > 0 ? "#F5F3FF" : "#f5f5f5", color: sols > 0 ? "#7C3AED" : "#999", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 700 }}>{sols} solicitudes</div>
-                <button onClick={(e) => eliminarPersona(e, p.id)} style={{ background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>X</button>
+                <button onClick={(e) => abrirMover(e, p)} style={{ background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Mover</button>
               </div>
             </div>
           );
@@ -6136,6 +6222,46 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
       {showModalPersona && (
         <Modal title="Registrar integrante" onClose={() => setShowModalPersona(false)}>
           <FormPersona form={form} setForm={setForm} onGuardar={guardarPersona} onCancelar={() => setShowModalPersona(false)} comiteIdFijo={comiteId} />
+        </Modal>
+      )}
+
+      {personaMover && (
+        <Modal title="Mover solicitante a otro comité" onClose={() => !moviendoPersona && setPersonaMover(null)}>
+          <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: 10, padding: "12px 14px", marginBottom: 16, color: "#92400E", fontSize: 13, lineHeight: 1.5 }}>
+            Este cambio no borra datos. Las solicitudes y documentos existentes se conservan, y la razón quedará guardada en observaciones del solicitante.
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Solicitante</div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 9, padding: "10px 12px", fontSize: 14, fontWeight: 700 }}>
+              {personaMover.nombre} <span style={{ color: "#64748b", fontWeight: 500 }}>- {formatRut(personaMover.rut)}</span>
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Comité / programa de destino</div>
+            <select value={comiteDestinoMover} onChange={e => setComiteDestinoMover(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #ddd", background: "#fff", fontSize: 14, boxSizing: "border-box" }}>
+              <option value="">-- Seleccionar destino --</option>
+              {comitesDestino.map(c => {
+                const prog = todosProgramas.find(p => p.id === c.programaId);
+                return <option key={c.id} value={c.id}>{c.nombre}{prog ? " - " + prog.nombre : ""}</option>;
+              })}
+            </select>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626", textTransform: "uppercase", marginBottom: 5 }}>Razón del cambio *</div>
+            <textarea value={motivoMovimiento} onChange={e => setMotivoMovimiento(e.target.value)}
+              placeholder="Ejemplo: se cambia por solicitud del postulante, corrección de programa, comité anterior no corresponde, etc."
+              rows={4}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid " + (motivoMovimiento.trim() ? "#F59E0B" : "#ddd"), fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button onClick={() => setPersonaMover(null)} disabled={moviendoPersona}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={moverPersona} disabled={!comiteDestinoMover || motivoMovimiento.trim().length < 8 || moviendoPersona}
+              style={{ padding: "9px 20px", borderRadius: 8, background: comiteDestinoMover && motivoMovimiento.trim().length >= 8 ? "#1D4ED8" : "#cbd5e1", color: "#fff", border: "none", fontSize: 14, fontWeight: 700, cursor: comiteDestinoMover && motivoMovimiento.trim().length >= 8 ? "pointer" : "not-allowed" }}>
+              {moviendoPersona ? "Moviendo..." : "Mover y guardar nota"}
+            </button>
+          </div>
         </Modal>
       )}
 
@@ -6920,7 +7046,7 @@ export default function App() {
         {!cargando && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} onNav={nav} />}
         {!cargando && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
         {!cargando && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
-        {!cargando && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
+        {!cargando && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
         {!cargando && view === "programas" && <ProgramasView solicitudes={solicitudes} programasCustom={programasCustom} onAddPrograma={async (prog) => {
           const { data, error } = await supabase.from("programas_custom").insert([{
             id: uid(), nombre: prog.nombre, descripcion: prog.descripcion,
