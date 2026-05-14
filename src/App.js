@@ -36,6 +36,10 @@ const rutFormatoChilenoValido = (rut) => {
   const formatted = formatRut(rut);
   return /^\d{1,2}\.\d{3}\.\d{3}-[0-9K]$/.test(formatted) && validarRutChileno(formatted);
 };
+const rutNumeroGuionValido = (rut) => {
+  const limpio = limpiarRut(rut || "");
+  return /^\d{7,8}-[0-9K]$/.test(limpio) && validarRutChileno(limpio);
+};
 
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -912,11 +916,14 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId: "" };
   const [form, setForm] = useState(EMPTY);
 
-  const filtered = personas.filter(p =>
-    p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    p.rut.includes(search) ||
-    (p.comuna || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const searchRut = limpiarRut(search.trim());
+  const searchActivo = searchRut.length > 0;
+  const searchRutValido = !searchActivo || rutNumeroGuionValido(searchRut);
+  const filtered = !searchActivo
+    ? personas
+    : searchRutValido
+      ? personas.filter(p => limpiarRut(p.rut || "") === searchRut)
+      : [];
 
   const getSols = (id) => solicitudes.filter(s => s.personaId === id);
   const getDocPct = (id) => {
@@ -1000,11 +1007,26 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
         <button onClick={() => setShowModal(true)} style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo solicitante</button>
       </div>
 
-      <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de" }}>
-        <input placeholder="Buscar por nombre, RUT o comuna..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
+      <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: searchActivo && !searchRutValido ? 6 : 18, display: "flex", alignItems: "center", gap: 10, border: "1.5px solid " + (searchActivo && !searchRutValido ? "#DC2626" : "#e8e3de") }}>
+        <input
+          placeholder="Buscar solo por cédula: 10398338-K"
+          value={search}
+          onChange={e => setSearch(limpiarRut(e.target.value))}
+          style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }}
+        />
       </div>
+      {searchActivo && !searchRutValido && (
+        <div style={{ marginBottom: 18, fontSize: 12, color: "#DC2626", fontWeight: 700 }}>
+          La cédula debe ingresarse sin puntos, con guion y dígito verificador chileno correcto. Ejemplo: 10398338-K
+        </div>
+      )}
+      {searchActivo && searchRutValido && (
+        <div style={{ marginBottom: 18, fontSize: 12, color: "#059669", fontWeight: 700 }}>
+          Cédula válida: {searchRut}
+        </div>
+      )}
 
-      {filtered.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>No hay solicitantes registrados aun.</div>}
+      {filtered.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>{searchActivo ? "No hay solicitantes para esa cédula válida." : "No hay solicitantes registrados aun."}</div>}
 
       <div style={{ display: "grid", gap: 10 }}>
         {filtered.map(p => {
