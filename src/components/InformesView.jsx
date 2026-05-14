@@ -251,10 +251,6 @@ function campoHtml(label, value) {
   return `<div class="card"><div class="k">${label}</div><div class="v">${v(value)}</div></div>`;
 }
 
-function datoFila(label, value) {
-  return `<div class="row"><div class="k">${label}</div><div class="v">${v(value)}</div></div>`;
-}
-
 function valorRsh(persona) {
   const raw = persona.puntajeRSH || persona.puntaje_rsh || persona.rsh || "";
   if (!raw && raw !== 0) return "";
@@ -266,53 +262,85 @@ function fechaNacimientoPersona(persona) {
   return persona.fechaNacimiento || persona.fecha_nacimiento || persona.fecha_nac || persona.nacimiento || "";
 }
 
-function datosPersonalesHtml(persona) {
-  return `<div class="person-grid">
-    <div class="person-col"><h3>Datos del solicitante</h3>
-      ${datoFila("Nombre", persona.nombre)}
-      ${datoFila("Teléfono", persona.telefono)}
-      ${datoFila("Dirección", persona.direccion)}
-      ${datoFila("Correo", persona.email || persona.correo)}
-      ${datoFila("Comité", persona.comite)}
-    </div>
-    <div class="person-col"><h3>Registro Social de Hogares</h3>
-      ${datoFila("RSH", valorRsh(persona))}
-      ${datoFila("Comuna", persona.comuna || persona.comunaRsh || persona.comuna_rsh)}
-      ${datoFila("Estado civil", persona.estadoCivil || persona.estado_civil || persona.estadocivil)}
-      ${datoFila("Numero de integrantes", persona.integrantesFamiliares || persona.integrantes_familiares)}
-      ${datoFila("Subsidio anterior", persona.subsidioAnterior || persona.subsidio_anterior)}
-    </div>
-    <div class="person-col"><h3>Identificacion</h3>
-      ${datoFila("Cédula de identidad", persona.rut)}
-      ${datoFila("Fecha de nacimiento", fechaNacimientoPersona(persona))}
-      ${datoFila("Adulto mayor", persona.adultoMayor || persona.adulto_mayor)}
-      ${datoFila("N de lista", persona.numeroLista || persona.numero_lista)}
-      ${datoFila("Cargo en comité", persona.cargoComite || persona.cargo_comite)}
-    </div>
-  </div>`;
+function primerDato(...values) {
+  const encontrado = values.find(value => value === 0 || (value && value.toString().trim()));
+  return encontrado === undefined || encontrado === null ? "" : encontrado;
 }
 
-function documentosPorProgramaHtml(docs) {
-  if (!docs.length) return `<div class="muted">Sin documentos registrados para este programa.</div>`;
-  const grupos = docs.reduce((acc, doc) => {
-    const key = doc.programa || "Programa";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(doc);
-    return acc;
-  }, {});
-
-  return Object.entries(grupos).map(([programa, items]) => `<div class="program-box">
-    <div class="program-title">${programa}</div>
-    <table><thead><tr><th>Documento</th><th>Estado</th><th>Observacion</th></tr></thead><tbody>
-      ${items.map(d => {
-        const completo = documentoCompleto(d);
-        return `<tr class="${completo ? "complete" : "pending"}"><td>${v(d.nombre)}</td><td class="estado">${completo ? "Completo" : "Pendiente"}</td><td>${v(d.observacion || d.valor)}</td></tr>`;
-      }).join("")}
-    </tbody></table>
-  </div>`).join("");
+function comiteDePersona(persona, comites = []) {
+  return (comites || []).find(comite => personaEnComite(persona, comite)) || null;
 }
 
-function bloquePersonaHtml(persona, solicitudes, personas, programaFiltro = "todos") {
+function cargoEnComite(persona, comites = []) {
+  const comite = comiteDePersona(persona, comites);
+  const directiva = Array.isArray(comite?.directiva) ? comite.directiva : [];
+  const miembroDirectiva = directiva.find(item => {
+    const mismoRut = item?.rut && persona?.rut && rutKey(item.rut) === rutKey(persona.rut);
+    const mismoNombre = item?.nombre && persona?.nombre && norm(item.nombre) === norm(persona.nombre);
+    return mismoRut || mismoNombre;
+  });
+  return primerDato(miembroDirectiva?.rol, miembroDirectiva?.cargo, persona.cargoComite, persona.cargo_comite, "Socio");
+}
+
+function rutColoresDesdeDocumentos(sols = []) {
+  for (const sol of sols) {
+    const doc = docsSolicitud(sol).find(d => docNombreNorm(d).includes("cedula"));
+    const partes = String(doc?.valor || "").split("|");
+    if (partes[2] && partes[2].trim()) return partes[2].trim();
+  }
+  return "";
+}
+
+function detalleDocumento(doc) {
+  return primerDato(doc.observacion, doc.detalle, doc.valor, doc.archivo, doc.url);
+}
+
+function filaInforme(tipo, estadoOk, dato) {
+  const estado = estadoOk ? "Completo" : "Pendiente";
+  const clase = estadoOk ? "complete" : "pending";
+  return `<tr class="${clase}"><td>${v(tipo)}</td><td class="estado">${estado}</td><td>${v(dato)}</td></tr>`;
+}
+
+function filasDatosFicha(persona, sols, comites, programaTxt) {
+  const comite = comiteDePersona(persona, comites);
+  const rutColores = primerDato(persona.rutColores, persona.rutcolores, rutColoresDesdeDocumentos(sols));
+  const datos = [
+    ["Programa informado", programaTxt],
+    ["Nombre del Comite", primerDato(comite?.nombre, persona.comite)],
+    ["Cargo en el Comite", cargoEnComite(persona, comites)],
+    ["Nombre del solicitante", persona.nombre],
+    ["Cedula de identidad", persona.rut],
+    ["Colores RUT", rutColores],
+    ["Fecha de nacimiento", fechaNacimientoPersona(persona)],
+    ["Adulto mayor", primerDato(persona.adultoMayor, persona.adulto_mayor)],
+    ["Telefono", persona.telefono],
+    ["Correo electronico", primerDato(persona.email, persona.correo)],
+    ["Direccion", persona.direccion],
+    ["Coordenadas", persona.coordenadas],
+    ["RSH %", valorRsh(persona)],
+    ["Comuna RSH", primerDato(persona.comunaRsh, persona.comuna_rsh, persona.comuna)],
+    ["Estado civil", primerDato(persona.estadoCivil, persona.estado_civil, persona.estadocivil)],
+    ["Numero de integrantes", primerDato(persona.integrantesFamiliares, persona.integrantes_familiares)],
+    ["Subsidio anterior", primerDato(persona.subsidioAnterior, persona.subsidio_anterior)],
+    ["Rol de avaluo", primerDato(persona.rol, persona.rolAvaluo, persona.rol_avaluo)],
+    ["Avaluo fiscal", primerDato(persona.avaluoFiscal, persona.avaluo_fiscal)],
+    ["Dominio de la propiedad", primerDato(persona.dominioPropiedad, persona.dominio_propiedad)],
+    ["Numero cuenta ahorro", primerDato(persona.numeroCuentaAhorro, persona.numero_cuenta_ahorro)],
+    ["Ingreso familiar UF", primerDato(persona.ingresoFamiliarUf, persona.ingreso_familiar_uf)],
+    ["Observaciones", persona.observaciones],
+  ];
+  return datos.map(([tipo, dato]) => filaInforme(tipo, !!primerDato(dato), dato)).join("");
+}
+
+function tablaIndividualHtml(persona, sols, docs, comites, programaTxt) {
+  const filasFicha = filasDatosFicha(persona, sols, comites, programaTxt);
+  const filasDocs = docs.length
+    ? docs.map(doc => filaInforme(`${doc.programa} - ${doc.nombre}`, documentoCompleto(doc), detalleDocumento(doc))).join("")
+    : filaInforme("Documentos del programa", false, "Sin documentos registrados");
+  return `<table class="tabla-individual"><thead><tr><th>Tipo documento</th><th>Estado</th><th>Datos del solicitante</th></tr></thead><tbody>${filasFicha}${filasDocs}</tbody></table>`;
+}
+
+function bloquePersonaHtml(persona, solicitudes, personas, comites = [], programaFiltro = "todos") {
   const sols = solicitudFiltrada(persona, solicitudes, personas, programaFiltro);
   const stats = estadisticasDocs(sols);
   const programaTxt = programaFiltro === "todos" ? "Todos los programas" : programaNombre(programaFiltro);
@@ -323,19 +351,18 @@ function bloquePersonaHtml(persona, solicitudes, personas, programaFiltro = "tod
 
   return `<div class="page">
     <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Entidad Patrocinante: Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe Individual del Solicitante</h1><div class="muted">${v(persona.nombre)} - Generado el ${new Date().toLocaleDateString("es-CL")}</div></div></div>
-    <div class="bar"><span>${v(persona.nombre)}</span><span>Cédula de identidad: ${v(persona.rut)} - ${programaTxt}</span></div>
+    <div class="bar"><span>${v(persona.nombre)}</span><span>${programaTxt}</span></div>
     <div style="font-weight:800;text-transform:uppercase;margin-bottom:8px">Programa informado: ${programaTxt}</div>
     <div class="stats"><div class="stat">Total documentos<b>${stats.total}</b></div><div class="stat">Completados<b>${stats.completos}</b></div><div class="stat">Faltan obligatorios<b>${stats.faltanObligatorios}</b></div><div class="stat">Opcionales pendientes<b>${stats.opcionalesPendientes}</b></div></div>
-    <div class="section"><h2>Datos personales</h2>${datosPersonalesHtml(persona)}</div>
-    <div class="section"><h2>Documentos</h2>${documentosPorProgramaHtml(docs)}</div>
+    <div class="section"><h2>Ficha del solicitante y documentos</h2>${tablaIndividualHtml(persona, sols, docs, comites, programaTxt)}</div>
   </div>`;
 }
 
-function imprimirIndividualMultiple(seleccionados, solicitudes, personas) {
+function imprimirIndividualMultiple(seleccionados, solicitudes, personas, comites = []) {
   if (!seleccionados.length) return;
   const html = seleccionados.map(item => {
     const persona = item.persona || item;
-    return bloquePersonaHtml(persona, solicitudes, personas, item.programaId || "todos");
+    return bloquePersonaHtml(persona, solicitudes, personas, comites, item.programaId || "todos");
   }).join("");
   imprimirVentana("Informe Individual del Solicitante", html);
 }
@@ -402,7 +429,7 @@ function PanelOpcionesCsp({ tipo, comites, personas, solicitudes, color }) {
   </div>;
 }
 
-function PanelIndividual({ personas, solicitudes }) {
+function PanelIndividual({ personas, solicitudes, comites }) {
   const [busqueda, setBusqueda] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
   const term = norm(busqueda);
@@ -422,7 +449,7 @@ function PanelIndividual({ personas, solicitudes }) {
   return <div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 14 }}>
       <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre, cédula o comité" style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
-      <button onClick={() => imprimirIndividualMultiple(seleccionados, solicitudes, personas)} disabled={!seleccionados.length} style={{ padding: "10px 16px", border: "none", borderRadius: 8, background: seleccionados.length ? "#2563eb" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: seleccionados.length ? "pointer" : "not-allowed" }}>Generar informe</button>
+      <button onClick={() => imprimirIndividualMultiple(seleccionados, solicitudes, personas, comites)} disabled={!seleccionados.length} style={{ padding: "10px 16px", border: "none", borderRadius: 8, background: seleccionados.length ? "#2563eb" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: seleccionados.length ? "pointer" : "not-allowed" }}>Generar informe</button>
     </div>
 
     {seleccionados.length > 0 && <div style={{ border: "1px solid #dbeafe", background: "#eff6ff", borderRadius: 8, padding: 10, marginBottom: 14 }}>
@@ -557,7 +584,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
       <div style={{ color: "#6b7280", marginBottom: 22 }}>Generación de informes individuales, comités rurales, comités urbanos y resumen completo.</div>
 
       <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes y el programa que debe informar cada uno" color="#2563eb">
-        <PanelIndividual personas={personas} solicitudes={solicitudes} />
+        <PanelIndividual personas={personas} solicitudes={solicitudes} comites={comites} />
       </Section>
 
       <Section title="Informe CSP Rural" subtitle="Construcción Sitio Propio Rural - selecciona comité, contenido y detalle de documentos" color="#d97706">
