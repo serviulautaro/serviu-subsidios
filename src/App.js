@@ -1,13 +1,77 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
+import ComitesVivienda from "./components/ComitesVivienda";
+import InformesView from "./components/InformesView";
+import JSZip from "jszip";
+
+// Formatear RUT chileno: 10398338-K -> 10.398.338-K
+const formatRut = (rut) => {
+  if (!rut) return "";
+  const clean = rut.replace(/[^0-9kK]/g, "");
+  if (clean.length < 2) return clean;
+  const dv = clean.slice(-1).toUpperCase();
+  const num = clean.slice(0, -1);
+  if (!num) return dv;
+  const formatted = num.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return formatted + "-" + dv;
+};
+const limpiarRut = (rut) => rut.replace(/[^0-9kK-]/g, "").toUpperCase();
+const validarRutChileno = (rut) => {
+  const clean = (rut || "").replace(/[^0-9kK]/g, "").toUpperCase();
+  if (clean.length < 8 || clean.length > 9) return false;
+  const cuerpo = clean.slice(0, -1);
+  const dv = clean.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0;
+  let multiplicador = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += Number(cuerpo[i]) * multiplicador;
+    multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+  }
+  const resto = 11 - (suma % 11);
+  const dvEsperado = resto === 11 ? "0" : resto === 10 ? "K" : String(resto);
+  return dv === dvEsperado;
+};
+const rutFormatoChilenoValido = (rut) => {
+  const formatted = formatRut(rut);
+  return /^\d{1,2}\.\d{3}\.\d{3}-[0-9K]$/.test(formatted) && validarRutChileno(formatted);
+};
+
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const today = () => new Date().toLocaleDateString("es-CL");
-const pct = (docs) => docs.length ? Math.round(docs.filter(d => d.entregado).length / docs.length * 100) : 0;
+const formatPesosChilenos = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits ? "$" + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
+};
+const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const docTieneValor = (doc) => !!((doc?.valor || "").toString().trim() || doc?.entregado || doc?.archivo || doc?.url);
+const docCompletoEquivalente = (doc, docs = []) => {
+  if (docTieneValor(doc)) return true;
+  const n = docNombreNorm(doc);
+  if (n.includes("fecha de nacimiento")) {
+    return docs.some(d => {
+      const dn = docNombreNorm(d);
+      const partes = String(d.valor || "").split("|");
+      return dn.includes("cedula") && partes[1] && partes[1].trim().length === 10;
+    });
+  }
+  if (n.includes("titulo") || n.includes("dominio")) {
+    return docs.some(d => {
+      const dn = docNombreNorm(d);
+      return (dn.includes("titulo") || dn.includes("dominio")) && docTieneValor(d);
+    });
+  }
+  return false;
+};
+const pct = (docs = []) => docs.length ? Math.round(docs.filter(d => docCompletoEquivalente(d, docs)).length / docs.length * 100) : 0;
 const statusColor = (p) => p === 100 ? "#059669" : p >= 50 ? "#D97706" : "#DC2626";
 const statusLabel = (p) => p === 100 ? "Completo" : p >= 50 ? "En proceso" : "Incompleto";
 const statusBg = (p) => p === 100 ? "#ECFDF5" : p >= 50 ? "#FFFBEB" : "#FEF2F2";
 const API = "http://localhost:3001";
+const LOGO_MUNI = "data:image/png;base64,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";
+const LOGO_VIVIENDA = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAD7AQ8DASIAAhEBAxEB/8QAHQABAAEFAQEBAAAAAAAAAAAAAAUEBgcICQMCAf/EAD4QAAAFAwEFBgQEBQQBBQAAAAABAgMEBQYRBxITITFRF0FXYZXSCBQigTJCcaEVFiNikSUzUsGxQ3J1stH/xAAaAQEAAwEBAQAAAAAAAAAAAAAAAQIDBAYF/8QAKREBAAICAAUEAQUBAQAAAAAAAAECAxEEEiExQQUTIlGRFDJhcYGhwf/aAAwDAQACEQMRAD8A3LAAAAAAAAAAAAAAAAAAAAAAAAARtyV6j25TF1Gt1BiDFTzW6rGT6F1MIjaJnSRMySRqUZERFkzPuGFdQPiJtW2bkTSIjDlU3LmzMdZMtlvyLqYxZq/rfXb5nuWrYMeUiC79BuNJMn3/ANOhCY0++GYp9tuTbwmvR6nITtstNn/sKPkauv6DrphrSN5XJfPa88uJsbZ1zUe7KGxWaJLRIjPJzwPik+hl3GJkaOLY1H0GutbzaXlU81Y28bUd9OenIjGzmk2r9rX9FZZZlIh1c0/1ITp4UZ95p6kM8uGa9a9YaYuIi3xt0lkcAAYOgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwRGZ8CGDNcdfKVaaH6LbS259bL6VL5tsfr1PyF6UtedVUvkrSN2XxqvqjbentO3lRfKROXwZhtHlaj7s9C8xqtJk6ha+3f8oRqRCbUa0IzhiOnPf1MUNhWvN1JrE+5roqbxxG5G7fUfFx15RbRIT0IZ/+EaSlNBr1EJltJ0uoLaJwkkSlJM8kRn3jeMmLDaaRO7x/xwc9uIvET0qu/SPSi3tP4KVx2UyqotJb+WssqM+iehDIRce8WhqjqDR9PaXGqFYafcakO7pBNERnnGREWFrBbl5Uur1CmsyUN0lveSCcLjs4zwGNovf5y7K2x4/hEr2r9Gptdpb1Nq0VuVFdSaVIWnI1P1i0Sq9jTVXdZD7yoMYyWSGzPfRzI+ZdSGXbX+IazriuCHRoUWcT0tew2pSSxkZRuRJHblRIyIyOMvgZf2mL0vfDbUqZK481ZmO8MB6HfEMxPNigXy4TMxR7DU7klzyX0PzGxrLrb7SXmXEuNrLKVJPJGXUjGk0PTCnXHp7Eq1OkHEuCRIfJBL/2n9lwyJJ9DEnpLrLcOmtVK0r0jvO02OZoUlXF1g+4yPvSJt7Oa0xhnrHeGGHibUnly/luSAjLZr1KuSjs1ajTG5cR4spWg+XkfQxJjn1ru74nfYAABIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA85DSX2HGV5JLiTSeD44MsDB9A+Hy1rdq9VuSqyF1ckk4/HYeT9DeCM/q/5DOgsjXasHQ9J6/NbVh04qmm+PNSuH/Yvjtbeo8s8lazG7R2YgsONHi6f051plLTlSnSJbmyXAy28I/YTfwlEXzV6/8Ayp/9iOpDZR6HQIfEiYp7HD+5REZ/uJL4SyxJvUj5/wAVP/sef9N4j3uP4m39R+HJT99YXP8AEVp/O1At6nwIM+PDVHk71RvHglFjGCFs6L6RVKzbduiBLq8SQursG00bRkZN/SZcR4/Go5NRZVIKE5JQapuFbk1EZls9+BY3wvP1T+S7+KS9PPZiGbe9NRmR7s/w57x6isW9re+hea+91r1V+nPw+1u3b0pVYkXBT3W4bu2pDZkalF0IbGXxUYVMtKoy6hKbjR0x1kbjh4LJlwGjOiMuslqrb23IqpIVI+reqWafvngNofiL3NQk2nbsw1LhT6htSmSP/cQhO1j9g4isxaOad+U4LRGO0xGmN9NqpTJunVJiQ5bTkhlyRvmUn9be06ZpMy8y4iHdtCmXfrYih1o3SRU6cpTLyVYUhxHI/PkKm8GIUfVa3ZdDgs00pa1x3W2CwlxsiM07RdRUXVJXQb5tK5WjwpioFGcP+1fA/wDyPH8Pmrj9VrxGK3xyxP5hjERbpbxLPGjGnkfTi2HKOzPcmqdeN1xxZYLOMcC7hfI/EKJSSUk8kZZIx+j01pm07l9OIiI1AAAISAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAw38VrynrQo1EaUe9qdXYa2S70krJ/YZkMYP1WfTU9f7Qpa9lcemxXpr6TPhnB7JiazEbtPiJllmnVVp6iVs7eM0Q45SZjkpMOCz3KXyT9iH7oxKr+nepZ2/cTsN1i43DcW4yrJMyMfgyIa+VG9eVovHzXWUKEhqo+UO+KLNySSbuAiUZnwLPUeY9Iy1w8k175Znbi6xbm+mzUyFDmoJEyKzIQR5JLqCURH9x8xabToja240GMylf40ttkklfrjmKhsyNBKSeSMiMh+/cx6WZ10fR1vqoWaJR2XieapcJtwjySkspIy/YYMv8ArjV1a4wYlOMnoFsxnHZkhJ5STi0mkkZ68RfGvd+PWhbaIVHT8zcNUX8tAjp4qyrhtmXQhj+gURNn2wi3EPJk1GU583V5XM3Xlflz5Dj9U4uvB8JbLbvPSHNlnc8sLSuZOzqBZ2efzDn/ANDHpq6ytdnypDRGbkN9L6ccywriY+6U3/NmqTLkU/8ATbXaW9NfPkt1RGSUJ8xX3pMhxLUqT9QMktLYUkyPvUZcCL7jycVvgvwddfLv+Zc0R0tLY6z5iKhalJmtrJaXobS9oj5maCyJUWF8PsaoxNIaCxVErRIKPkkq5kkzyn9sC/R7q0anT6Ne0AAAhYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABrtU3P4trLelwIzu6ZBaprX/vPBn/AOBsSNeNTYjth6rOVeSS02pdBIZluJLJRpRcErM+7Iy4il8mC9KfumOjDPHx2s6+TJq47PkuqJDLdYb21nyTkXFqlQEXAqq01xw2FlJN1hwuaFkeUn/kfF40FqsUqVRZCkmtR5ZeL8iy/Csj7v1FFYtcfrVGep9USoq/RFFHnZ/9dH5HS6ljgZ9R4XFbJbgqzj6XwzPT/wBcsz1mJ8slfDzqG9dFGfoFdJDFwUkyaebzxdSXAllkZJr9VhUWjy6tUX0sxIrRuOKM8ERENWLwXNtWvw9QaGpBTIakomskov67OePDqQntQrzi6sXLTLRpU5MS3WWUTa2+peyS04zuy6n3D2/p2evG4a5u3Tq1rxEVpqZ6va2ZLlx117VyrJUciQao1BhLL6Wmi4G9jqYjL4qk1iGiBS/61cqru4it5+o1K4KWfkWci45lQpkuQlFNcZahMIJqM0lZFsILgWB4wYlOYraK+5G31VYaU3Ef28pazzPHXA8bxvqNeJ9Q588T7de0f0z7+X5SKHDs+327WgK3jyVk7UpZnn5h8y4nnoXIRNmWw9qnfikSjV/KdDdJSlJ5SpBfl8yIUN81Ce67FtaibTtbrKt02ZcTaSZ4UtQ2K0wtGJZFlwaBFwpTKMvOd7jh8VKP7j6/o+C/EZZ47NHWf2/xH8L4qxeenaFytNoaaQ02kkoQkkpSXIiLkQ+gAejdoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsXWqTZa7Nl0i8p7EePLbMkJM8ukruUlPPJGL4dSpTS0oWaFGRkSscj6i1odgW6iempVGKVVqBc5Ev+pg/7SPgn7Cazqdq2jcaa5UudqBVLbh06iWfKnTY2WW6hJLdoeZLg2rB8c4H5G0g1oqVXdqrsmHRZMhncurbcJW0joeBtwhKUIJCEklKSwREWCIh+jLHgwY8lslKRE27uf9LXzO2qDHwv3XLPeVK8GSUZcSwtRH+4rU/CpIJOCu7ZMywrYQoiP/A2iAdFMs0jVdRH9J/SYvpqxJ+FWqERHFvIiMuRKJf/AOilToTqvQvro1zsyCI+CDVjP+RtiAztFLxq1In/ACE/pcf01Tsahapae3nIueuWciurkIJtbzTxLW2kj/J0Ga7Z1ctaqzEU6oqfoVTUePlagg2zz3YUfAxkEQ1yWtb9xNbFZpUWWZfhWtsttOOWFcyFt11Ea0vTH7caqmSMjIjIyMj5GAibdoqaI05Fjy5DsTJbpt5W0bfkSj4mQlhVqAAAAAAAAAAAAAAAAAAAAAAAAAACyXLgqZawptwnEfw86UqRsY+rbJRFnP3GHT1hvSFdlOJxDc6mpnzUT2m2/r3DThJI0+ZZyMu3zaNdl3VEum1KjEh1JqKuI8iUk1NuNqMjzw47RY4C37R0fVQq/Rao7VUzTjNyznbxHF9yQZGrHkQ0rNYjqyvzb6LUkar3I/dLqafNYcpblT3cc93xNk2VqL9yIeNq3xqLTbNo+o1ersKpUOZJSzKgoj7C2kLVskold5keBNUzQl2m1F1yNV2vlDqapbLaknlts0KSSPttD7omj1zJtmn2pWrihyaDAUpxDDTaiN5eD2SWfQjPPDoLWmnTSsRfrt9UrVWpVDWiRS2HWDtl5tyHDyX9Q5jZZUZ/28DEdBuHVKDb67+kV+nVCjMyzTJppxtlaWd4SMpX1LInKhofTitKIxSZCIVyR3EvHUyNR7Tn5zx5lkh8x9LrwkU5m3apdEVNvJlb99iM0ZOPp2iVsGZ92SIRM18Jjm8prVGqXPJqdt0m0qyzSl1RRqU+6zvPpJOS4CxLxv6/LcoE6gVSrw2q7BqLLZ1FqPlDkdxG0StjqQyfqHatbq9Ro1TtyoRIMqmKUaSfQZpNJljHAWnUNJ7gmUSQ9JuJiXcUqotzXZTzWWiJtOylsk45EQis18rWi3h76W1W6K3b9wqReDNbmNtbMRXyJsE06aTNOc8yMxRsXzdFUs63Y8V9mNXnnX26mZo2ibJhKts8eaiIhflg0m6aYqUVwzaXIQ5jdFDY3eD8+HEQFG0xVTb/ALjuNFRJUaqRFsx4xkeI618Vq+5iNxtMxOltadakXG7W4x3ItpdNqNJelxFIRjDjJ/Ukz8yIzFFVtQbxhW/JmOTGUOu0FdTYPd/gJUgktn54QYuCs6QyZ2nNFtlmsIjzKZJ3pSkpP6kKM9tHXBkeBJXrpm7WkutwJzUZv+BJpTKVJM9k0uEslH5cMCYmu1dWiGKXtQr5i2VV6zBviNVpzEVpbUZVONokKW4SfxHz54FzXDq1XHLLotQp6Cg1NLr0eqx3kcUuIYNZY8jMskfQS1T01vas2tIt2p1qiJiuIZSlceMaF/QslcTxx5D1v/Rr+Yrnh1uHVChmmCqNLZMj2Hlm2aEuYLvIjx+gtE0nujV9dEPbtyakW/Fta4rjrkCs0auqabfZQxu3IxuERpMj78GfETWn2pU6s6tVe3pymDpkhK10lSD+r+kvYcSr7kZiNkaSXlVqJTqPWrrinDpMfYhNR21ESnCRspWs+fDnwExS9HYVDK26hQ3mo9apbhKly1mo/miUnDhGXnkzFZmqYi+4StKuesSNeKtarrrZ0qNR25TaCT9ROGsiM8/oLfv3UqoUzVenUqlyY38GgLbaraVnhe26oiQSeuMkZiUuWxLrPUqTeVr1uDDclQkxHW5DalfSlWc8PMRjOiMCbb9YcuGQ3NuWqLU6uoINRE25+QyLoQivL5TPN4Vy7yrqNM7nrhPMqlwJLyI6yT9OylWC/XgLSlv6uHXbepzd9U9sq9GOQhZwuDBE3tmR8ePQSbOlF6s207aTd1QyostTapTm7Ub/AAxtpSfLCsd4uu+rAnVhdJXR6miEumwXYbalkZnhbewR8OhCYmIJiZhZ9gam1qZd1SptZnQ3I0qG4dGW3zcdZI0uGou7JpMyFiUzWK7IZ06qO3hAqjr8025NGKGaVIaJeDMl9SLiMmv6HUeNTKGqhuJhVemmW9lGaj35GnDmemeJioqej8aVp/S7ebVAbmQpqZKpRM4NxJOGs0moizxI8C26KzF1st3JqjUbXkapxKtBYorCnH2qIbOTcjIUZKyv/kZEYzbbFWYr1vU+sx0qQ1NjoeSlXNO0WcDFfZTdTFAlWVEuhlFqSnjWslIP5lttStpTST5bJ5PmMt0iBHpdLi02IjYjxWktNl0SksEM7THheu/KqAAFVwAAAAAAAAAAAABRV6cdMo8qeTe8NlBqJPUWcyzPrJMPzbuTGcfLKI8XBERHyLPUT19PrZpbLe+OOw/IS1IdIs7DZ5yY/YFGtiDHaksNRCS2RGl41/vnIztEzb+BWwkO0ii4nS3JqmUmZuGn6lF3cOotlu/VSJTzEOkvOmh5KE54fSfMz6H5C37zuB+bcq2Yc51UBhTbhkn8P0/iP9PMIlyRorqJjbhNsypbr7p4LaJJEZJIy6DG+brqPCJlelSlSXbypkWNI2GksrdkN55l3ZISN0zTgW9NloVhSGjNOD4/YYmeU7BTKlNTyelTGkJcXt/Xhwto8fpjA9Xqs1MiphVCTvGoTCVMKNf4zNaT4+ZJyKRxPfZtklpyqFZrTsFaVzVRyUlTx8uGcn1Fu2lT59Vp51SdcEpLZqURoSrZIjLmeeguWiS3JtvSJCjLYM3SZMiwW7LOz+wtPT23kVW32n6hKkLik+s0xCVhs+PEz7zyNZiZvUTNJuQ4luKlTTdlkh5xppxtOd4lJnhR9C8x72nd8auG0wqK8xKWRq2NnKdku8j6Cy5r0inP1SZGlIQSo7yG43dsoXsEki644j1iVJceRTau2+mNTo7BRSNJfjUbZqPj34UQy9+YmI7jKpKSecGXDnx5CmadmnUnG1x2ihkgjbdJeVKV3kZdww1RqlU0JkZlPfLzjJMp5Jnho1Kxkz7j7hXuXLVYrcpmDJdV8nIS2ZlxI2U8M/c+GRMcXHmDmZfyXUhTVWe1ToapTyHFpSeNltOVH9hh9dcdlwo5HUHojkR03lJJXNSl/wDRGYriuucusfL1BbilIfUtkyLBbJoNKcF5ngxMcXWe0G150K84tRUltcOS04txSC+jKeB4LiLpGE3Km8oqTFZdWT0HePSE4wW82s8f15DLdDkSF0NmZUTJLi296vokj4/sQ0w5efcfRCGqdXlI1CptLZeL5ZbKzeR3mrGSH1Dq1QlX5LpjbzfycVolLRs8TyXA8/qIApjLdRYuuc0bLLs1ews+ZNE2aSP9DMsikR8zGKXUIjrkaZPiJcJ3kZEp/CT4+WBlHPE9/O/8GUsl15cxSvOy0zWUtMNriqI964a8Gk+7Bd4xQdyTYDe4clOvMrJ5MhaTyZuYNJEZ/uPV+sSFOoo6Km4nYYZaSaV8HNsy2sn1LIvPE1NsqG5I+eJBNI+V3ed7t8drPLHTA9yUXD6i48uIxBOqj7b0i34dQecZecRFiqNXFtRK4q8yzwHlMkVKOzEp6Zym0xl75DpqPJntbKvtkjFY4us76dja8Dq017U9qChxaYjbam1pJX0qPZ2uQvUYttt16VWZFb3n+oSZSIyGsciTjbUReaRlIaYLTaJmSAAAbpAAAAAAAAAAAAAHxIZakMqZfbS42ssKSoskZCA/ku3+XyrmxnOxvVbP+Mi4gETESI5yhUlaTScJoiNrcmRFjKOg8nrbojqjNdOY4mRnhOORYISwCOWPoQB2dbxtmg6eniRlnaPJEZ55j6VaFvKQ2g6a1stkZJ+/PPUToCPbr9DyYjssRUxmm0pZQnYSguRF0HnToManx/l4jZNtbRq2SPvM8mKkBbQh02zRSnKmHDSp5SzWZqMzLJ8+A9nKFSXITUJUJo47Tm8Q3jgSuokgDlgRTNu0hmHLhohoJiWrbeR3KMfrVvUho3DRCQneIS2vHelPEi/YSgCOWPoQki06A/J+YcpzRr4+RHnnwFSqhUpTqXVQ21OJ2dlRlxLZ5f4EkARWI8CJk25RpC0rchI2kub3JcDUrOePUetXo0KqEgpRO7KC2SShw0kZdDIuYkQE6gUcqlwJVPRAfjIXGQSSSgy4FjkKGrW9GqE9iStakIba3LjSS4LRzIvLBiaAJrEiLRb1HSwTCYLW7JZOYx+YixkeX8r0LCf9PbI0krBlzLPMTICOSv0LLvGjUyHCgtx4SUG5IaZNxP4kp2s8+vmJt22KK6TBOQ0q3CFNoyZ/hPmR9RLuNtup2XEEoskeDLvIfQj26/QjmaJTGak3UGoyUSG0bCVEfAixjl1x3iRABaIiAAAEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsftg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AHWDtg0q8RLX9Ta9wdsGlXiJa/qbXuHJ8AH//Z";
+const SII_MAPAS_URL = "https://www4.sii.cl/mapasui/internet/#/contenido/index.html";
 
 const ESTADO_DESMARQUE = {
   "DESMARCADO":                { color: "#0891B2", bg: "#E0F7FA", label: "Desmarcado" },
@@ -24,13 +88,14 @@ const ESTADO_DESMARQUE = {
 // Calcula estado desmarque automáticamente según documentos ingresados
 const calcularEstadoDesmarque = (sol, estadoActual) => {
   if (!sol || sol.programaId !== "habitabilidad") return estadoActual;
-  // Si ya está en estado manual final, no cambiar
   if (["NO CALIFICA","APELAR SERVIU","DESMARCADO"].includes(estadoActual)) return estadoActual;
   const docs = sol.documentos || [];
   const tieneCarta = docs.some(d => d.nombre && d.nombre.includes("Carta SERVIU") && d.entregado && d.valor);
   const tieneMemo = docs.some(d => d.nombre && d.nombre.includes("Memo DOM") && d.entregado && d.valor);
+  const tieneVisita = !!(sol.fecha_visita && sol.fecha_visita.trim());
   if (tieneCarta) return "INFORME EN SERVIU";
   if (tieneMemo) return "INFORME EN DOM";
+  if (tieneVisita) return "VISITA HECHA FALTA INFORME";
   return estadoActual || "NO VISITADO";
 };
 
@@ -43,7 +108,11 @@ const PROGRAMAS = [
     documentos: [
       { nombre: "Cedula de identidad (escaneada a color)", obligatorio: true },
       { nombre: "Titulo de dominio / Derecho real de uso / Usufructo / Goce de tierra", obligatorio: true },
-      { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true }
+      { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
+      { nombre: "Informe DOM", obligatorio: false, valor: "" },
+      { nombre: "N° Memo DOM", obligatorio: false, valor: "" },
+      { nombre: "N° Carta SERVIU", obligatorio: false, valor: "" },
+      { nombre: "Respuesta SERVIU", obligatorio: false, valor: "" }
     ]
   },
   {
@@ -58,10 +127,11 @@ const PROGRAMAS = [
       { nombre: "Fecha de nacimiento", obligatorio: true },
       { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
       { nombre: "Informaciones previas", obligatorio: true },
-      { nombre: "Certificado de la vivienda", obligatorio: true },
+      { nombre: "Antecedentes de la vivienda", obligatorio: true },
       { nombre: "Boleta de luz", obligatorio: true, tipo: "luz", opciones: ["Con empalme", "Sin empalme"] },
       { nombre: "Boleta de agua (APR o Pozo)", obligatorio: true, tipo: "agua", opciones: ["Con arranque", "Pozo"] },
-      { nombre: "Credencial de discapacidad (si corresponde)", obligatorio: false, tipo: "discapacidad", opciones: ["Con discapacidad", "Sin discapacidad"] }
+      { nombre: "Credencial de discapacidad (si corresponde)", obligatorio: false, tipo: "discapacidad", opciones: ["Con discapacidad", "Sin discapacidad"] },
+      { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true }
     ]
   },
   {
@@ -71,17 +141,92 @@ const PROGRAMAS = [
     color: "#D97706", colorLight: "#FFFBEB", icon: "R",
     documentos: [
       { nombre: "Cedula de identidad", obligatorio: true },
-      { nombre: "Titulo de dominio del terreno", obligatorio: true },
+      { nombre: "Dominio de la propiedad", obligatorio: true },
       { nombre: "Registro Social de Hogares en la comuna", obligatorio: true },
-      { nombre: "Fecha de nacimiento", obligatorio: true },
       { nombre: "Certificado de ruralidad", obligatorio: true },
       { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
       { nombre: "Boleta de luz", obligatorio: true, tipo: "luz", opciones: ["Con empalme", "Sin empalme"] },
       { nombre: "Boleta de agua (APR o Pozo)", obligatorio: true, tipo: "agua", opciones: ["Con arranque", "Pozo"] },
-      { nombre: "Credencial de discapacidad (si corresponde)", obligatorio: false, tipo: "discapacidad", opciones: ["Con discapacidad", "Sin discapacidad"] }
+      { nombre: "Credencial de discapacidad (si corresponde)", obligatorio: false, tipo: "discapacidad", opciones: ["Con discapacidad", "Sin discapacidad"] },
+      { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true }
     ]
   }
 ];
+
+const COMITES_FIJOS = [
+  { codigo:"gr1R", nombre:"Comité de Vivienda Rural Mi Nuevo Hogar",         tipo:"RURAL"  },
+  { codigo:"gr2R", nombre:"Comité de Vivienda Rural La Fuerza",               tipo:"RURAL"  },
+  { codigo:"gr3R", nombre:"Comité de Vivienda Rural Küme Ruka",               tipo:"RURAL"  },
+  { codigo:"gr4R", nombre:"Comité de Vivienda Rural Newen Mapu",              tipo:"RURAL"  },
+  { codigo:"gr5R", nombre:"Comité de Vivienda Rural Kimey Ruca",              tipo:"RURAL"  },
+  { codigo:"gr6R", nombre:"Comité de Vivienda Rural (Por Constituir)",        tipo:"RURAL"  },
+  { codigo:"gr1U", nombre:"Comité de Vivienda Urbano Pioneros de Lautaro",    tipo:"URBANO" },
+  { codigo:"gr2U", nombre:"Comité de Vivienda Urbano (Por Constituir)",       tipo:"URBANO" },
+];
+
+// Directiva de cada comité (fuente de verdad para el cargo automático)
+const COMITES_DIRECTIVA = [
+  { codigo:"gr1R", directiva:[{rol:"Presidente",nombre:"Juan Pérez González"},{rol:"Secretario",nombre:"Carlos Hernán Paillaleo Paillaleo"},{rol:"Tesorero",nombre:"Elías Fernando Apablaza Riffo"},{rol:"1er Director",nombre:"Juan Carlos Huenchuan Méndez"}]},
+  { codigo:"gr2R", directiva:[{rol:"Presidente",nombre:"Liber Omar Cancino Campos"},{rol:"Vicepresidente",nombre:"Orfelina Leonor Inostroza Burgos"},{rol:"Secretario",nombre:"Alejandra Maribel Lefián Silva"},{rol:"Tesorero",nombre:"Mirta Rosa Martín Vallejos"},{rol:"1er Director",nombre:"Luis Fernando Sánchez Llancamil"}]},
+  { codigo:"gr3R", directiva:[{rol:"Presidente",nombre:"Rosa Llancapan Liempe"},{rol:"Vicepresidente",nombre:"María Angélica Antinao Liempe"},{rol:"Secretario",nombre:"Elías Rivas Espinoza"},{rol:"Tesorero",nombre:"Mónica Maribel Rubilar Antilaf"},{rol:"1er Director",nombre:"Juan Miguel Tripaiñan Huenulao"}]},
+  { codigo:"gr4R", directiva:[]},
+  { codigo:"gr5R", directiva:[]},
+  { codigo:"gr6R", directiva:[]},
+  { codigo:"gr1U", directiva:[{rol:"Presidente",nombre:"Luis Armando Espinoza Mendoza"},{rol:"Vicepresidente",nombre:"Tomás Salvador Díaz Barrientos"},{rol:"Secretario",nombre:"Margot Leticia Contreras Márquez"},{rol:"Tesorero",nombre:"Iris del Carmen Godoy Morales"},{rol:"1er Director",nombre:"Domingo Antonio Bucarey Torres"}]},
+  { codigo:"gr2U", directiva:[]},
+];
+
+// Normaliza nombre para comparación (sin tildes, minúsculas, sin caracteres especiales)
+function normNomDirectiva(s) {
+  return (s||"").toLowerCase().trim()
+    .normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[^a-z\s]/g,"").replace(/\s+/g," ");
+}
+
+// Infiere el cargo de un solicitante comparando su nombre con la directiva del comité
+function inferirCargo(personaNombre, comiteId) {
+  if (!personaNombre || !comiteId) return "Socio";
+  const comite = COMITES_DIRECTIVA.find(c => c.codigo === comiteId);
+  if (!comite || !comite.directiva || comite.directiva.length === 0) return "Socio";
+  const normPersona = normNomDirectiva(personaNombre);
+  const palabrasPersona = normPersona.split(" ").filter(p => p.length > 2);
+  for (const miembro of comite.directiva) {
+    const normMiembro = normNomDirectiva(miembro.nombre);
+    const palabrasMiembro = normMiembro.split(" ").filter(p => p.length > 2);
+    const coincidencias = palabrasPersona.filter(p => palabrasMiembro.includes(p));
+    if (coincidencias.length >= 2) return miembro.rol;
+    if (normPersona === normMiembro) return miembro.rol;
+  }
+  return "Socio";
+}
+
+const DOCS_SOLICITUD = {
+  habitabilidad: [
+    { id: "dominio",  label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
+    { id: "rut",      label: "Cédula de identidad colores" },
+    { id: "avaluo",   label: "Avalúo fiscal detallado" },
+  ],
+  csp_urbano: [
+    { id: "dominio",      label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
+    { id: "avaluo",       label: "Avalúo fiscal detallado" },
+    { id: "infoprevias",  label: "Informaciones previas" },
+    { id: "cuenta",       label: "Cuenta de ahorro para la vivienda" },
+    { id: "rut",          label: "Cédula de identidad colores" },
+    { id: "agua",         label: "Boleta de agua o factibilidad" },
+    { id: "luz",          label: "Boleta de luz o factibilidad" },
+    { id: "discapacidad", label: "Credencial de discapacidad (si corresponde)" },
+  ],
+  csp_rural: [
+    { id: "rut",          label: "Cédula de identidad colores" },
+    { id: "agua",         label: "Boleta de agua (si corresponde)" },
+    { id: "luz",          label: "Boleta de luz (si corresponde)" },
+    { id: "dominio",      label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
+    { id: "avaluo",       label: "Certificado de avalúo detallado" },
+    { id: "ruralidad",    label: "Certificado de ruralidad" },
+    { id: "discapacidad", label: "Credencial de discapacidad (si corresponde)" },
+    { id: "cuenta",       label: "Cuenta de ahorro para la vivienda" },
+  ],
+};
 
 const DB = {
   get: (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
@@ -90,12 +235,375 @@ const DB = {
 
 const carpetaNombre = (nombre, rut) => nombre.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") + "_" + rut.replace(/[^0-9kK]/g, "");
 
+// ─── GENERADORES DE DOCUMENTOS HTML (frontend puro) ───────────────────────────
+
+function _fechaHoy() {
+  const m = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const d = new Date();
+  return `${d.getDate()} de ${m[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+function _fmtRut(rut) {
+  if (!rut) return '';
+  const s = rut.replace(/[^0-9kK]/g, '');
+  if (s.length < 2) return rut;
+  return s.slice(0,-1).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + s.slice(-1).toUpperCase();
+}
+
+const _CSS = `
+*{box-sizing:border-box;margin:0;padding:0}
+@media print{@page{size:21.6cm 35.6cm;margin:1.5cm 2cm 2cm 2cm}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+body{font-family:Arial,sans-serif;font-size:9pt;line-height:1.45;color:#000}
+.pag{max-width:21.6cm;margin:0 auto;padding:1.5cm 2cm}
+.enc{text-align:center;margin-bottom:18px;width:100%}
+.muni{font-size:15pt;font-weight:bold;color:#1e3a5f;letter-spacing:.5px;display:block}
+.depto{font-size:9pt;font-weight:bold;color:#1e3a5f;margin-top:2px;display:block}
+.sep{border:none;border-top:2.5px solid #1e3a5f;margin:10px 0 18px;width:100%}
+p{margin:3px 0}
+.sp{display:block;margin-top:10px}
+.spg{display:block;margin-top:28px}
+.firma{margin-top:60px;text-align:center}
+.ind{padding-left:72px}
+.ref{display:flex;justify-content:space-between;margin-bottom:14px}
+.pie{margin-top:32px;padding-top:7px;border-top:1px solid #ccc;text-align:center;font-size:9pt;color:#666;font-style:italic}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #999;padding:7px 10px;vertical-align:top}
+th{background:#1e3a5f;color:#fff;font-weight:bold}
+.lbl{background:#D0E4F7;font-weight:bold}
+`;
+
+function _wrap(titulo, cuerpo) {
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${titulo}</title><style>${_CSS}</style></head><body><div class="pag">${cuerpo}<div class="pie">Propietario del software: JACC</div></div></body></html>`;
+}
+
+function _encabezado() {
+  return `<div class="enc"><table style="width:100%;border:none;margin-bottom:10px"><tr><td style="width:110px;border:none;padding:0;text-align:left;vertical-align:middle"><img src="data:image/png;base64,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" style="height:90px;object-fit:contain"></td><td style="border:none;padding:0;text-align:center;vertical-align:middle"><div class="muni">MUNICIPALIDAD DE LAUTARO</div><div class="depto">UNIDAD DE VIVIENDA MUNICIPALIDAD DE LAUTARO</div><div class="depto">ENTIDAD PATROCINANTE</div></td><td style="width:110px;border:none;padding:0;text-align:right;vertical-align:middle"><img src="data:image/png;base64,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" style="height:110px;object-fit:contain"></td></tr></table><hr class="sep"></div>`;
+}
+
+function generarHtmlMemo({ numero, nombre, rut, direccion, coordenadas, problemas }) {
+  const lista = Array.isArray(problemas) && problemas.length > 0
+    ? problemas
+    : ['(Sin especificar)'];
+  const probHtml = lista
+    .map((p, i) => `<p style="padding-left:60px;margin:5px 0">${i+1}.- ${String(p||'')}</p>`)
+    .join('');
+  return _wrap(`Memorándum N° ${numero}`, `
+${_encabezado()}
+<div style="text-align:right"><div style="display:inline-block;text-align:left"><p><b>MEMO N°&nbsp;:</b>&nbsp;${numero}</p><p><b>MAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;Solicitud evaluación de vivienda</p><p><b>LAUTARO,</b>&nbsp;${_fechaHoy()}</p></div></div>
+<p><b>DE&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>MARCELO CIFUENTES VÁSQUEZ</b></p>
+<p style="padding-left:60px">ENCARGADO ENTIDAD PATROCINANTE</p>
+<p style="padding-left:60px">MUNICIPALIDAD DE LAUTARO.</p>
+<span class="sp"></span>
+<p><b>A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>SEÑOR EDUARDO BUSTOS VALDEBENITO</b></p>
+<p style="padding-left:60px">DIRECTOR DE OBRAS</p>
+<p style="padding-left:60px">MUNICIPALIDAD DE LAUTARO</p>
+<p style="padding-left:60px">PRESENTE.</p>
+<span class="sp"></span>
+<p style="padding-left:60px">Junto con saludar cordialmente, me permito informar a Ud., el ingreso de una solicitud para evaluar vivienda de:</p>
+<span class="sp"></span>
+<p><b>NOMBRE:</b> ${(nombre||'')}</p>
+<span class="sp"></span>
+<p><b>RUT:</b> ${rut||''}</p>
+<span class="sp"></span>
+<p><b>DIRECCIÓN:</b> ${(direccion||'')}</p>
+<span class="sp"></span>
+<p><b>Coordenadas:</b> ${coordenadas||''}</p>
+<span class="sp"></span>
+<p><b>PROBLEMAS DE LA VIVIENDA:</b></p>
+<div style="margin:8px 0">${probHtml}</div>
+<span class="sp"></span>
+<p><b>ADJUNTO:</b></p>
+<span class="sp"></span>
+<p>- Rut del propietario.</p>
+<p>- Informe de evaluación previa. vivienda revisada por JACC.</p>
+<p>- Escritura u otro que acredite la propiedad de la vivienda.</p>
+<div class="firma">
+  <p>Sin otro particular, saluda atentamente a Usted.,</p>
+  <span class="spg"></span>
+  <p><b>MARCELO CIFUENTES VÁSQUEZ</b></p>
+  <p><b>ENCARGADO DE ENTIDAD PATROCINANTE</b></p>
+  <p><b>MUNICIPALIDAD DE LAUTARO</b></p>
+</div>
+<span class="sp"></span>
+<p>MCV/mcv</p>
+<span class="sp"></span>
+<p><b>DISTRIBUCIÓN:</b></p>
+<p>- Destinatario</p>
+<p>- Archivo Vivienda</p>`);
+}
+
+function generarHtmlCarta({ numero, nombre, rut }) {
+  return _wrap(`Carta SERVIU N° ${numero}`, `
+${_encabezado()}
+<div style="text-align:right"><div style="display:inline-block;text-align:left"><p><b>CNº&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${numero}</b></p><p><b>MAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;Lo que indica</p><p><b>LAUTARO,</b>&nbsp;${_fechaHoy()}</p></div></div>
+<span class="sp"></span>
+<p><b>DE&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>MARCELO CIFUENTES VÁSQUEZ</b></p>
+<p class="ind">ENCARGADO ENTIDAD PATROCINANTE</p>
+<p class="ind">MUNICIPALIDAD DE LAUTARO.</p>
+<span class="sp"></span>
+<p><b>A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>SEÑOR JOSÉ LUIS SEPÚLVEDA SOZA</b></p>
+<p class="ind">DIRECTOR DE SERVIU</p>
+<p class="ind">REGIÓN DE LA ARAUCANÍA</p>
+<p class="ind">PRESENTE.</p>
+<span class="spg"></span>
+<p class="ind">Junto con saludar cordialmente, me permito informar a Ud., el ingreso de una solicitud para quitar la marca de subsidio de vivienda registrado en el sistema a nombre de <b>${(nombre||'')}</b>, RUT: ${rut||''}.</p>
+<div class="firma">
+  <p>Sin otro particular, saluda atentamente a Usted.,</p>
+  <span class="spg"></span>
+  <p><b>MARCELO CIFUENTES VÁSQUEZ</b></p>
+  <p><b>ENCARGADO DE ENTIDAD PATROCINANTE</b></p>
+  <p><b>MUNICIPALIDAD DE LAUTARO</b></p>
+</div>
+<span class="sp"></span>
+<p>MCV/mcv</p>
+<span class="sp"></span>
+<p><b>DISTRIBUCIÓN:</b></p>
+<p>- Destinatario</p>
+<p>- Archivo Vivienda</p>`);
+}
+
+function generarHtmlSolicitud({ nombre, rut, direccion, telefono, subsidio, anioSubsidio }) {
+  const hoy = new Date();
+  const f = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+  // Extraer solo el número de año (ej: "Año 1992" → "1992", "TITULO I Año 1992" → "1992")
+  const soloAnio = (() => {
+    if (!anioSubsidio) return '';
+    const m = String(anioSubsidio).match(/\b(19|20)\d{2}\b/);
+    return m ? m[0] : anioSubsidio;
+  })();
+  const fila = (l, v) => `<tr><td class="lbl" style="width:38%">${l}</td><td>${v||''}</td></tr>`;
+  const chk = (l) => `<tr><td style="width:36px;text-align:center">☐</td><td>${l}</td></tr>`;
+  return _wrap('Formulario de Habilitación', `
+<p style="text-align:center;font-size:13pt;font-weight:bold;margin-bottom:14px">Formulario de Habilitación Vivienda Inhabitable/Siniestrada</p>
+<p style="margin-bottom:14px">Solicito habilitación para poder postular a un nuevo subsidio habitacional, en razón a la inhabitabilidad y/o siniestro sufrido en mi vivienda.</p>
+<table style="margin-bottom:16px"><tbody>
+  ${fila('NOMBRE BENEFICIARIO', nombre||'')}
+  ${fila('RUT',rut||'')}
+  ${fila('COMUNA','LAUTARO')}
+  ${fila('DIRECCIÓN', direccion||'')}
+  ${fila('TELÉFONO',telefono||'')}
+  ${fila('CORREO ELECTRÓNICO','Jcampos@munilautaro.cl')}
+  ${fila('SUBSIDIO ADJUDICADO',subsidio||'')}
+  ${fila('AÑO DEL SUBSIDIO',soloAnio)}
+</tbody></table>
+<table><thead><tr><th colspan="2" style="text-align:left">DOCUMENTOS A ADJUNTAR</th></tr></thead><tbody>
+  ${chk('Fotocopia de cédula de Identidad por ambos lados.')}
+  ${chk('DOCUMENTO DOM')}
+  ${chk('Registro de Propiedad otorgado por Conservador de Bienes Raíces.')}
+</tbody></table>
+<div style="margin-top:40px;display:flex;justify-content:space-between">
+  <p>FIRMA: ___________________________</p>
+  <p><b>Fecha:</b> ${f}</p>
+</div>`);
+}
+
+function generarHtmlInformeJACC({ nombre, rut, telefono, direccion, coordenadas, subsidioTexto, fechaVisita, estadoVivienda, filas }) {
+  const rutFmt = _fmtRut(rut);
+  const filasHtml = (filas||[]).map(fila => {
+    const img = fila.imagenBase64
+      ? `<img src="data:${fila.mimeType||'image/jpeg'};base64,${fila.imagenBase64}" style="width:7cm;height:auto;display:block;margin:0 auto;max-width:100%">`
+      : '<span style="color:#aaa;font-size:9pt">Sin imagen</span>';
+    return `<tr>
+      <td style="text-align:center;font-weight:bold;width:50px">${fila.numero}</td>
+      <td>${fila.descripcion||''}</td>
+      <td style="text-align:center;width:8.5cm;padding:6px">${img}</td>
+    </tr>`;
+  }).join('');
+  const encJACC = _encabezado();
+  const parrafoVerificacion = `<p style="margin:18px 0;line-height:1.7;text-align:justify">Según el registro de verificación con fecha <b>${fechaVisita||'_____________'}</b>, con las visitas de inspección realizadas en la propiedad indicada. Se informa que la vivienda se encuentra en estado: <b>${estadoVivienda||'_____________'}</b></p>`;
+  return _wrap(`Informe JACC - ${nombre||''}`, `
+${encJACC}
+<p style="text-align:center;font-size:13pt;font-weight:bold;margin-bottom:18px">INFORME TÉCNICO DE VISITA JACC</p>
+<p style="font-weight:bold;margin-bottom:8px">I. ANTECEDENTES DEL BENEFICIARIO</p>
+<table style="margin-bottom:18px"><tbody>
+  <tr><td class="lbl" style="width:35%">NOMBRE BENEFICIARIO</td><td>${(nombre||'')}</td></tr>
+  <tr><td class="lbl">RUT</td><td>${rutFmt}</td></tr>
+  <tr><td class="lbl">TELÉFONO</td><td>${telefono||''}</td></tr>
+  <tr><td class="lbl">DIRECCIÓN</td><td>${(direccion||'')}</td></tr>
+  <tr><td class="lbl">COORDENADAS</td><td>${coordenadas||''}</td></tr>
+  <tr><td class="lbl">AÑO Y TIPO DE SUBSIDIO</td><td>${subsidioTexto||''}</td></tr>
+</tbody></table>
+${parrafoVerificacion}
+<p style="font-weight:bold;margin-bottom:8px">II. REGISTRO FOTOGRÁFICO</p>
+<table>
+  <thead><tr>
+    <th style="width:50px">N° Foto</th>
+    <th>Estado de la Vivienda</th>
+    <th style="width:8.5cm;text-align:center">Fotografía</th>
+  </tr></thead>
+  <tbody>${filasHtml}</tbody>
+</table>
+<div style="margin-top:60px;text-align:center">
+  <p style="margin-bottom:2px">_________________________________</p>
+  <p style="font-weight:bold;margin-bottom:1px">JORGE ANTONIO CAMPOS CAMPOS</p>
+  <p style="margin-bottom:1px">CONSTRUCTOR CIVIL/ENCARGADO C.S.P.</p>
+  <p>UNIDAD DE VIVIENDA/E.P.</p>
+</div>`);
+}
+
+// Convierte campos camelCase de la ficha a nombres de columnas de Supabase
+function toDbFields(form) {
+  const MAP = {
+    fechaNacimiento:        "fecha_nacimiento",
+    integrantesFamiliares:  "integrantes_familiares",
+    puntajeRSH:             "puntaje_rsh",
+    comiteId:               "comite_id",
+    nFJS:                   "nfjs",
+    sistemaAgua:            "sistemaagua",
+    nServicioAgua:          "nservicioagua",
+    proveedorElectrico:     "proveedorelectrico",
+    nClienteElectricidad:   "nclienteelectricidad",
+    certRuralidad:          "certruralidad",
+    avaluoFiscal:           "avaluofiscal",
+    informacionesPrevias:   "informacionesprevias",
+    infPrevias:             "infprevias",
+    antecedentesVivienda:   "antecedentesvivienda",
+    movilidadReducida:      "movilidadreducida",
+    credencialDiscapacidad: "credencialdiscapacidad",
+    cuentaAhorro:           "cuentaahorro",
+    subsidioAnterior:       "subsidio_anterior",
+    estadoCivil:            "estadocivil",
+    ahorroPostular:         "ahorropostular",
+    adultoMayor:            "adultomayor",
+    permisoEdificacion:     "permisoedificacion",
+    recepcionDefinitiva:    "recepciondefinitiva",
+    constructoraSeleccionada:"constructoraseleccionada",
+    metrosOriginal:         "metrosoriginal",
+    metrosAmpl:             "metrosampl",
+    metrosNoRegul:          "metrosnoregul",
+    totalMetros:            "totalmetros",
+    modalidadPostulacion:   "modalidadpostulacion",
+    // Ya en snake_case — pasan directo:
+    // dominiopropiedad, discapacidad, banco, rol, cargo_comite, numero_lista, etc.
+  };
+  const EXCLUDE = ["comiteId", "fechaIngreso"]; // campos que no van en update directo
+  const result = {};
+  for (const [k, v] of Object.entries(form)) {
+    if (EXCLUDE.includes(k)) continue;
+    result[MAP[k] || k] = v;
+  }
+  return result;
+}
+
+const isBlankFichaValue = (v) => v === null || v === undefined || String(v).trim() === "";
+
+function protegerDatosFicha(form, persona, extra = {}) {
+  const protegido = { ...persona, ...form, ...extra };
+  for (const key of Object.keys(persona || {})) {
+    if (isBlankFichaValue(protegido[key]) && !isBlankFichaValue(persona[key])) {
+      protegido[key] = persona[key];
+    }
+  }
+  return protegido;
+}
+
+// Carpeta estructurada: programa/comite/rut
+// Usa persona.tipo_comite primero (disponible desde Supabase sin necesitar solicitudes)
+const carpetaPrograma = (persona, solicitudes) => {
+  if (!persona) return "";
+  const cid = persona.comiteId || "";
+  let prog;
+  // 1) Detección por comiteId conocido
+  if (cid === "comite_desmarque") prog = "Desmarque";
+  else if (/^gr\d+R$/i.test(cid)) prog = "CSP_Rural";
+  else if (/^gr\d+U$/i.test(cid)) prog = "CSP_Urbano";
+  // 2) Detección por tipo_comite en persona (no requiere solicitudes cargadas)
+  else {
+    const tipo = (persona.tipo_comite || "").toUpperCase();
+    if (tipo === "RURAL") prog = "CSP_Rural";
+    else if (tipo === "URBANO") prog = "CSP_Urbano";
+    else {
+      // 3) Último recurso: solicitudes (si ya están cargadas)
+      const sol = (solicitudes || []).find(s => s.personaId === persona.id || s.persona_id === persona.id);
+      const pid = sol?.programaId || sol?.programa_id || "";
+      const map = { habitabilidad: "Desmarque", csp_rural: "CSP_Rural", csp_urbano: "CSP_Urbano" };
+      prog = map[pid] || "SinPrograma";
+    }
+  }
+  const comite = (cid || "SinComite").replace(/[^a-zA-Z0-9]/g, "_");
+  const rut = (persona.rut || "").trim();
+  if (!rut) return carpetaNombre(persona.nombre, persona.rut);
+  return `${prog}/${comite}/${rut}`;
+};
+
 function Modal({ title, onClose, children }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 18, padding: "28px 32px", width: "520px", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.2)" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontWeight: 800, fontSize: 20, color: "#1e3a5f", marginBottom: 22 }}>{title}</div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+function PromptModal({ mensaje, onConfirm, onCancel }) {
+  const [valor, setValor] = useState("");
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000 }} onClick={onCancel}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "28px 32px", width: "420px", boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 15, color: "#333", marginBottom: 16, lineHeight: 1.6 }}>{mensaje}</div>
+        <input type="password" autoComplete="new-password" value={valor} onChange={e => setValor(e.target.value)} onKeyDown={e => e.key === "Enter" && onConfirm(valor)}
+          autoFocus placeholder="Ingrese la clave..."
+          style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1.5px solid #1e3a5f", fontSize: 14, boxSizing: "border-box", marginBottom: 20 }} />
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={onCancel} style={{ padding: "9px 20px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={() => onConfirm(valor)} style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Confirmar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalClaveAcceso({ onConfirmar, onCancelar }) {
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState(false);
+  const verificar = () => {
+    if (clave === "196560") { onConfirmar(); }
+    else { setError(true); setClave(""); }
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3000 }} onClick={onCancelar}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "28px 32px", width: 400, boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#1e3a5f", marginBottom: 6 }}>Campo protegido</div>
+        <div style={{ fontSize: 13, color: "#555", marginBottom: 16 }}>Ingresa la clave de administrador para editar este campo.</div>
+        <input type="password" autoComplete="new-password" autoFocus value={clave}
+          onChange={e => { setClave(e.target.value); setError(false); }}
+          onKeyDown={e => e.key === "Enter" && verificar()}
+          placeholder="Clave..."
+          style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1.5px solid " + (error ? "#DC2626" : "#ddd"), fontSize: 14, boxSizing: "border-box", marginBottom: error ? 6 : 20 }} />
+        {error && <div style={{ fontSize: 12, color: "#DC2626", marginBottom: 14 }}>Clave incorrecta. Intenta nuevamente.</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={onCancelar} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={verificar} style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Confirmar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({ mensaje, onConfirm, onCancel, danger = false }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000 }} onClick={onCancel}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "28px 32px", width: "420px", boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 15, color: "#333", marginBottom: 24, lineHeight: 1.6 }}>{mensaje}</div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={onCancel} style={{ padding: "9px 20px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={onConfirm} style={{ padding: "9px 20px", borderRadius: 8, background: danger ? "#DC2626" : "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Aceptar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlertModal({ mensaje, onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "28px 32px", width: "380px", boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 15, color: "#333", marginBottom: 24, lineHeight: 1.6 }}>{mensaje}</div>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "9px 24px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Aceptar</button>
+        </div>
       </div>
     </div>
   );
@@ -147,52 +655,260 @@ function Dashboard({ personas, solicitudes, comites, onNav }) {
 }
 
 // ─── FORMULARIO DE PERSONA (reutilizable) ───────────────────────────────────
-function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFijo }) {
+function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFijo, programasCustom }) {
+  const [tipoSolicitud, setTipoSolicitud] = useState(
+    form.comiteId === "comite_desmarque" ? "desmarque" : (form.comiteId ? "comite" : "")
+  );
+  const [archivoRut, setArchivoRut] = useState("");
+  const [archivoRol, setArchivoRol] = useState("");
+  const [archivoDoc, setArchivoDoc] = useState("");
+  const [motivoSinComite, setMotivoSinComite] = useState("");
+
   const CAMPOS = [
     ["nombre", "Nombre completo *", "text", "12"],
-    ["rut", "RUT *", "text", "6"],
-    ["fechaNacimiento", "Fecha de nacimiento", "date", "6"],
+    ["rut", "Cédula de identidad *", "text", "6"],
     ["telefono", "Telefono", "tel", "6"],
-    ["email", "Correo electronico", "email", "6"],
     ["direccion", "Direccion", "text", "12"],
-    ["comuna", "Comuna", "text", "6"],
     ["puntajeRSH", "Puntaje RSH", "text", "6"],
-    ["integrantesFamiliares", "Integrantes grupo familiar", "number", "6"],
+    ["comuna", "Comuna", "text", "6"],
   ];
+
+  // Lista dinámica: COMITES_FIJOS (con códigos) + nuevos comités de Supabase
+  const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
+  // Si el tipo es comite_PROGID, filtrar comités de ese programa
+  const progIdSeleccionado = tipoSolicitud && tipoSolicitud.startsWith("comite_") ? tipoSolicitud.replace("comite_","") : null;
+
+  const comitesMergedBase = [
+    ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, programaId: c.tipo === "Urbano" ? "csp_urbano" : "csp_rural" })),
+    ...(comites||[])
+      .filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
+      .map(sc => ({
+        id: sc.id,
+        nombre: sc.nombre,
+        tipo: sc.programaId === "csp_urbano" ? "URBANO" : "RURAL",
+        programaId: sc.programaId
+      }))
+  ];
+  const comitesMerged = progIdSeleccionado
+    ? comitesMergedBase.filter(c => c.programaId === progIdSeleccionado)
+    : comitesMergedBase;
+
+  const seleccionarTipo = (tipo) => {
+    setTipoSolicitud(tipo);
+    if (tipo === "desmarque") {
+      setForm({ ...form, comiteId: "comite_desmarque", comuna: "Lautaro", observaciones: "" });
+    } else if (tipo === "sincomite") {
+      setForm({ ...form, comiteId: "", comite: "", tipo_comite: "", observaciones: "" });
+      setMotivoSinComite("");
+    } else if (tipo.startsWith("comite_")) {
+      setForm({ ...form, comiteId: "", comite: "", tipo_comite: "", observaciones: "" });
+    } else {
+      setForm({ ...form, comiteId: "", comite: "", tipo_comite: "", observaciones: "" });
+    }
+  };
+
+  const handleGuardar = () => {
+    if (tipoSolicitud === "sincomite" && !motivoSinComite.trim()) {
+      alert("El motivo es obligatorio cuando no se asigna comité."); return;
+    }
+    onGuardar();
+  };
+
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        {CAMPOS.map(([k, l, t, cols]) => (
-          <div key={k} style={{ gridColumn: "span " + cols }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>{l}</label>
-            <input type={t} value={form[k]} onChange={e => setForm({ ...form, [k]: e.target.value })}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+      {/* Selección tipo solicitud - todos los programas del sistema */}
+      {!comiteIdFijo && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 10 }}>¿Programa de solicitud? *</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+            {/* Programa Habitabilidad (desmarque) */}
+            <div onClick={() => seleccionarTipo("desmarque")}
+              style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "desmarque" ? "#0891B2" : "#ddd"),
+                background: tipoSolicitud === "desmarque" ? "#E0F7FA" : "#fafafa", cursor: "pointer", textAlign: "center" }}>
+              <div style={{ fontSize: 22 }}>🏠</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "desmarque" ? "#0891B2" : "#555", marginTop: 4 }}>Habitabilidad de Vivienda</div>
+              <div style={{ fontSize: 10, color: "#888" }}>Desmarque</div>
+            </div>
+            {/* Programas CSP y personalizados (con comité) */}
+            {[...PROGRAMAS.filter(p => p.id !== "habitabilidad"), ...(programasCustom || [])].map(p => (
+              <div key={p.id} onClick={() => seleccionarTipo("comite_" + p.id)}
+                style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "comite_" + p.id ? (p.color || "#7C3AED") : "#ddd"),
+                  background: tipoSolicitud === "comite_" + p.id ? (p.colorLight || p.colorlight || "#F5F3FF") : "#fafafa", cursor: "pointer", textAlign: "center" }}>
+                <div style={{ fontSize: 22 }}>{p.icon || "👥"}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "comite_" + p.id ? (p.color || "#7C3AED") : "#555", marginTop: 4 }}>{p.nombre}</div>
+                <div style={{ fontSize: 10, color: "#888" }}>{p.descripcion || "Con comité"}</div>
+              </div>
+            ))}
+            {/* Sin comité */}
+            <div onClick={() => seleccionarTipo("sincomite")}
+              style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "sincomite" ? "#D97706" : "#ddd"),
+                background: tipoSolicitud === "sincomite" ? "#FFFBEB" : "#fafafa", cursor: "pointer", textAlign: "center" }}>
+              <div style={{ fontSize: 22 }}>📋</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "sincomite" ? "#D97706" : "#555", marginTop: 4 }}>Sin comité</div>
+              <div style={{ fontSize: 10, color: "#888" }}>Pendiente de asignación</div>
+            </div>
           </div>
-        ))}
-        {/* Selector de comité solo si no hay comité fijo */}
-        {!comiteIdFijo && comites && comites.length > 0 && (
-          <div style={{ gridColumn: "span 12" }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Comité</label>
-            <select value={form.comiteId || ""} onChange={e => setForm({ ...form, comiteId: e.target.value })}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box", background: "#fff" }}>
-              <option value="">-- Sin comité --</option>
-              {comites.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
+        </div>
+      )}
+
+      {/* Formulario solo aparece después de seleccionar tipo */}
+      {(tipoSolicitud || comiteIdFijo) && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {CAMPOS.map(([k, l, t, cols]) => {
+              // Cédula de identidad - campo normal con nota para subir cédula después
+              if (k === "rut" && tipoSolicitud === "desmarque") {
+                return (
+                  <div key={k} style={{ gridColumn: "span 6" }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Cédula de identidad *</label>
+                    <input value={formatRut(form.rut || "")}
+                      onChange={e => setForm({...form, rut: limpiarRut(e.target.value)})}
+                      placeholder="Solo números y guión: 10398338-K"
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+                    <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>⚠ Solo números y guión. Ej: 10398338-K → se mostrará 10.398.338-K</div>
+                  </div>
+                );
+              }
+              return (
+                <div key={k} style={{ gridColumn: "span " + (cols || "6") }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>{l}</label>
+                  {k === "rut" ? (
+                    <><input value={formatRut(form.rut || "")}
+                      onChange={e => setForm({ ...form, rut: limpiarRut(e.target.value) })}
+                      placeholder="Solo números y guión: 10398338-K"
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+                    <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>⚠ Solo números y guión. Ej: 10398338-K → 10.398.338-K</div></>
+                  ) : (
+                    <input type={t} value={form[k] || ""} onChange={e => setForm({ ...form, [k]: e.target.value })}
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Selector de comité Rural/Urbano — carga desde Supabase + estáticos */}
+            {!comiteIdFijo && tipoSolicitud && tipoSolicitud.startsWith("comite_") && (
+              <div style={{ gridColumn: "span 12" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>
+                  Comité * <span style={{ fontWeight: 400, color: "#9ca3af" }}>({comitesMerged.length} disponibles)</span>
+                </label>
+                <select value={form.comiteId || ""} onChange={e => {
+                  const sel = comitesMerged.find(c => c.id === e.target.value);
+                  setForm(sel
+                    ? { ...form, comiteId: sel.id, comite: sel.nombre, tipo_comite: sel.tipo }
+                    : { ...form, comiteId: "", comite: "", tipo_comite: "" }
+                  );
+                }} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (form.comiteId ? "#7C3AED" : "#ddd"), fontSize: 14, boxSizing: "border-box", background: "#fff" }}>
+                  <option value="">-- Seleccionar comité --</option>
+                  {comitesMerged.map(c => (
+                    <option key={c.id} value={c.id}>{c.tipo === "RURAL" ? "🌾" : "🏙️"} {c.nombre}</option>
+                  ))}
+                </select>
+                {form.comiteId && (
+                  <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 5, fontWeight: 600 }}>
+                    ✓ {form.tipo_comite === "RURAL" ? "🌾 Rural" : "🏙️ Urbano"} — {form.comite}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Campo motivo cuando no se asigna comité */}
+            {!comiteIdFijo && tipoSolicitud === "sincomite" && (
+              <div style={{ gridColumn: "span 12" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#D97706", display: "block", marginBottom: 5, textTransform: "uppercase" }}>
+                  ¿Motivo por el que no se asigna comité? *
+                </label>
+                <textarea value={motivoSinComite}
+                  onChange={e => {
+                    setMotivoSinComite(e.target.value);
+                    setForm(f => ({ ...f, observaciones: e.target.value.trim() ? "Pendiente por: " + e.target.value.trim() : "" }));
+                  }}
+                  placeholder="Ej: En espera de apertura de lista, pendiente de asignación por SERVIU..."
+                  rows={3}
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (motivoSinComite.trim() ? "#D97706" : "#FCA5A5"), fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                {motivoSinComite.trim() && (
+                  <div style={{ fontSize: 11, color: "#D97706", marginTop: 4 }}>
+                    Se guardará como: <strong>"Pendiente por: {motivoSinComite.trim()}"</strong>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Campos extra para Desmarque */}
+            {tipoSolicitud === "desmarque" && (
+              <>
+                <div style={{ gridColumn: "span 6" }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Tipo (RURAL/URBANO) *</label>
+                  <select value={form.tipo_comite || ""} onChange={e => setForm({ ...form, tipo_comite: e.target.value })}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (!form.tipo_comite ? "#FCA5A5" : "#ddd"), fontSize: 14, boxSizing: "border-box", background: "#fff" }}>
+                    <option value="">-- Seleccionar --</option>
+                    <option value="RURAL">RURAL</option>
+                    <option value="URBANO">URBANO</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn: "span 6" }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Año Subsidio *</label>
+                  <input value={form.anio_subsidio || ""} onChange={e => setForm({ ...form, anio_subsidio: e.target.value })}
+                    placeholder="Ej: 1989" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (!form.anio_subsidio ? "#FCA5A5" : "#ddd"), fontSize: 14, boxSizing: "border-box" }} />
+                </div>
+                {/* Rol de Propiedad */}
+                <div style={{ gridColumn: "span 6" }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Rol de la Propiedad *</label>
+                  <input value={form.rol_propiedad || ""} onChange={e => setForm({...form, rol_propiedad: e.target.value})}
+                    placeholder="Ej: 300-39"
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (!form.rol_propiedad ? "#FCA5A5" : "#ddd"), fontSize: 14, boxSizing: "border-box" }} />
+                </div>
+
+                {/* Documento de Propiedad */}
+                <div style={{ gridColumn: "span 6" }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Documento de Propiedad *</label>
+                  <select value={form.dominio_terreno || ""} onChange={e => setForm({...form, dominio_terreno: e.target.value})}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (!form.dominio_terreno ? "#FCA5A5" : "#ddd"), fontSize: 14, boxSizing: "border-box", background: "#fff" }}>
+                    <option value="">-- Seleccionar --</option>
+                    <option value="DV">DV - Dominio Vigente</option>
+                    <option value="DRU">DRU - Derecho Real de Uso</option>
+                    <option value="USUFRUCTO">Usufructo</option>
+                    <option value="GOCE">Goce de Tierra</option>
+                    <option value="OTRO">Otro</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn: "span 6" }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Sector *</label>
+                  <input value={form.sector || ""} onChange={e => setForm({ ...form, sector: e.target.value })}
+                    placeholder="Ej: BLANCO LEPIN" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (!form.sector ? "#FCA5A5" : "#ddd"), fontSize: 14, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ gridColumn: "span 6" }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Coordenadas (opcional)</label>
+                  <input value={form.coordenadas || ""} onChange={e => setForm({ ...form, coordenadas: e.target.value })}
+                    placeholder="Ej: C=-38.516023,-72.374214" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ gridColumn: "span 12" }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Observaciones (opcional)</label>
+                  <textarea value={form.observaciones || ""} onChange={e => setForm({ ...form, observaciones: e.target.value })}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
+                </div>
+              </>
+            )}
           </div>
-        )}
-      </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
-        <button onClick={onCancelar} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-        <button onClick={onGuardar} style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Guardar</button>
-      </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
+            <button onClick={onCancelar} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={handleGuardar} disabled={!tipoSolicitud && !comiteIdFijo}
+              style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Guardar</button>
+          </div>
+        </>
+      )}
     </>
   );
 }
 
 // ─── VISTA SOLICITANTES ──────────────────────────────────────────────────────
-function PersonasView({ personas, solicitudes, comites, onSave, onDetail }) {
+function PersonasView({ personas, solicitudes, comites, onSave, onDetail, programasCustom }) {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
+  const [claveInput, setClaveInput] = useState("");
+  const [claveError, setClaveError] = useState(false);
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId: "" };
   const [form, setForm] = useState(EMPTY);
 
@@ -212,15 +928,63 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail }) {
 
   const eliminar = (e, id) => {
     e.stopPropagation();
-    const ok = window["confirm"]("Eliminar este solicitante?");
-    if (ok) onSave(personas.filter(x => x.id !== id));
+    setPendingDeleteId(id);
+    setClaveInput("");
+    setClaveError(false);
+  };
+
+  const confirmarEliminar = () => {
+    if (claveInput === "196560") {
+      onSave(personas.filter(x => x.id !== pendingDeleteId));
+      setPendingDeleteId(null);
+    } else {
+      setClaveError(true);
+    }
   };
 
   const guardar = async () => {
-    if (!form.nombre.trim() || !form.rut.trim()) { alert("Nombre y RUT son obligatorios."); return; }
-    const nueva = { ...form, id: uid(), fechaIngreso: today() };
-    const carpeta = carpetaNombre(form.nombre, form.rut);
-    try { await fetch(API + "/carpeta/" + encodeURIComponent(carpeta), { method: "POST" }); } catch (e) { }
+    if (!form.nombre.trim() || !form.rut.trim()) { alert("Nombre y cédula de identidad son obligatorios."); return; }
+    if (!rutFormatoChilenoValido(form.rut)) {
+      alert("La cédula de identidad no es válida. Debe ingresar una cédula chilena con puntos, guion y dígito verificador correcto. Ejemplo: 10.398.338-K");
+      return;
+    }
+    const rutFormateado = formatRut(form.rut);
+    const rutLimpio = form.rut.replace(/[^0-9kK]/g, "").toLowerCase();
+    const duplicado = personas.find(p => p.rut && p.rut.replace(/[^0-9kK]/g,"").toLowerCase() === rutLimpio);
+    if (duplicado) { alert("\u26A0 La cédula " + formatRut(form.rut) + " ya está registrada para: " + duplicado.nombre + ".\n\nNo se puede registrar el mismo solicitante dos veces."); return; }
+    if (form.comiteId === "comite_desmarque") {
+      if (!form.telefono.trim()) { alert("El teléfono es obligatorio para Desmarque."); return; }
+      if (!form.direccion.trim()) { alert("La dirección es obligatoria para Desmarque."); return; }
+      if (!form.tipo_comite) { alert("Debe seleccionar RURAL o URBANO."); return; }
+      if (!form.anio_subsidio) { alert("El año de subsidio es obligatorio."); return; }
+      if (!form.rol_propiedad) { alert("El rol de la propiedad es obligatorio."); return; }
+      if (!form.dominio_terreno) { alert("El documento de propiedad es obligatorio."); return; }
+      if (!form.sector) { alert("El sector es obligatorio."); return; }
+    }
+    // Generar N° Recepción automático basado en total de personas desmarque
+    const totalDesmarque = personas.filter(p => p.comiteId === "comite_desmarque").length + 1;
+    const numeroRecepcion = form.comiteId === "comite_desmarque" ? String(totalDesmarque) : "";
+    const fechaRecepcion = form.comiteId === "comite_desmarque" ? today() : "";
+    const fechaSistema = today();
+    const nueva = { ...form, rut: rutFormateado, id: uid(), fechaIngreso: fechaSistema, fecha_ingreso: fechaSistema, 
+      numero_recepcion: numeroRecepcion, fecha_recepcion: fechaRecepcion,
+      tipo_comite: form.tipo_comite || "",
+      rol_propiedad: form.rol_propiedad || "",
+      dominio_terreno: form.dominio_terreno || "",
+      anio_subsidio: form.anio_subsidio || "",
+      sector: form.sector || "",
+      coordenadas: form.coordenadas || "",
+      observaciones: form.observaciones || "",
+    };
+    const carpeta = carpetaNombre(form.nombre, rutFormateado);
+    try { 
+      await fetch(API + "/carpeta/" + encodeURIComponent(carpeta), { method: "POST" });
+      // Mover archivos de carpeta temporal si existe
+      const carpetaTmp = form.nombre.replace(/\s+/g,"_").replace(/[^a-zA-Z0-9_]/g,"") + "_" + rutFormateado.replace(/[^0-9kK]/g,"");
+      if (carpetaTmp !== carpeta) {
+        await fetch(API + "/renombrar-carpeta", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ origen: carpetaTmp, destino: carpeta }) });
+      }
+    } catch (e) { }
     onSave([...personas, nueva]);
     setForm(EMPTY);
     setShowModal(false);
@@ -245,16 +1009,41 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail }) {
       <div style={{ display: "grid", gap: 10 }}>
         {filtered.map(p => {
           const dp = getDocPct(p.id);
-          const sols = getSols(p.id).length;
+          const solsAll = getSols(p.id);
+          const sols = solsAll.length;
           const comite = comites.find(c => c.id === p.comiteId);
+
+          // Detectar "Desmarque en trámite": tiene habitabilidad + otro programa,
+          // y Respuesta SERVIU no está aprobada
+          const tieneHabitabilidad = solsAll.some(s => s.programaId === "habitabilidad");
+          const tieneOtroPrograma = solsAll.some(s => s.programaId !== "habitabilidad");
+          const respuestaAprobada = solsAll.some(s =>
+            s.programaId === "habitabilidad" &&
+            (s.documentos || []).some(d =>
+              d.nombre && d.nombre.includes("Respuesta SERVIU") &&
+              d.valor && d.valor.toLowerCase().includes("aprobado")
+            )
+          );
+          const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
+
           return (
-            <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: "#fff", borderRadius: 12, padding: "16px 20px", border: "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+            <div key={p.id} onClick={() => onDetail(p.id)} style={{
+              background: desmarqueEnTramite ? "#FFF7ED" : "#fff",
+              borderRadius: 12, padding: "16px 20px",
+              border: desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de",
+              display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer"
+            }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 22, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: desmarqueEnTramite ? "#F97316" : "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
-                  <div style={{ fontSize: 13, color: "#888" }}>RUT: {p.rut}{p.comuna ? " - " + p.comuna : ""}</div>
+                  <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
                   {comite && <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 2 }}>● {comite.nombre}</div>}
+                  {desmarqueEnTramite && (
+                    <div style={{ display: "inline-block", marginTop: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: 0.3 }}>
+                      ⚠ Desmarque en trámite
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -269,42 +1058,1170 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail }) {
 
       {showModal && (
         <Modal title="Registrar solicitante" onClose={() => setShowModal(false)}>
-          <FormPersona form={form} setForm={setForm} onGuardar={guardar} onCancelar={() => setShowModal(false)} comites={comites} />
+          <FormPersona form={form} setForm={setForm} onGuardar={guardar} onCancelar={() => setShowModal(false)} comites={comites} programasCustom={programasCustom} />
         </Modal>
+      )}
+
+      {pendingDeleteId && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }}
+          onClick={() => setPendingDeleteId(null)}>
+          <div style={{ background:"#fff", borderRadius:14, padding:"28px 32px", width:400, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#DC2626", marginBottom:8 }}>🗑 Eliminar solicitante</div>
+            <div style={{ fontSize:13, color:"#555", marginBottom:18, lineHeight:1.6 }}>
+              Esta acción es irreversible. Ingresa la clave de administrador para confirmar la eliminación.
+            </div>
+            <input type="password" autoComplete="new-password" autoFocus value={claveInput}
+              onChange={e => { setClaveInput(e.target.value); setClaveError(false); }}
+              onKeyDown={e => e.key === "Enter" && confirmarEliminar()}
+              placeholder="Clave de administrador"
+              style={{ width:"100%", padding:"10px 14px", borderRadius:8, border:"1.5px solid " + (claveError ? "#DC2626" : "#ddd"), fontSize:14, boxSizing:"border-box", marginBottom:claveError ? 6 : 20 }} />
+            {claveError && <div style={{ fontSize:12, color:"#DC2626", marginBottom:14 }}>⚠ Clave incorrecta. Intenta nuevamente.</div>}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+              <button onClick={() => setPendingDeleteId(null)}
+                style={{ padding:"9px 18px", borderRadius:8, border:"1px solid #ddd", background:"#fff", fontSize:14, fontWeight:600, cursor:"pointer" }}>Cancelar</button>
+              <button onClick={confirmarEliminar}
+                style={{ padding:"9px 20px", borderRadius:8, background:"#DC2626", color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer" }}>Eliminar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
 // ─── DETALLE PERSONA ─────────────────────────────────────────────────────────
-function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onSaveSolicitudes, onSavePersonas }) {
+
+// ─── FICHA RURAL ─────────────────────────────────────────────────────────────
+// Formatea YYYY-MM-DD → DD/MM/YYYY para mostrar en pantalla e impresos
+function fmtFecha(f) {
+  if (!f) return "";
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(f)) {
+    const [y, m, d] = f.split("-");
+    return d + "/" + m + "/" + y;
+  }
+  return f; // ya está formateada o formato desconocido
+}
+
+function calcularEdad(fechaNac) {
+  if (!fechaNac) return null;
+  // Parsear manualmente para evitar problemas de zona horaria UTC
+  let anio, mes, dia;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaNac)) {
+    [anio, mes, dia] = fechaNac.split("-").map(Number);
+  } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(fechaNac)) {
+    [dia, mes, anio] = fechaNac.split("/").map(Number);
+  } else {
+    return null;
+  }
+  if (!anio || anio < 1900 || anio > new Date().getFullYear()) return null;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - anio;
+  if (hoy.getMonth() + 1 < mes || (hoy.getMonth() + 1 === mes && hoy.getDate() < dia)) edad--;
+  return edad;
+}
+
+function calcularAhorro(rsh) {
+  const val = parseFloat(String(rsh).replace(",", ".").replace("%", ""));
+  if (isNaN(val)) return "";
+  if (val <= 40) return "10";
+  if (val < 90) return "15";
+  return "";
+}
+
+function FichaRural({ persona, misSols, onSave, esCsp }) {
+  const [modo, setModo] = useState("ver");
+  const [form, setForm] = useState({ ...persona });
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [camposDesbloqueados, setCamposDesbloqueados] = useState(false);
+  const [showClaveCampos, setShowClaveCampos] = useState(false);
+
+  useEffect(() => {
+    if (modo === "ver") setForm({ ...persona });
+  }, [persona, modo]);
+
+  const guardar = () => {
+    setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Rural?", fn: async () => {
+      const edadCalc = calcularEdad(form.fechaNacimiento);
+      const formFinal = protegerDatosFicha(form, persona, {
+        adultoMayor: edadCalc !== null ? (edadCalc >= 60 ? "ADULTO MAYOR" : "NO") : form.adultoMayor
+      });
+      await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
+      onSave(formFinal);
+      setCamposDesbloqueados(false);
+      setModo("ver");
+      setConfirmModal(null);
+    }});
+  };
+
+  const handleFechaNac = (val) => {
+    const edad = calcularEdad(val);
+    const adulto = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : (form.adultoMayor || "");
+    setForm(f => ({ ...f, fechaNacimiento: val, adultoMayor: adulto }));
+  };
+
+  const handleRSH = (val) => {
+    const ahorro = calcularAhorro(val);
+    setForm(f => ({ ...f, puntajeRSH: val, ahorroPostular: ahorro || f.ahorroPostular }));
+  };
+
+  const sectionTitleStyle = {
+    gridColumn: "span 3",
+    fontSize: 15,
+    fontWeight: 900,
+    color: "#1E3A8A",
+    textTransform: "uppercase",
+    padding: "8px 0 7px",
+    borderBottom: "3px solid #93C5FD",
+    letterSpacing: "0.2px"
+  };
+
+  const campo = (label, valor) => (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 500 : 600, padding: "5px 0", borderBottom: "1px solid #f0ede8" }}>{valor || "⚠ Falta"}</div>
+    </div>
+  );
+
+  const inp = (label, key, type = "text") => {
+    const onChange = key === "fechaNacimiento" ? e => handleFechaNac(e.target.value)
+                   : key === "puntajeRSH"     ? e => handleRSH(e.target.value)
+                   : key === "avaluoFiscal"   ? e => setForm({ ...form, [key]: formatPesosChilenos(e.target.value) })
+                   : e => setForm({ ...form, [key]: e.target.value });
+    return (
+      <div>
+        <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{label}</label>
+        <input type={type} value={form[key] || ""} onChange={onChange}
+          style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, boxSizing: "border-box", background: "#fff" }} />
+      </div>
+    );
+  };
+
+  const seccion = (titulo) => (
+    <div style={{ ...sectionTitleStyle, marginTop: 10 }}>{titulo}</div>
+  );
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
+      <div style={{ background: "#FFFBEB", borderBottom: "3px solid #D97706", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#D97706" }}>🌾 Ficha Rural — {persona.comite}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["ver","Ver"],["editar","Editar"]].map(([k,l]) => (
+            <button key={k} onClick={() => { setForm({...persona}); if (k==="ver") setCamposDesbloqueados(false); setModo(k); }}
+              style={{ padding: "6px 14px", borderRadius: 7, border: "1.5px solid " + (modo===k ? "#D97706" : "#ddd"), background: modo===k ? "#D97706" : "#fff", color: modo===k ? "#fff" : "#555", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: "20px 24px" }}>
+        {modo === "ver" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div style={sectionTitleStyle}>Información General</div>
+            {campo("Nombre del Comité", persona.comite)}
+            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId))}
+            {campo("Nombre Postulante", persona.nombre)}
+            {campo("Cédula de identidad", persona.rut)}
+            {campo("Fecha de Nacimiento", fmtFecha(persona.fechaNacimiento))}
+            {campo("Dirección", persona.direccion)}
+            {campo("Coordenadas", persona.coordenadas)}
+            {campo("Rol", persona.rol)}
+            {campo("Teléfono", persona.telefono)}
+            {campo("Correo electrónico", persona.email)}
+            {campo("RSH %", persona.puntajeRSH ? persona.puntajeRSH + "%" : "")}
+            {campo("Comuna RSH", persona.comuna)}
+            {campo("N° Integrantes", persona.integrantesFamiliares)}
+            {campo("Estado Civil", persona.estadoCivil)}
+            {(() => {
+              const e = calcularEdad(persona.fechaNacimiento);
+              const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : (persona.adultoMayor || "");
+              return campo("Adulto Mayor", val + (e !== null ? ` (${e} años)` : ""));
+            })()}
+
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Técnica</div>
+            {campo("Dominio Propiedad", persona.dominiopropiedad)}
+            {campo("N° FJS / Año", persona.nFJS)}
+            {campo("Sistema de Agua Potable", persona.sistemaAgua)}
+            {campo("N° Servicio Agua", persona.nServicioAgua)}
+            {campo("Proveedor Eléctrico", persona.proveedorElectrico)}
+            {campo("N° Cliente Electricidad", persona.nClienteElectricidad)}
+            {campo("Inf. Previas", persona.infPrevias || "N/A")}
+            {campo("Antecedentes de la Vivienda", persona.antecedentesVivienda || "N/A")}
+            {campo("Cert. Ruralidad", persona.certRuralidad)}
+            {campo("Avalúo Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
+            {campo("Permiso Edificación", persona.permisoEdificacion)}
+            {campo("Recepción Definitiva", persona.recepcionDefinitiva)}
+            {campo("Constructora Seleccionada", persona.constructoraSeleccionada)}
+            {campo("Metros Viv. Original", persona.metrosOriginal)}
+            {campo("Metros Ampliación", persona.metrosAmpl)}
+            {campo("Metros No Regularizados", persona.metrosNoRegul)}
+            {campo("Total Metros", persona.totalMetros)}
+            {campo("Modalidad Postulación DS49", persona.modalidadPostulacion)}
+
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Social</div>
+            {campo("Discapacidad", persona.discapacidad)}
+            {campo("Movilidad Reducida", persona.movilidadReducida)}
+            {campo("Credencial/Cert. Discapacidad", persona.credencialDiscapacidad)}
+            {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
+            {campo("Banco", persona.banco)}
+            {campo("Subsidio Anterior", persona.subsidioAnterior)}
+            {campo("Ahorro para Postular (UF)", persona.ahorroPostular)}
+            {campo("Observaciones", persona.observaciones)}
+          </div>
+        )}
+
+        {modo === "editar" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+            {seccion("Información General")}
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comité</label>
+              <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#374151", fontWeight: 600 }}>
+                {inferirCargo(form.nombre, persona.comiteId)}
+                <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(automático)</span>
+              </div>
+            </div>
+            {inp("Nombre Postulante", "nombre")}
+            {!esCsp && inp("Cédula de identidad", "rut")}
+            {!esCsp && inp("Fecha de Nacimiento", "fechaNacimiento", "date")}
+            {inp("Dirección", "direccion")}
+            {inp("Coordenadas", "coordenadas")}
+            {!esCsp && inp("Rol", "rol")}
+            {inp("Teléfono", "telefono")}
+            {inp("Correo electrónico", "email")}
+            {!esCsp && inp("RSH %", "puntajeRSH")}
+            {!esCsp && inp("Comuna RSH", "comuna")}
+            {!esCsp && inp("N° Integrantes", "integrantesFamiliares")}
+            {!esCsp && (
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Estado Civil</label>
+              <select value={form.estadoCivil || ""} onChange={e => setForm({...form, estadoCivil: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                {["SOLTERO/A","CASADO/A","DIVORCIADO/A","VIUDO/A","CONVIVIENTE"].map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            )}
+            {!esCsp && <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Adulto Mayor</label>
+              {(() => {
+                const e = calcularEdad(form.fechaNacimiento);
+                const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : null;
+                return val ? (
+                  <div style={{ padding: "7px 10px", borderRadius: 7, background: e >= 60 ? "#FFFBEB" : "#f9fafb", border: "1.5px solid " + (e >= 60 ? "#D97706" : "#e5e7eb"), fontSize: 13, fontWeight: 700, color: e >= 60 ? "#D97706" : "#6b7280" }}>
+                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>({e} años — calculado automáticamente)</span>
+                  </div>
+                ) : (
+                  <div style={{ padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#9ca3af" }}>
+                    Ingresa la fecha de nacimiento para calcular
+                  </div>
+                );
+              })()}
+            </div>}
+
+            {seccion("Área Técnica")}
+            {!esCsp && (
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Dominio Propiedad</label>
+              <select value={form.dominiopropiedad || ""} onChange={e => setForm({...form, dominiopropiedad: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                {["DV - Dominio Vigente","DRU - Derecho Real de Uso","USUFRUCTO","GOCE","ADJUDICACION","OTRO"].map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            )}
+            {(() => {
+              const val = form.nFJS || "";
+              const sp = val.indexOf(" ");
+              const prefijo = sp > 0 ? val.slice(0, sp) : "";
+              const resto = sp > 0 ? val.slice(sp + 1) : val;
+              const sl = resto.indexOf("/");
+              const numero = sl >= 0 ? resto.slice(0, sl) : resto;
+              const anio = sl >= 0 ? resto.slice(sl + 1) : "";
+              const upd = (p, n, a) => {
+                const numAnio = n.trim() && a.trim() ? n.trim() + "/" + a.trim() : n.trim() || a.trim();
+                setForm({...form, nFJS: [p.trim(), numAnio].filter(Boolean).join(" ")});
+              };
+              const estilo = { width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, boxSizing: "border-box" };
+              const lbl = (t) => <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{t}</label>;
+              return (<>
+                <div>{lbl("FJS")} <input type="text" value={prefijo} placeholder="FJS" onChange={e => upd(e.target.value, numero, anio)} style={estilo} /></div>
+                <div>{lbl("N°")} <input type="text" value={numero} placeholder="25" onChange={e => upd(prefijo, e.target.value, anio)} style={estilo} /></div>
+                <div>{lbl("Año")} <input type="text" value={anio} placeholder="2026" onChange={e => upd(prefijo, numero, e.target.value)} style={estilo} /></div>
+              </>);
+            })()}
+            {!esCsp && inp("Sistema de Agua Potable", "sistemaAgua")}
+            {!esCsp && inp("N° Servicio Agua", "nServicioAgua")}
+            {!esCsp && inp("Proveedor Eléctrico", "proveedorElectrico")}
+            {esCsp ? (
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>N° Cliente Electricidad</label>
+                <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#555" }}>{form.nClienteElectricidad || <span style={{ color: "#9ca3af" }}>— (se sincroniza desde la solicitud)</span>}</div>
+              </div>
+            ) : inp("N° Cliente Electricidad", "nClienteElectricidad")}
+            {!esCsp && inp("Inf. Previas", "infPrevias")}
+            {!esCsp && inp("Antecedentes de la Vivienda", "antecedentesVivienda")}
+            {!esCsp && (
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cert. Ruralidad</label>
+              <select value={form.certRuralidad || ""} onChange={e => setForm({...form, certRuralidad: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                <option value="SI">SI - Tiene</option>
+                <option value="NO">NO - No tiene</option>
+                <option value="FALTA">FALTA - Pendiente</option>
+              </select>
+            </div>
+            )}
+            {!esCsp && inp("Avalúo Fiscal", "avaluoFiscal")}
+            {inp("Permiso Edificación", "permisoEdificacion")}
+            {inp("Recepción Definitiva", "recepcionDefinitiva")}
+            {inp("Constructora Seleccionada", "constructoraSeleccionada")}
+            {inp("Metros Viv. Original", "metrosOriginal")}
+            {inp("Metros Ampliación", "metrosAmpl")}
+            {inp("Metros No Regularizados", "metrosNoRegul")}
+            {inp("Total Metros", "totalMetros")}
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Modalidad Postulación</label>
+              <select value={form.modalidadPostulacion || ""} onChange={e => setForm({...form, modalidadPostulacion: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                <option value="CSP DS49">CSP DS49</option>
+                <option value="CSP">CSP</option>
+                <option value="D.S. 49">D.S. 49</option>
+                <option value="C.S.P.">C.S.P.</option>
+              </select>
+            </div>
+
+            {seccion("Área Social")}
+            {!esCsp && (() => {
+              const discNoAplica = form.discapacidad === "N/A" || (form.discapacidad || "").toLowerCase().includes("sin");
+              const lockStyle = { padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#6b7280" };
+              const lockLabel = (label) => <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{label}</label>;
+              return (<>
+            <div>
+              {lockLabel("Discapacidad")}
+              <select value={form.discapacidad || ""} onChange={e => {
+                const val = e.target.value;
+                const noAplica = val === "N/A" || val.toLowerCase().includes("sin");
+                setForm({ ...form, discapacidad: val, ...(noAplica ? { movilidadReducida: "N/A", credencialDiscapacidad: "N/A" } : {}) });
+              }} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                <option value="S">S - Sí</option>
+                <option value="N">N - No</option>
+                <option value="N/A">N/A</option>
+              </select>
+            </div>
+            {discNoAplica ? (
+              <div>{lockLabel("Movilidad Reducida")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+            ) : (
+              <div>
+                {lockLabel("Movilidad Reducida")}
+                <select value={form.movilidadReducida || ""} onChange={e => setForm({...form, movilidadReducida: e.target.value})}
+                  style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
+                  <option value="">-- Seleccionar --</option>
+                  <option value="SI">SI</option>
+                  <option value="N/A">N/A</option>
+                </select>
+              </div>
+            )}
+            {inp("N° Cuenta de Ahorro", "cuentaAhorro")}
+            {inp("Banco", "banco")}
+            {discNoAplica ? (
+              <div>{lockLabel("Credencial/Cert. Discapacidad")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+            ) : inp("Credencial/Cert. Discapacidad", "credencialDiscapacidad")}
+              </>);
+            })()}
+            {!esCsp && inp("Subsidio Anterior", "subsidioAnterior")}
+            {!esCsp && inp("Ahorro para Postular (UF)", "ahorroPostular")}
+            <div style={{ gridColumn: "span 3" }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Observaciones</label>
+              <textarea value={form.observaciones || ""} onChange={e => setForm({...form, observaciones: e.target.value})}
+                rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+            </div>
+
+            <div style={{ gridColumn: "span 3", display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 16, borderTop: "1px solid #f0ede8" }}>
+              <button onClick={() => { setForm({...persona}); setCamposDesbloqueados(false); setModo("ver"); }} style={{ padding: "9px 20px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={guardar} style={{ padding: "9px 22px", borderRadius: 8, background: "#D97706", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Guardar cambios</button>
+            </div>
+          </div>
+        )}
+      </div>
+      {confirmModal && <ConfirmModal mensaje={confirmModal.msg} danger={false} onConfirm={confirmModal.fn} onCancel={() => setConfirmModal(null)} />}
+      {/* clave de campos eliminada */}
+    </div>
+  );
+}
+
+// ─── FICHA URBANA ─────────────────────────────────────────────────────────────
+function FichaUrbana({ persona, misSols, onSave, esCsp }) {
+  const [modo, setModo] = useState("ver");
+  const [form, setForm] = useState({ ...persona });
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [camposDesbloqueados, setCamposDesbloqueados] = useState(false);
+  const [showClaveCampos, setShowClaveCampos] = useState(false);
+
+  useEffect(() => {
+    if (modo === "ver") setForm({ ...persona });
+  }, [persona, modo]);
+
+  const guardar = () => {
+    setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Urbana?", fn: async () => {
+      const edadCalc = calcularEdad(form.fechaNacimiento);
+      const formFinal = protegerDatosFicha(form, persona, {
+        adultoMayor: edadCalc !== null ? (edadCalc >= 60 ? "ADULTO MAYOR" : "NO") : form.adultoMayor
+      });
+      await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
+      onSave(formFinal);
+      setCamposDesbloqueados(false);
+      setModo("ver");
+      setConfirmModal(null);
+    }});
+  };
+
+  const handleFechaNac = (val) => {
+    const edad = calcularEdad(val);
+    const adulto = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : (form.adultoMayor || "");
+    setForm(f => ({ ...f, fechaNacimiento: val, adultoMayor: adulto }));
+  };
+
+  const handleRSH = (val) => {
+    const ahorro = calcularAhorro(val);
+    setForm(f => ({ ...f, puntajeRSH: val, ahorroPostular: ahorro || f.ahorroPostular }));
+  };
+
+  const sectionTitleStyle = {
+    gridColumn: "span 3",
+    fontSize: 15,
+    fontWeight: 900,
+    color: "#1E3A8A",
+    textTransform: "uppercase",
+    padding: "8px 0 7px",
+    borderBottom: "3px solid #93C5FD",
+    letterSpacing: "0.2px"
+  };
+
+  const campo = (label, valor) => (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 500 : 600, padding: "5px 0", borderBottom: "1px solid #f0ede8" }}>{valor || "⚠ Falta"}</div>
+    </div>
+  );
+
+  const inp = (label, key, type = "text") => {
+    const onChange = key === "fechaNacimiento" ? e => handleFechaNac(e.target.value)
+                   : key === "puntajeRSH"     ? e => handleRSH(e.target.value)
+                   : key === "avaluoFiscal"   ? e => setForm({ ...form, [key]: formatPesosChilenos(e.target.value) })
+                   : e => setForm({ ...form, [key]: e.target.value });
+    return (
+      <div>
+        <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{label}</label>
+        <input type={type} value={form[key] || ""} onChange={onChange}
+          style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, boxSizing: "border-box", background: "#fff" }} />
+      </div>
+    );
+  };
+
+  const seccion = (titulo) => (
+    <div style={{ ...sectionTitleStyle, marginTop: 10 }}>{titulo}</div>
+  );
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
+      <div style={{ background: "#ECFDF5", borderBottom: "3px solid #059669", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#059669" }}>🏙️ Ficha Urbana — {persona.comite}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["ver","Ver"],["editar","Editar"]].map(([k,l]) => (
+            <button key={k} onClick={() => { setForm({...persona}); if (k==="ver") setCamposDesbloqueados(false); setModo(k); }}
+              style={{ padding: "6px 14px", borderRadius: 7, border: "1.5px solid " + (modo===k ? "#059669" : "#ddd"), background: modo===k ? "#059669" : "#fff", color: modo===k ? "#fff" : "#555", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: "20px 24px" }}>
+        {modo === "ver" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div style={sectionTitleStyle}>Información General</div>
+            {campo("Nombre del Comité", persona.comite)}
+            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId))}
+            {campo("Nombre Postulante", persona.nombre)}
+            {campo("Cédula de identidad", persona.rut)}
+            {campo("Fecha de Nacimiento", fmtFecha(persona.fechaNacimiento))}
+            {campo("Dirección", persona.direccion)}
+            {campo("Coordenadas", persona.coordenadas)}
+            {campo("Rol", persona.rol)}
+            {campo("Teléfono", persona.telefono)}
+            {campo("Correo electrónico", persona.email)}
+            {campo("RSH %", persona.puntajeRSH ? persona.puntajeRSH + "%" : "")}
+            {campo("Comuna RSH", persona.comuna)}
+            {campo("N° Integrantes", persona.integrantesFamiliares)}
+            {campo("Estado Civil", persona.estadoCivil)}
+            {(() => {
+              const e = calcularEdad(persona.fechaNacimiento);
+              const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : (persona.adultoMayor || "");
+              return campo("Adulto Mayor", val + (e !== null ? ` (${e} años)` : ""));
+            })()}
+
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Técnica</div>
+            {campo("Dominio Propiedad", persona.dominiopropiedad)}
+            {campo("N° FJS / Año", persona.nFJS)}
+            {campo("Informaciones Previas", persona.informacionesPrevias || "N/A")}
+            {campo("Antecedentes de la Vivienda", persona.antecedentesVivienda || "N/A")}
+            {campo("Sistema de Agua Potable", persona.sistemaAgua)}
+            {campo("N° Servicio Agua", persona.nServicioAgua)}
+            {campo("Proveedor Eléctrico", persona.proveedorElectrico)}
+            {campo("N° Cliente Electricidad", persona.nClienteElectricidad)}
+            {campo("Avalúo Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
+            {campo("Permiso Edificación", persona.permisoEdificacion)}
+            {campo("Recepción Definitiva", persona.recepcionDefinitiva)}
+            {campo("Constructora Seleccionada", persona.constructoraSeleccionada)}
+            {campo("Metros Viv. Original", persona.metrosOriginal)}
+            {campo("Metros Ampliación", persona.metrosAmpl)}
+            {campo("Metros No Regularizados", persona.metrosNoRegul)}
+            {campo("Total Metros", persona.totalMetros)}
+            {campo("Modalidad Postulación", persona.modalidadPostulacion)}
+
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Social</div>
+            {campo("Discapacidad", persona.discapacidad)}
+            {campo("Movilidad Reducida", persona.movilidadReducida)}
+            {campo("Credencial/Cert. Discapacidad", persona.credencialDiscapacidad)}
+            {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
+            {campo("Banco", persona.banco)}
+            {campo("Subsidio Anterior", persona.subsidioAnterior)}
+            {campo("Ahorro para Postular (UF)", persona.ahorroPostular)}
+            {campo("Observaciones", persona.observaciones)}
+          </div>
+        )}
+
+        {modo === "editar" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+            {seccion("Información General")}
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comité</label>
+              <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#374151", fontWeight: 600 }}>
+                {inferirCargo(form.nombre, persona.comiteId)}
+                <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(automático)</span>
+              </div>
+            </div>
+            {inp("Nombre Postulante", "nombre")}
+            {!esCsp && inp("Cédula de identidad", "rut")}
+            {!esCsp && inp("Fecha de Nacimiento", "fechaNacimiento", "date")}
+            {inp("Dirección", "direccion")}
+            {inp("Coordenadas", "coordenadas")}
+            {!esCsp && inp("Rol", "rol")}
+            {inp("Teléfono", "telefono")}
+            {inp("Correo electrónico", "email")}
+            {!esCsp && inp("RSH %", "puntajeRSH")}
+            {!esCsp && inp("Comuna RSH", "comuna")}
+            {!esCsp && inp("N° Integrantes", "integrantesFamiliares")}
+            {!esCsp && (
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Estado Civil</label>
+              <select value={form.estadoCivil || ""} onChange={e => setForm({...form, estadoCivil: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                {["SOLTERO/A","CASADO/A","DIVORCIADO/A","VIUDO/A","CONVIVIENTE"].map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            )}
+            {!esCsp && <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Adulto Mayor</label>
+              {(() => {
+                const e = calcularEdad(form.fechaNacimiento);
+                const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : null;
+                return val ? (
+                  <div style={{ padding: "7px 10px", borderRadius: 7, background: e >= 60 ? "#ECFDF5" : "#f9fafb", border: "1.5px solid " + (e >= 60 ? "#059669" : "#e5e7eb"), fontSize: 13, fontWeight: 700, color: e >= 60 ? "#059669" : "#6b7280" }}>
+                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>({e} años — calculado automáticamente)</span>
+                  </div>
+                ) : (
+                  <div style={{ padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#9ca3af" }}>
+                    Ingresa la fecha de nacimiento para calcular
+                  </div>
+                );
+              })()}
+            </div>}
+
+            {seccion("Área Técnica")}
+            {!esCsp && (
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Dominio Propiedad</label>
+              <select value={form.dominiopropiedad || ""} onChange={e => setForm({...form, dominiopropiedad: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                {["DV - Dominio Vigente","DRU - Derecho Real de Uso","USUFRUCTO","GOCE","ADJUDICACION","OTRO"].map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            )}
+            {!esCsp && inp("Informaciones Previas", "informacionesPrevias")}
+            {(() => {
+              const val = form.nFJS || "";
+              const sp = val.indexOf(" ");
+              const prefijo = sp > 0 ? val.slice(0, sp) : "";
+              const resto = sp > 0 ? val.slice(sp + 1) : val;
+              const sl = resto.indexOf("/");
+              const numero = sl >= 0 ? resto.slice(0, sl) : resto;
+              const anio = sl >= 0 ? resto.slice(sl + 1) : "";
+              const upd = (p, n, a) => {
+                const numAnio = n.trim() && a.trim() ? n.trim() + "/" + a.trim() : n.trim() || a.trim();
+                setForm({...form, nFJS: [p.trim(), numAnio].filter(Boolean).join(" ")});
+              };
+              const estilo = { width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, boxSizing: "border-box" };
+              const lbl = (t) => <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{t}</label>;
+              return (<>
+                <div>{lbl("FJS")} <input type="text" value={prefijo} placeholder="FJS" onChange={e => upd(e.target.value, numero, anio)} style={estilo} /></div>
+                <div>{lbl("N°")} <input type="text" value={numero} placeholder="25" onChange={e => upd(prefijo, e.target.value, anio)} style={estilo} /></div>
+                <div>{lbl("Año")} <input type="text" value={anio} placeholder="2026" onChange={e => upd(prefijo, numero, e.target.value)} style={estilo} /></div>
+              </>);
+            })()}
+            {!esCsp && inp("Antecedentes de la Vivienda", "antecedentesVivienda")}
+            {!esCsp && inp("Sistema de Agua Potable", "sistemaAgua")}
+            {!esCsp && inp("N° Servicio Agua", "nServicioAgua")}
+            {!esCsp && inp("Proveedor Eléctrico", "proveedorElectrico")}
+            {esCsp ? (
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>N° Cliente Electricidad</label>
+                <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#555" }}>{form.nClienteElectricidad || <span style={{ color: "#9ca3af" }}>— (se sincroniza desde la solicitud)</span>}</div>
+              </div>
+            ) : inp("N° Cliente Electricidad", "nClienteElectricidad")}
+            {!esCsp && inp("Avalúo Fiscal", "avaluoFiscal")}
+            {inp("Permiso Edificación", "permisoEdificacion")}
+            {inp("Recepción Definitiva", "recepcionDefinitiva")}
+            {inp("Constructora Seleccionada", "constructoraSeleccionada")}
+            {inp("Metros Viv. Original", "metrosOriginal")}
+            {inp("Metros Ampliación", "metrosAmpl")}
+            {inp("Metros No Regularizados", "metrosNoRegul")}
+            {inp("Total Metros", "totalMetros")}
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Modalidad Postulación</label>
+              <select value={form.modalidadPostulacion || ""} onChange={e => setForm({...form, modalidadPostulacion: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                <option value="CSP DS49">CSP DS49</option>
+                <option value="CSP">CSP</option>
+              </select>
+            </div>
+
+            {seccion("Área Social")}
+            {!esCsp && (() => {
+              const discNoAplica = form.discapacidad === "N/A" || (form.discapacidad || "").toLowerCase().includes("sin");
+              const lockStyle = { padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#6b7280" };
+              const lockLabel = (label) => <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{label}</label>;
+              return (<>
+            <div>
+              {lockLabel("Discapacidad")}
+              <select value={form.discapacidad || ""} onChange={e => {
+                const val = e.target.value;
+                const noAplica = val === "N/A" || val.toLowerCase().includes("sin");
+                setForm({ ...form, discapacidad: val, ...(noAplica ? { movilidadReducida: "N/A", credencialDiscapacidad: "N/A" } : {}) });
+              }} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                <option value="S">S - Sí</option>
+                <option value="N">N - No</option>
+                <option value="N/A">N/A</option>
+              </select>
+            </div>
+            {discNoAplica ? (
+              <div>{lockLabel("Movilidad Reducida")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+            ) : (
+              <div>
+                {lockLabel("Movilidad Reducida")}
+                <select value={form.movilidadReducida || ""} onChange={e => setForm({...form, movilidadReducida: e.target.value})}
+                  style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, background: "#fff" }}>
+                  <option value="">-- Seleccionar --</option>
+                  <option value="SI">SI</option>
+                  <option value="N/A">N/A</option>
+                </select>
+              </div>
+            )}
+            {inp("N° Cuenta de Ahorro", "cuentaAhorro")}
+            {inp("Banco", "banco")}
+            {discNoAplica ? (
+              <div>{lockLabel("Credencial/Cert. Discapacidad")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+            ) : inp("Credencial/Cert. Discapacidad", "credencialDiscapacidad")}
+              </>);
+            })()}
+            {!esCsp && inp("Subsidio Anterior", "subsidioAnterior")}
+            {!esCsp && inp("Ahorro para Postular (UF)", "ahorroPostular")}
+            <div style={{ gridColumn: "span 3" }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Observaciones</label>
+              <textarea value={form.observaciones || ""} onChange={e => setForm({...form, observaciones: e.target.value})}
+                rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+            </div>
+
+            <div style={{ gridColumn: "span 3", display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 16, borderTop: "1px solid #f0ede8" }}>
+              <button onClick={() => { setForm({...persona}); setCamposDesbloqueados(false); setModo("ver"); }} style={{ padding: "9px 20px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={guardar} style={{ padding: "9px 22px", borderRadius: 8, background: "#059669", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Guardar cambios</button>
+            </div>
+          </div>
+        )}
+      </div>
+      {confirmModal && <ConfirmModal mensaje={confirmModal.msg} danger={false} onConfirm={confirmModal.fn} onCancel={() => setConfirmModal(null)} />}
+      {/* clave de campos eliminada */}
+    </div>
+  );
+}
+
+function FichaProgramaCustom({ persona, programa, solicitud }) {
+  const docs = solicitud && Array.isArray(solicitud.documentos) ? solicitud.documentos : [];
+  const color = programa.color || "#7C3AED";
+  const colorLight = programa.colorLight || programa.colorlight || "#F5F3FF";
+
+  const valorDoc = (doc) => {
+    const raw = doc.valor || "";
+    if (!raw) return "";
+    try {
+      const obj = JSON.parse(raw);
+      return Object.entries(obj)
+        .filter(([, v]) => v !== undefined && v !== null && String(v).trim())
+        .map(([k, v]) => {
+          const label = k
+            .replace(/([A-Z])/g, " $1")
+            .replace(/^./, c => c.toUpperCase());
+          return `${label}: ${v}`;
+        })
+        .join(" | ");
+    } catch {
+      return raw;
+    }
+  };
+
+  const dato = (label, value) => {
+    const val = value === 0 ? "0" : (value || "").toString().trim();
+    if (!val) return null;
+    return (
+      <div key={label} style={{ borderBottom: "1px solid #eef2f7", padding: "8px 0" }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 700 }}>{val}</div>
+      </div>
+    );
+  };
+
+  const datos = [
+    dato("Nombre", persona.nombre),
+    dato("Cédula de identidad", persona.rut),
+    dato("Fecha de ingreso", persona.fechaIngreso || persona.fecha_ingreso),
+    dato("Fecha de nacimiento", persona.fechaNacimiento || persona.fecha_nacimiento),
+    dato("Teléfono", persona.telefono),
+    dato("Dirección", persona.direccion),
+    dato("Correo", persona.email || persona.correo),
+    dato("Comuna", persona.comuna),
+    dato("Comité", persona.comite),
+    dato("RSH", persona.puntajeRSH || persona.puntaje_rsh),
+    dato("Estado civil", persona.estadoCivil || persona.estadocivil || persona.estado_civil),
+    dato("N° integrantes", persona.integrantesFamiliares || persona.integrantes_familiares),
+    dato("N° cuenta ahorro", persona.numero_cuenta_ahorro || persona.cuentaAhorro || persona.cuentaahorro),
+    dato("Banco", persona.banco),
+    dato("Ingreso familiar UF", persona.ingreso_familiar_uf),
+    dato("Subsidio anterior", persona.subsidioAnterior || persona.subsidio_anterior),
+    dato("Rol propiedad", persona.rol_propiedad || persona.rol),
+    dato("Avalúo fiscal", persona.avaluoFiscal || persona.avaluofiscal),
+    dato("Coordenadas", persona.coordenadas),
+    dato("Observaciones", persona.observaciones),
+  ].filter(Boolean);
+
+  const docsConDatos = docs.filter(d => docCompletoEquivalente(d, docs) || valorDoc(d));
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: "20px 24px", marginBottom: 20, border: "1px solid #e8e3de" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: colorLight, color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900 }}>
+          {programa.icon || "P"}
+        </div>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 900, color }}>Ficha {programa.nombre || "Programa personalizado"}</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>Datos disponibles del solicitante para este programa</div>
+        </div>
+      </div>
+
+      {datos.length > 0 ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0 18px", marginBottom: 18 }}>
+          {datos}
+        </div>
+      ) : (
+        <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 14, color: "#94a3b8", fontSize: 13 }}>
+          Aún no hay datos cargados para mostrar en esta ficha.
+        </div>
+      )}
+
+      {docsConDatos.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: "#334155", textTransform: "uppercase", marginBottom: 8 }}>Documentos / antecedentes registrados</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {docsConDatos.map((d, i) => {
+              const completo = docCompletoEquivalente(d, docs);
+              const val = valorDoc(d);
+              return (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, padding: "9px 12px", borderRadius: 9, border: "1px solid " + (completo ? "#bbf7d0" : "#e5e7eb"), background: completo ? "#f0fdf4" : "#f8fafc" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#1f2937" }}>{d.nombre}</div>
+                    {val && <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{val}</div>}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: completo ? "#047857" : "#64748b", textTransform: "uppercase" }}>
+                    {completo ? "VB" : "Dato"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetallePersona({ personaId, personas, solicitudes, comites, programasCustom, onBack, onSaveSolicitudes, onSavePersonas, currentUser, registrarAuditoria }) {
+  const todosProgramas = [...PROGRAMAS, ...(programasCustom || [])];
   const [showModal, setShowModal] = useState(false);
   const [progSel, setProgSel] = useState("");
   const [archivos, setArchivos] = useState([]);
+  const [archivosRutas, setArchivosRutas] = useState({});
   const [subiendo, setSubiendo] = useState(false);
   const [showModalComprobante, setShowModalComprobante] = useState(false);
+  const [showDesbloquearRespuesta, setShowDesbloquearRespuesta] = useState(false);
+  const [solsEditando, setSolsEditando] = useState({}); // {solId: true} para habilitar edición
+  const [showModalEmigrar, setShowModalEmigrar] = useState(false);
+  const [programaEmigrar, setProgramaEmigrar] = useState("");
+  const [showDesbloquearPrograma, setShowDesbloquearPrograma] = useState(false);
   const [notaRechazo, setNotaRechazo] = useState("");
   const [resultadoComp, setResultadoComp] = useState("");
+  const [showModalInformeDom, setShowModalInformeDom] = useState(false);
+  const [resultadoInformeDom, setResultadoInformeDom] = useState("");
+  const [showModalRespuestaServiu, setShowModalRespuestaServiu] = useState(false);
+  const [resultadoRespuestaServiu, setResultadoRespuestaServiu] = useState("");
+  const [notaResultado, setNotaResultado] = useState("");
+  const [showFichaEdit, setShowFichaEdit] = useState(false);
+  const [fichaForm, setFichaForm] = useState({});
+  const [tipoComiteDesbloqueado, setTipoComiteDesbloqueado] = useState(false);
+  const [showDesbloquearTipoComite, setShowDesbloquearTipoComite] = useState(false);
+  const [camposDesmarqueDesbloqueados, setCamposDesmarqueDesbloqueados] = useState(false);
+  const [showClaveCamposDesmarque, setShowClaveCamposDesmarque] = useState(false);
+  const [rutDesbloqueado, setRutDesbloqueado] = useState(false);
+  const [showClaveRut, setShowClaveRut] = useState(false);
+  const [showClaveVbDesmarque, setShowClaveVbDesmarque] = useState(false);
+  const [pendingVbDesmarque, setPendingVbDesmarque] = useState(null);
+  const [showModalMemo, setShowModalMemo] = useState(false);
+  const [showModalCarta, setShowModalCarta] = useState(false);
+  const [showModalSolicitud, setShowModalSolicitud] = useState(false);
+  const [showModalInformeJACC, setShowModalInformeJACC] = useState(false);
+  const [formMemo, setFormMemo] = useState({ numero: "", problemas: [], nuevoProblema: "" });
+  const [formCarta, setFormCarta] = useState({ numero: "" });
+  const [formSolicitud, setFormSolicitud] = useState({ subsidio: "", anioSubsidio: "" });
+  const [filasInforme, setFilasInforme] = useState([{ id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }]);
+  const [informeSubsidioTexto, setInformeSubsidioTexto] = useState("");
+  const [informeEstadoVivienda, setInformeEstadoVivienda] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const [generandoInforme, setGenerandoInforme] = useState(false);
+  const [docMenu, setDocMenu] = useState(null); // { arch, x, y }
+  const [htmlPreview, setHtmlPreview] = useState(null);
+  const [showModalZip, setShowModalZip] = useState(false);
+  const [zipSearch, setZipSearch] = useState("");
+  const [zipSeleccionados, setZipSeleccionados] = useState([]);
+  const [generandoZip, setGenerandoZip] = useState(false);
   const fileRef = useRef();
+  const iframePreviewRef = useRef();
+
+  const [showAsignarComite, setShowAsignarComite] = useState(false);
+  const [comiteParaAsignar, setComiteParaAsignar] = useState("");
+  const [visitas, setVisitas] = useState([]);
+  const [showFormVisita, setShowFormVisita] = useState(false);
+  const [formVisita, setFormVisita] = useState({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "" });
+  const [guardandoVisita, setGuardandoVisita] = useState(false);
 
   const persona = personas.find(p => p.id === personaId);
-  const carpeta = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
+  const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
+  const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
+
+  const cargarVisitas = async () => {
+    try {
+      const { data, error } = await supabase.from("visitas").select("*").eq("persona_id", personaId).order("fecha", { ascending: false });
+      if (error) {
+        if (error.code === "PGRST205") console.warn("[visitas] Tabla 'visitas' no existe aún. Ejecuta supabase_migration.sql en el Dashboard.");
+        else console.warn("[visitas] error:", error.message);
+        setVisitas([]); return;
+      }
+      setVisitas(data || []);
+    } catch (err) { console.warn("[cargarVisitas] excepción:", err.message); setVisitas([]); }
+  };
+
+  const agregarVisita = async (progDocs) => {
+    const profesionalActual = formVisita.profesional || currentUser?.nombre || "";
+    if (!formVisita.fecha || !profesionalActual) return;
+    setGuardandoVisita(true);
+    const buildLineas = (checks) => progDocs
+      .filter(d => checks[d.id])
+      .map(d => d.subopciones && typeof checks[d.id] === "string"
+        ? `• ${d.label} (${checks[d.id]})`
+        : `• ${d.label}`);
+    const lineas = buildLineas(formVisita.checksDocs);
+    if (formVisita.otrosSolicitud.trim()) lineas.push(`Otros: ${formVisita.otrosSolicitud.trim()}`);
+    const recibidosLineas = buildLineas(formVisita.checksDocsRecibidos);
+    const nueva = {
+      id: uid(), persona_id: personaId, fecha: formVisita.fecha,
+      profesional: profesionalActual,
+      solicitud: lineas.join("\n"),
+      compromiso: formVisita.compromiso.trim(),
+      docs_recibidos: recibidosLineas.join("\n"),
+      profesional_recibio: formVisita.profesionalRecibio || (recibidosLineas.length ? profesionalActual : ""),
+    };
+    const { error: insErr } = await supabase.from("visitas").insert([nueva]);
+    if (insErr) { console.warn("[visitas insert] error:", insErr.message); }
+    await registrarAuditoria?.("registrar_visita", "visitas", nueva.id, { personaId, persona: persona?.nombre || "", fecha: nueva.fecha, profesional: nueva.profesional });
+    setVisitas(prev => [nueva, ...prev].sort((a, b) => b.fecha.localeCompare(a.fecha)));
+    setFormVisita({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "" });
+    setShowFormVisita(false);
+    setGuardandoVisita(false);
+  };
+
+  const asignarComite = async () => {
+    const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
+    const todosComites = [
+      ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo })),
+      ...(comites||[]).filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
+        .map(sc => ({ id: sc.id, nombre: sc.nombre, tipo: sc.programaId === "csp_urbano" ? "URBANO" : "RURAL" }))
+    ];
+    const sel = todosComites.find(c => c.id === comiteParaAsignar);
+    if (!sel) return;
+    await supabase.from("personas").update({ comite_id: sel.id, comite: sel.nombre, tipo_comite: sel.tipo }).eq("id", persona.id);
+    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, comiteId: sel.id, comite: sel.nombre, tipo_comite: sel.tipo } : p));
+    setShowAsignarComite(false);
+    setComiteParaAsignar("");
+  };
+
+  const eliminarVisita = async (id) => {
+    if (!window.confirm("¿Eliminar esta visita?")) return;
+    const { error } = await supabase.from("visitas").delete().eq("id", id);
+    if (error) console.warn("[visitas delete] error:", error.message);
+    setVisitas(prev => prev.filter(v => v.id !== id));
+  };
+
+  const imprimirVisita = (v) => {
+    const win = window.open("", "_blank", "width=820,height=700");
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Visita — ${persona.nombre}</title>
+<style>
+  @page { margin: 2.2cm 2cm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; line-height: 1.55; }
+  .header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 14px; border-bottom: 3px solid #1e3a5f; margin-bottom: 22px; }
+  .org-name { font-size: 17px; font-weight: 700; color: #1e3a5f; }
+  .org-sub  { font-size: 12px; color: #555; margin-top: 2px; }
+  .doc-title { text-align: right; }
+  .doc-title h1 { font-size: 15px; font-weight: 700; color: #1e3a5f; }
+  .doc-title p  { font-size: 11px; color: #888; margin-top: 3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; margin-bottom: 18px; }
+  .field { margin-bottom: 14px; }
+  .field-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #888; margin-bottom: 3px; }
+  .field-value { font-size: 13px; font-weight: 600; color: #111; padding: 6px 10px; background: #f9fafb; border-radius: 5px; border-left: 3px solid #1e3a5f; }
+  .docs-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; white-space: pre-line; font-size: 13px; min-height: 60px; }
+  .comprob-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; font-size: 13px; min-height: 60px; }
+  .divider { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
+  .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 52px; }
+  .firma-line { border-top: 1px solid #333; padding-top: 8px; text-align: center; font-size: 11px; color: #555; }
+  .footer-note { margin-top: 36px; font-size: 10px; color: #aaa; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+<div class="header">
+  <div>
+    <div class="org-name">UNIDAD DE VIVIENDA</div>
+    <div class="org-sub">Entidad Patrocinante: Ilustre Municipalidad de Lautaro</div>
+  </div>
+  <div class="doc-title">
+    <h1>Registro de Visita a Oficina</h1>
+    <p>Documento generado el ${new Date().toLocaleDateString("es-CL")}</p>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="field">
+    <div class="field-label">Nombre del solicitante</div>
+    <div class="field-value">${persona.nombre}</div>
+  </div>
+  <div class="field">
+    <div class="field-label">RUT</div>
+    <div class="field-value">${persona.rut || "—"}</div>
+  </div>
+  <div class="field">
+    <div class="field-label">Fecha de visita</div>
+    <div class="field-value">${fmtFecha(v.fecha)}</div>
+  </div>
+  <div class="field">
+    <div class="field-label">Profesional que atendió</div>
+    <div class="field-value">${v.profesional}</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<div class="field" style="margin-bottom:16px">
+  <div class="field-label" style="margin-bottom:6px">Documentos / solicitudes al postulante</div>
+  <div class="docs-box">${v.solicitud ? v.solicitud.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "—"}</div>
+</div>
+
+<div class="field">
+  <div class="field-label" style="margin-bottom:6px">Compromiso del solicitante</div>
+  <div class="comprob-box">${v.compromiso ? v.compromiso.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "—"}</div>
+</div>
+
+${v.docs_recibidos || v.profesional_recibio ? `
+<hr class="divider">
+<div class="field" style="margin-bottom:${v.profesional_recibio ? "10px" : "16px"}">
+  <div class="field-label" style="margin-bottom:6px;color:#059669">Documentos recibidos en esta visita</div>
+  <div class="docs-box" style="border-left:3px solid #059669">${v.docs_recibidos ? v.docs_recibidos.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "—"}</div>
+</div>
+${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesional que recibió los documentos</div><div class="field-value" style="border-left-color:#059669">${v.profesional_recibio}</div></div>` : ""}
+` : ""}
+
+<div class="firmas">
+  <div class="firma-line">Firma del profesional<br><span style="font-weight:600">${v.profesional}</span></div>
+  <div class="firma-line">Firma del solicitante<br><span style="font-weight:600">${persona.nombre}</span></div>
+</div>
+
+<div class="footer-note">Unidad de Vivienda · Ilustre Municipalidad de Lautaro · Propietario del software: JACC</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 400);
+  };
+
+  // Sincroniza campos de persona a Supabase y estado local
+  const syncPersona = async (fields) => {
+    if (!persona) return;
+    // Mapeo completo camelCase → snake_case para columnas de Supabase
+    const snakeMap = {
+      fechaNacimiento:       "fecha_nacimiento",
+      integrantesFamiliares: "integrantes_familiares",
+      puntajeRSH:            "puntaje_rsh",
+      comiteId:              "comite_id",
+      // Campos técnicos ficha (DB los guarda en minúsculas)
+      nFJS:                  "nfjs",
+      sistemaAgua:           "sistemaagua",
+      nServicioAgua:         "nservicioagua",
+      proveedorElectrico:    "proveedorelectrico",
+      nClienteElectricidad:  "nclienteelectricidad",
+      certRuralidad:         "certruralidad",
+      avaluoFiscal:          "avaluofiscal",
+      informacionesPrevias:  "informacionesprevias",
+      infPrevias:            "infprevias",
+      antecedentesVivienda:  "antecedentesvivienda",
+      movilidadReducida:     "movilidadreducida",
+      credencialDiscapacidad:"credencialdiscapacidad",
+      cuentaAhorro:          "cuentaahorro",
+      subsidioAnterior:      "subsidio_anterior",
+      estadoCivil:           "estadocivil",
+      ahorroPostular:        "ahorropostular",
+      adultoMayor:           "adultomayor",
+      permisoEdificacion:    "permisoedificacion",
+      recepcionDefinitiva:   "recepciondefinitiva",
+      constructoraSeleccionada: "constructoraseleccionada",
+      metrosOriginal:        "metrosoriginal",
+      metrosAmpl:            "metrosampl",
+      metrosNoRegul:         "metrosnoregul",
+      totalMetros:           "totalmetros",
+      modalidadPostulacion:  "modalidadpostulacion",
+    };
+    const dbFields = {};
+    for (const [k, v] of Object.entries(fields)) dbFields[snakeMap[k] || k] = v;
+    try {
+      const { error } = await supabase.from("personas").update(dbFields).eq("id", persona.id);
+      if (error) console.warn("[syncPersona] error al actualizar campo(s):", Object.keys(dbFields), error.message);
+    } catch (err) { console.warn("[syncPersona] excepción:", err.message); }
+    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...fields } : p));
+  };
 
   useEffect(() => {
-    if (persona) cargarArchivos();
-  }, [personaId]);
+    if (persona) { cargarArchivos(); cargarVisitas(); }
+  }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-cargar archivos cuando carpeta cambia (puede cambiar al cargar solicitudes)
+  useEffect(() => {
+    if (persona && carpeta) { cargarArchivos(); }
+  }, [carpeta]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-poblar N/A en Ficha Rural para CSP rural (debe ir antes del return null)
+  useEffect(() => {
+    if (!persona) return;
+    const tieneRuralCsp = solicitudes.some(s => s.personaId === personaId && s.programaId === "csp_rural");
+    if (!tieneRuralCsp) return;
+    const updates = {};
+    if (!persona.infPrevias) updates.infPrevias = "N/A";
+    if (!persona.antecedentesVivienda) updates.antecedentesVivienda = "N/A";
+    if (Object.keys(updates).length > 0) syncPersona(updates);
+  }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!persona) return null;
 
   const misSols = solicitudes.filter(s => s.personaId === personaId);
   const comite = comites.find(c => c.id === persona.comiteId);
 
+  // Registra un archivo en Supabase asociado al solicitante
+  const _registrarArchivoSupa = async (nombre, carp) => {
+    const { error } = await supabase.from("archivos_solicitante").upsert({
+      id: `${persona.id}_${nombre}`,
+      persona_id: persona.id,
+      nombre,
+      carpeta: carp || carpeta
+    });
+    if (error) console.error("[archivos_solicitante] Error al registrar:", error.message, "| archivo:", nombre);
+    return !error;
+  };
+
   const cargarArchivos = async () => {
-    try {
-      const r = await fetch(API + "/archivos/" + encodeURIComponent(carpeta));
-      const data = await r.json();
-      setArchivos(data);
-    } catch (e) { setArchivos([]); }
+    const fetchLista = async (p) => {
+      if (!p) return [];
+      try {
+        const r = await fetch(API + "/archivos/" + encodeURIComponent(p));
+        if (!r.ok) return [];
+        return await r.json();
+      } catch { return []; }
+    };
+
+    // 1. Filesystem (servidor local) — falla silenciosamente si el servidor no está
+    const [nuevos, viejos] = await Promise.all([
+      fetchLista(carpeta),
+      carpeta !== carpetaVieja ? fetchLista(carpetaVieja) : Promise.resolve([])
+    ]);
+
+    const rutasMap = {};
+    nuevos.forEach(f => { rutasMap[f] = carpeta; });
+    viejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
+
+    // 2. Supabase — completamente independiente, no afecta al resultado del filesystem
+    let supaNames = [];
+    const { data: supaFiles, error: supaError } = await supabase
+      .from("archivos_solicitante")
+      .select("nombre, carpeta")
+      .eq("persona_id", persona.id)
+      .order("creado", { ascending: false });
+
+    if (supaError) {
+      console.warn("[archivos_solicitante] No se pudo consultar Supabase:", supaError.message);
+    } else {
+      (supaFiles || []).forEach(sf => {
+        if (!rutasMap[sf.nombre]) rutasMap[sf.nombre] = sf.carpeta || carpeta;
+      });
+      supaNames = (supaFiles || []).map(sf => sf.nombre);
+    }
+
+    // 3. Unión deduplicada: Supabase primero (más reciente), luego filesystem
+    const fsFiles = [...nuevos, ...viejos.filter(f => !nuevos.includes(f))];
+    const todos = [...new Set([...supaNames, ...fsFiles])];
+    setArchivos(todos);
+    setArchivosRutas(rutasMap);
+
+    const hayArchivoAvaluo = todos.some(a => {
+      const al = a.toLowerCase();
+      return al.includes("avaluo") || al.includes("avalúo");
+    });
+    const actualizadas = solicitudes.map(s => {
+      if (s.personaId !== personaId || !Array.isArray(s.documentos)) return s;
+      let cambio = false;
+      const documentos = s.documentos.map(d => {
+        const dn = (d.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (!dn.includes("avaluo") || d.entregado === hayArchivoAvaluo) return d;
+        cambio = true;
+        return { ...d, entregado: hayArchivoAvaluo };
+      });
+      return cambio ? { ...s, documentos } : s;
+    });
+    if (actualizadas.some((s, idx) => s !== solicitudes[idx])) onSaveSolicitudes(actualizadas);
   };
 
   const subirArchivo = async (e) => {
@@ -314,13 +2231,20 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
     const fd = new FormData();
     fd.append("archivo", file);
     try {
-      await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+      const uploadUrl = API + "/subir/" + encodeURIComponent(carpeta);
+      console.log("[subirArchivo] POST", uploadUrl, "archivo:", file.name);
+      const res = await fetch(uploadUrl, { method: "POST", body: fd });
+      const resData = await res.json().catch(() => ({}));
+      const nombreSubido = resData.nombre || file.name;
+      await _registrarArchivoSupa(nombreSubido, carpeta);
       await cargarArchivos();
-      // Si es comité desmarque, preguntar si es comprobante SERVIU
+      // Si es comité desmarque, detectar tipo de archivo
       if (persona.comiteId === "comite_desmarque") {
-        const esComp = window["confirm"]("¿Este archivo es el Comprobante SERVIU de desmarque?");
-        if (esComp) {
-          setShowModalComprobante(true);
+        const nombreLower = file.name.toLowerCase();
+        if (nombreLower.includes("informe") || nombreLower.includes("dom") || nombreLower.includes("inspeccion")) {
+          setShowModalInformeDom(true);
+        } else if (nombreLower.includes("comprobante") || nombreLower.includes("serviu") || nombreLower.includes("respuesta") || nombreLower.includes("desmarque")) {
+          setShowModalRespuestaServiu(true);
         }
       }
     } catch (err) { alert("Error al subir el archivo."); }
@@ -331,28 +2255,370 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
   const eliminarArchivo = async (nombre) => {
     const ok = window["confirm"]("Eliminar " + nombre + "?");
     if (!ok) return;
-    await fetch(API + "/archivos/" + encodeURIComponent(carpeta) + "/" + encodeURIComponent(nombre), { method: "DELETE" });
-    await cargarArchivos();
+    try {
+      await fetch(API + "/archivos/" + encodeURIComponent(carpeta + "/" + nombre), { method: "DELETE" }).catch(() => {});
+      if (carpeta !== carpetaVieja) {
+        await fetch(API + "/archivos/" + encodeURIComponent(carpetaVieja + "/" + nombre), { method: "DELETE" }).catch(() => {});
+      }
+    } catch {}
+    try {
+      await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
+    } catch {}
+    try { await cargarArchivos(); } catch {}
+  };
+
+  const descargarZip = async () => {
+    if (zipSeleccionados.length === 0) return;
+    setGenerandoZip(true);
+    try {
+      const zip = new JSZip();
+      for (const p of zipSeleccionados) {
+        const rutLimpia = (p.rut || "").replace(/[^0-9kK]/g, "");
+        const nombreCarpeta = `${(p.nombre || "SIN_NOMBRE").replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "")}_${rutLimpia}`;
+        const folder = zip.folder(nombreCarpeta);
+
+        // Calcular carpeta del solicitante en el servidor
+        const carpetaSol = carpetaPrograma(p, solicitudes);
+        const carpetaViejaSol = carpetaNombre(p.nombre, p.rut);
+
+        // Obtener lista de archivos: Supabase + servidor local
+        const archivosSet = new Set();
+        const rutasPorArchivo = {};
+
+        // Desde Supabase
+        const { data: supaArch } = await supabase
+          .from("archivos_solicitante")
+          .select("nombre, carpeta")
+          .eq("persona_id", p.id);
+        (supaArch || []).forEach(a => {
+          archivosSet.add(a.nombre);
+          rutasPorArchivo[a.nombre] = a.carpeta || carpetaSol;
+        });
+
+        // Desde servidor local (nueva carpeta y vieja)
+        for (const carp of [carpetaSol, carpetaViejaSol]) {
+          if (!carp) continue;
+          try {
+            const r = await fetch(API + "/archivos/" + encodeURIComponent(carp));
+            if (r.ok) {
+              const lista = await r.json();
+              lista.forEach(nombre => {
+                archivosSet.add(nombre);
+                if (!rutasPorArchivo[nombre]) rutasPorArchivo[nombre] = carp;
+              });
+            }
+          } catch {}
+        }
+
+        // Descargar y agregar cada archivo al ZIP
+        for (const nombre of archivosSet) {
+          const rutaArch = rutasPorArchivo[nombre] || carpetaSol;
+          const url = API + "/files/" + encodeURIComponent(rutaArch) + "/" + encodeURIComponent(nombre);
+          try {
+            const resp = await fetch(url);
+            if (resp.ok) {
+              const blob = await resp.blob();
+              folder.file(nombre, blob);
+            }
+          } catch {}
+        }
+      }
+
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const fecha = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `Documentos_${zipSeleccionados.length}solicitantes_${fecha}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setShowModalZip(false);
+      setZipSeleccionados([]);
+      setZipSearch("");
+    } catch (e) {
+      alert("Error generando ZIP: " + e.message);
+    }
+    setGenerandoZip(false);
+  };
+
+  const guardarResultadoInformeDom = async () => {
+    if (!resultadoInformeDom) return;
+    // Cerrar modal primero para evitar error removeChild
+    const res = resultadoInformeDom;
+    const nota = notaResultado;
+    setShowModalInformeDom(false);
+    setResultadoInformeDom("");
+    setNotaResultado("");
+    await new Promise(r => setTimeout(r, 50));
+    let nuevoEstado = persona.estado_desmarque;
+    if (res === "APROBADO") nuevoEstado = "INFORME EN SERVIU";
+    else if (res === "RECHAZADO_APELABLE") nuevoEstado = "APELAR SERVIU";
+    else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "NO CALIFICA";
+    try {
+      const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
+      const solDb = solsDb && solsDb[0];
+      if (solDb) {
+        const etiqueta = res === "APROBADO" ? "✓ APROBADO" : res === "RECHAZADO_APELABLE" ? "✗ RECHAZADO - APELAR" : "✗ RECHAZADO SIN APELACIÓN";
+        const docsActualizados = (solDb.documentos || []).map(d =>
+          d.nombre && d.nombre.includes("Informe DOM")
+            ? { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true }
+            : d
+        );
+        await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
+        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados } : s));
+      }
+      await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
+      onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
+    } catch(e) { console.warn("[guardarInformeDom]", e.message); }
+  };
+
+  const guardarResultadoRespuestaServiu = async () => {
+    if (!resultadoRespuestaServiu) return;
+    const res = resultadoRespuestaServiu;
+    const nota = notaResultado;
+    setShowModalRespuestaServiu(false);
+    setResultadoRespuestaServiu("");
+    setNotaResultado("");
+    await new Promise(r => setTimeout(r, 50));
+    let nuevoEstado = persona.estado_desmarque;
+    if (res === "APROBADO") nuevoEstado = "DESMARCADO";
+    else if (res === "RECHAZADO_APELABLE") nuevoEstado = "APELAR SERVIU";
+    else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "NO CALIFICA";
+    try {
+      const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
+      const solDb = solsDb && solsDb[0];
+      if (solDb) {
+        const etiqueta = res === "APROBADO" ? "✓ APROBADO - DESMARCADO"
+          : res === "RECHAZADO_APELABLE" ? "✗ RECHAZADO - PARA APELAR"
+          : "✗ RECHAZADO SIN APELACIÓN";
+        const docsActualizados = (solDb.documentos || []).map(d =>
+          d.nombre && d.nombre.includes("Respuesta SERVIU")
+            ? { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true }
+            : d
+        );
+        await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
+        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados } : s));
+      }
+      await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones }).eq("id", persona.id);
+      onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
+    } catch(e) { console.warn("[guardarRespuestaServiu]", e.message); }
+  };
+
+  const guardarFichaDesmarque = async () => {
+    const campos = {
+      rut: fichaForm.rut || persona.rut || "",
+      direccion: fichaForm.direccion || persona.direccion || "",
+      telefono: fichaForm.telefono || persona.telefono || "",
+      tipo_comite: fichaForm.tipo_comite || persona.tipo_comite || "",
+      sector: fichaForm.sector || persona.sector || "",
+      rol_propiedad: fichaForm.rol_propiedad || persona.rol_propiedad || "",
+      coordenadas: fichaForm.coordenadas || persona.coordenadas || "",
+      puntaje_rsh: fichaForm.puntaje_rsh || persona.puntajeRSH || "",
+      dominio_terreno: fichaForm.dominio_terreno || persona.dominio_terreno || "",
+      anio_subsidio: fichaForm.anio_subsidio || persona.anio_subsidio || "",
+      observaciones: fichaForm.observaciones || persona.observaciones || "",
+    };
+    await supabase.from("personas").update(campos).eq("id", persona.id);
+    const p2 = { ...persona, ...campos, puntajeRSH: campos.puntaje_rsh };
+    onSavePersonas(personas.map(p => p.id === persona.id ? p2 : p));
+
+    // Actualizar documentos de la solicitud si se ingresaron valores
+    const sol = misSols[0];
+    if (sol) {
+      const docsActualizados = sol.documentos.map(d => {
+        if (d.nombre && d.nombre.includes("Memo DOM") && fichaForm.numero_memo_dom)
+          return { ...d, valor: fichaForm.numero_memo_dom, entregado: true };
+        if (d.nombre && d.nombre.includes("Carta SERVIU") && fichaForm.numero_carta_serviu)
+          return { ...d, valor: fichaForm.numero_carta_serviu, entregado: true };
+        if (d.nombre && d.nombre.includes("Informe DOM") && fichaForm.numero_informe_dom)
+          return { ...d, valor: fichaForm.numero_informe_dom, entregado: true };
+        return d;
+      });
+      const solActualizada = { ...sol, documentos: docsActualizados, fecha_visita: sol.fecha_visita };
+      onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? solActualizada : s));
+      await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", sol.id);
+      // Auto-cambiar estado según datos ingresados
+      if (!["NO CALIFICA","APELAR SERVIU","DESMARCADO"].includes(persona.estado_desmarque)) {
+        const nuevoEstado = calcularEstadoDesmarque(solActualizada, persona.estado_desmarque);
+        if (nuevoEstado !== persona.estado_desmarque) {
+          await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
+          onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
+        }
+      }
+    }
+    setShowFichaEdit(false);
+  };
+
+  // Helper: actualiza valor (N°|fecha) en un doc de solicitud sin tocar entregado
+  const _actualizarValorDoc = async (nombreDoc, valor) => {
+    const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
+    const solDb = (solsDb && solsDb[0]) || misSols[0];
+    if (!solDb) return;
+    const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, valor } : d);
+    await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
+    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs } : s));
+  };
+
+  // Helper: activa el VB (entregado:true) para un doc de solicitud
+  const _activarVb = async (nombreDoc) => {
+    const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
+    const solDb = (solsDb && solsDb[0]) || misSols[0];
+    if (!solDb) return;
+    const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, entregado: true } : d);
+    await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
+    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs } : s));
+  };
+
+  const generarMemo = async () => {
+    // Capturar valores del form antes de cualquier operación async (evita closure stale)
+    const numero = formMemo.numero;
+    const problemas = [...(formMemo.problemas || [])];
+    setGenerando(true);
+    try {
+      const html = generarHtmlMemo({
+        numero,
+        nombre: persona.nombre,
+        rut: persona.rut,
+        direccion: persona.direccion,
+        coordenadas: persona.coordenadas || "",
+        problemas
+      });
+      setHtmlPreview(html);
+      const nombreArch = `MEMO_${numero.replace(/[^a-zA-Z0-9]/g, '_')}_${persona.nombre.split(' ')[0]}.html`;
+      fetch(API + "/guardar-html/" + encodeURIComponent(carpeta), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreArch, html })
+      }).catch(() => {});
+      const ok = await _registrarArchivoSupa(nombreArch, carpeta);
+      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await cargarArchivos();
+      // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el escaneado)
+      const fechaIso = new Date().toISOString().slice(0, 10);
+      await _actualizarValorDoc("Memo DOM", numero + "|" + fechaIso);
+      setShowModalMemo(false);
+      setFormMemo({ numero: "", problemas: [], nuevoProblema: "" });
+    } catch(e) { alert("Error generando memo: " + e.message); }
+    setGenerando(false);
+  };
+
+  const generarCarta = async () => {
+    const numero = formCarta.numero;
+    setGenerando(true);
+    try {
+      const html = generarHtmlCarta({ numero, nombre: persona.nombre, rut: persona.rut });
+      setHtmlPreview(html);
+      const nombreArch = `CARTA_${numero.replace(/[^a-zA-Z0-9]/g, '_')}_${persona.nombre.split(' ')[0]}.html`;
+      fetch(API + "/guardar-html/" + encodeURIComponent(carpeta), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreArch, html })
+      }).catch(() => {});
+      const ok = await _registrarArchivoSupa(nombreArch, carpeta);
+      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await cargarArchivos();
+      // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el comprobante)
+      const fechaIso = new Date().toISOString().slice(0, 10);
+      await _actualizarValorDoc("Carta SERVIU", numero + "|" + fechaIso);
+      setShowModalCarta(false);
+      setFormCarta({ numero: "" });
+    } catch(e) { alert("Error generando carta: " + e.message); }
+    setGenerando(false);
+  };
+
+  const generarSolicitud = async () => {
+    setGenerando(true);
+    try {
+      const html = generarHtmlSolicitud({
+        nombre: persona.nombre, rut: persona.rut, direccion: persona.direccion,
+        telefono: persona.telefono, subsidio: formSolicitud.subsidio, anioSubsidio: formSolicitud.anioSubsidio
+      });
+      setHtmlPreview(html);
+      const nombreArch = `SOLICITUD_${persona.nombre.split(' ')[0]}_${new Date().toISOString().slice(0,10)}.html`;
+      fetch(API + "/guardar-html/" + encodeURIComponent(carpeta), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreArch, html })
+      }).catch(() => {});
+      const ok = await _registrarArchivoSupa(nombreArch, carpeta);
+      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await cargarArchivos();
+      setShowModalSolicitud(false);
+      setFormSolicitud({ subsidio: "", anioSubsidio: "" });
+    } catch(e) { alert("Error generando solicitud: " + e.message); }
+    setGenerando(false);
+  };
+
+  const handleImagenFilaJACC = (filaId, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      const base64 = dataUrl.split(',')[1];
+      const mimeType = file.type;
+      const img = new window.Image();
+      img.onload = () => {
+        const targetW = 265;
+        const targetH = Math.round(targetW * (img.naturalHeight / img.naturalWidth));
+        setFilasInforme(prev => prev.map(f => f.id === filaId ? { ...f, imagenBase64: base64, imagenNombre: file.name, mimeType, imgWidth: targetW, imgHeight: targetH } : f));
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const generarInformeJACC = async () => {
+    const estadoVivienda = informeEstadoVivienda;
+    const subsidioTexto  = informeSubsidioTexto;
+    const sol = misSols[0];
+    const fechaVisita = sol ? fmtFecha(sol.fecha_visita || "") : "";
+    setGenerandoInforme(true);
+    try {
+      const html = generarHtmlInformeJACC({
+        nombre: persona.nombre, rut: persona.rut, telefono: persona.telefono || "",
+        direccion: persona.direccion || "", coordenadas: persona.coordenadas || "",
+        subsidioTexto,
+        fechaVisita,
+        estadoVivienda,
+        filas: filasInforme.map((f, i) => ({ numero: i + 1, descripcion: f.descripcion, imagenBase64: f.imagenBase64 || null, mimeType: f.mimeType || "image/jpeg" }))
+      });
+      setHtmlPreview(html);
+      const nombreArchivo = `INFORME_JACC_${persona.nombre.split(" ")[0]}_${new Date().toISOString().slice(0,10)}.html`;
+      fetch(API + "/guardar-html/" + encodeURIComponent(carpeta), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreArchivo, html })
+      }).catch(() => {});
+      const ok = await _registrarArchivoSupa(nombreArchivo, carpeta);
+      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await cargarArchivos();
+      setShowModalInformeJACC(false);
+      setFilasInforme([{ id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }]);
+      setInformeSubsidioTexto("");
+      setInformeEstadoVivienda("");
+    } catch(e) { alert("Error generando informe: " + e.message); }
+    setGenerandoInforme(false);
   };
 
   const guardarResultadoComprobante = async () => {
     if (!resultadoComp) return;
-    let nuevoEstado = resultadoComp;
-    const updPersona = { ...persona, estado_desmarque: nuevoEstado };
-    if (notaRechazo) updPersona.observaciones = notaRechazo;
-    await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: notaRechazo || persona.observaciones }).eq("id", persona.id);
-    onSavePersonas(personas.map(p => p.id === persona.id ? updPersona : p));
+    const res = resultadoComp;
+    const nota = notaRechazo;
     setShowModalComprobante(false);
     setNotaRechazo("");
     setResultadoComp("");
+    await new Promise(r => setTimeout(r, 50));
+    try {
+      const updPersona = { ...persona, estado_desmarque: res };
+      if (nota) updPersona.observaciones = nota;
+      await supabase.from("personas").update({ estado_desmarque: res, observaciones: nota || persona.observaciones }).eq("id", persona.id);
+      onSavePersonas(personas.map(p => p.id === persona.id ? updPersona : p));
+    } catch(e) { console.warn("[guardarComprobante]", e.message); }
   };
 
   const yaInscritos = misSols.map(s => s.programaId);
-  const disponibles = PROGRAMAS.filter(p => !yaInscritos.includes(p.id));
+  const disponibles = todosProgramas.filter(p => !yaInscritos.includes(p.id));
 
   const agregar = () => {
     if (!progSel) return;
-    const prog = PROGRAMAS.find(p => p.id === progSel);
+    const prog = todosProgramas.find(p => p.id === progSel);
     const nueva = {
       id: uid(), personaId, personaNombre: persona.nombre,
       programaId: prog.id, fecha: today(),
@@ -367,6 +2633,19 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
   };
 
   const toggleDoc = (solId, idx) => {
+    const sol = solicitudes.find(s => s.id === solId);
+    if (!sol) return;
+    const doc = sol.documentos[idx];
+    // Documentos que requieren archivo o proceso especial: no se pueden marcar manualmente
+    const requiereArchivo = doc.nombre && (
+      doc.nombre.toLowerCase().includes('cedula') ||
+      doc.nombre.toLowerCase().includes('título') ||
+      doc.nombre.toLowerCase().includes('titulo') ||
+      doc.nombre.toLowerCase().includes('certificado de avaluo') ||
+      doc.nombre.toLowerCase().includes('avaluo') ||
+      doc.nombre.toLowerCase().includes('informe dom')
+    );
+    if (requiereArchivo) return; // Solo se marca al subir archivo
     const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s, documentos: s.documentos.map((d, i) => i === idx ? { ...d, entregado: !d.entregado } : d)
     });
@@ -375,7 +2654,14 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
 
   const setDocValor = async (solId, idx, valor) => {
     const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
-      ...s, documentos: s.documentos.map((d, i) => i !== idx ? d : { ...d, valor, entregado: valor.trim() !== "" })
+      ...s, documentos: s.documentos.map((d, i) => {
+        if (i !== idx) return d;
+        // Memo, Carta e Informe DOM: requiere N° Y fecha (separados por |)
+        const necesitaNumYFecha = d.nombre && (d.nombre.includes('Memo DOM') || d.nombre.includes('Carta SERVIU') || d.nombre.includes('Informe DOM'));
+        const partes = valor.split("|").map(p => p.trim()).filter(Boolean);
+        const completo = necesitaNumYFecha ? partes.length >= 2 && partes[0] && partes[1] : valor.trim() !== '';
+        return { ...d, valor, entregado: completo };
+      })
     });
     onSaveSolicitudes(nuevasSols);
     // Actualizar estado automático si es desmarque
@@ -419,10 +2705,30 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
           <div style={{ width: 58, height: 58, borderRadius: 29, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 24 }}>{persona.nombre[0].toUpperCase()}</div>
           <div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#1e3a5f" }}>{persona.nombre}</div>
-            <div style={{ fontSize: 13, color: "#888" }}>RUT: {persona.rut}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
+            <div style={{ fontSize: 13, color: "#888" }}>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
             {(persona.puntajeRSH || persona.integrantesFamiliares) && <div style={{ fontSize: 13, color: "#888" }}>{persona.puntajeRSH ? "RSH: " + persona.puntajeRSH : ""}{persona.integrantesFamiliares ? " - Grupo familiar: " + persona.integrantesFamiliares + " personas" : ""}</div>}
-            {comite && <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 4, fontWeight: 600 }}>Comité: {comite.nombre}</div>}
+            {(comite || persona.comite) && (
+              <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 4, fontWeight: 600 }}>
+                {persona.tipo_comite === "RURAL" ? "🌾" : persona.tipo_comite === "URBANO" ? "🏙️" : "👥"} Comité: {comite ? comite.nombre : persona.comite}
+                {persona.comiteId && COMITES_FIJOS.find(c => c.codigo === persona.comiteId) && (
+                  <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 400, background: "#f5f3ff", color: "#7C3AED", borderRadius: 8, padding: "1px 7px" }}>{persona.comiteId}</span>
+                )}
+              </div>
+            )}
+            {!persona.comiteId && persona.comiteId !== "comite_desmarque" && (
+              <>
+                {(persona.observaciones || "").startsWith("Pendiente por:") && (
+                  <div style={{ marginTop: 5, fontSize: 12, background: "#FFFBEB", color: "#D97706", borderRadius: 8, padding: "4px 10px", display: "inline-block", fontWeight: 600, border: "1px solid #FDE68A" }}>
+                    ⏳ {persona.observaciones}
+                  </div>
+                )}
+                <button onClick={() => setShowAsignarComite(true)}
+                  style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#f5f3ff", border: "1px solid #ddd8fe", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
+                  + Asignar comité
+                </button>
+              </>
+            )}
             {persona.estado_desmarque && (() => {
               const est = ESTADO_DESMARQUE[persona.estado_desmarque] || ESTADO_DESMARQUE["NO VISITADO"];
               return <span style={{ display:"inline-block", marginTop:6, background:est.bg, color:est.color, borderRadius:10, padding:"4px 14px", fontSize:13, fontWeight:800 }}>{est.label}</span>;
@@ -436,44 +2742,566 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
         </div>
       </div>
 
+      {/* Modal asignar comité */}
+      {showAsignarComite && (
+        <Modal title="Asignar comité al solicitante" onClose={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: "#555", marginBottom: 12 }}>
+              Selecciona el comité para <strong>{persona.nombre}</strong>:
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {(() => {
+                const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
+                const lista = [
+                  ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, codigo: c.codigo })),
+                  ...(comites||[]).filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
+                    .map(sc => ({ id: sc.id, nombre: sc.nombre, tipo: sc.programaId === "csp_urbano" ? "URBANO" : "RURAL", codigo: null }))
+                ];
+                return lista.map(c => (
+                  <div key={c.id} onClick={() => setComiteParaAsignar(c.id)}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 9, border: "2px solid " + (comiteParaAsignar === c.id ? "#7C3AED" : "#e5e7eb"), background: comiteParaAsignar === c.id ? "#f5f3ff" : "#fff", cursor: "pointer" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: comiteParaAsignar === c.id ? "#7C3AED" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: c.codigo ? 11 : 14, fontWeight: 800, color: comiteParaAsignar === c.id ? "#fff" : "#6b7280", fontFamily: "monospace", flexShrink: 0 }}>
+                      {c.codigo || (c.tipo === "URBANO" ? "🏙️" : "🌾")}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: comiteParaAsignar === c.id ? "#4C1D95" : "#111827" }}>{c.nombre}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{c.tipo === "RURAL" ? "🌾 Rural" : "🏙️ Urbano"}</div>
+                    </div>
+                    {comiteParaAsignar === c.id && <span style={{ color: "#7C3AED", fontWeight: 700, fontSize: 16 }}>✓</span>}
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 16, borderTop: "1px solid #f0ede8" }}>
+            <button onClick={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={asignarComite} disabled={!comiteParaAsignar}
+              style={{ padding: "9px 22px", borderRadius: 8, background: comiteParaAsignar ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: comiteParaAsignar ? "pointer" : "not-allowed" }}>
+              Confirmar asignación
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── REGISTRO DE VISITAS A OFICINA ─────────────────────────────────── */}
+      <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
+        <div style={{ background: "#f8f7ff", borderBottom: "2px solid #7C3AED", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#4C1D95" }}>📋 Registro de Visitas a Oficina</div>
+          <button onClick={() => { setShowFormVisita(v => !v); setFormVisita({ fecha: "", profesional: currentUser?.nombre || "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: currentUser?.nombre || "" }); }}
+            style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            {showFormVisita ? "✕ Cancelar" : "+ Agregar visita"}
+          </button>
+        </div>
+
+        {showFormVisita && (() => {
+          const progId = misSols.find(s => s.programaId === "csp_urbano") ? "csp_urbano"
+            : misSols.find(s => s.programaId === "csp_rural") ? "csp_rural"
+            : misSols.find(s => s.programaId === "habitabilidad") ? "habitabilidad"
+            : persona.comiteId === "comite_desmarque" ? "habitabilidad"
+            : null;
+          console.log("[Visitas] programaId detectado:", progId, "| misSols programas:", misSols.map(s => s.programaId));
+          const progDocs = progId ? (DOCS_SOLICITUD[progId] || []) : [];
+          const progLabel = progId === "csp_urbano" ? "Construcción Sitio Propio Urbano"
+            : progId === "csp_rural" ? "Construcción Sitio Propio Rural"
+            : progId === "habitabilidad" ? "Desmarque de Vivienda"
+            : null;
+          const profesionalesBase = ["Priscilla Curín Castro","Jacqueline Ortega","Marcelo Cifuentes Vásquez","Onoria Retamal","Jorge Campos Campos","Jonathan Rodríguez"];
+          const profesionales = currentUser?.nombre && !profesionalesBase.includes(currentUser.nombre)
+            ? [currentUser.nombre, ...profesionalesBase]
+            : profesionalesBase;
+          const canSave = formVisita.fecha && (formVisita.profesional || currentUser?.nombre);
+          return (
+          <div style={{ padding: "18px 22px", background: "#faf9ff", borderBottom: "1px solid #e8e3de" }}>
+            {/* Fila 1: fecha + profesional */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Fecha de visita *</label>
+                <input type="date" value={formVisita.fecha} onChange={e => setFormVisita(f => ({ ...f, fecha: e.target.value }))}
+                  style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.fecha ? "#7C3AED" : "#ddd"), fontSize: 13, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Profesional que atendió *</label>
+                <select value={formVisita.profesional} onChange={e => setFormVisita(f => ({ ...f, profesional: e.target.value }))}
+                  style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.profesional ? "#7C3AED" : "#ddd"), fontSize: 13, background: "#fff", boxSizing: "border-box" }}>
+                  <option value="">Seleccionar profesional…</option>
+                  {profesionales.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Checklist de documentos */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 6, textTransform: "uppercase" }}>
+                Documentos solicitados
+                {progLabel && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: "#7C3AED", background: "#f5f3ff", borderRadius: 10, padding: "2px 8px" }}>{progLabel}</span>}
+              </label>
+              {progDocs.length === 0 ? (
+                <div style={{ fontSize: 12, color: "#aaa" }}>Sin programa CSP detectado — use el campo "Otros"</div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                  {progDocs.map(doc => {
+                    const checked = !!formVisita.checksDocs[doc.id];
+                    const subVal = typeof formVisita.checksDocs[doc.id] === "string" ? formVisita.checksDocs[doc.id] : "";
+                    return (
+                      <div key={doc.id} style={{ background: checked ? "#f5f3ff" : "#f9fafb", borderRadius: 8, padding: "6px 10px", border: "1.5px solid " + (checked ? "#7C3AED" : "#e5e7eb") }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+                          onClick={() => setFormVisita(f => ({ ...f, checksDocs: { ...f.checksDocs, [doc.id]: f.checksDocs[doc.id] ? false : (doc.subopciones ? true : true) } }))}>
+                          <div style={{ width: 16, height: 16, borderRadius: 4, border: "2px solid " + (checked ? "#7C3AED" : "#d1d5db"), background: checked ? "#7C3AED" : "#fff", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {checked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>}
+                          </div>
+                          <span style={{ fontSize: 12, color: checked ? "#4C1D95" : "#374151", fontWeight: checked ? 600 : 400 }}>{doc.label}</span>
+                        </div>
+                        {doc.subopciones && checked && (
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5, marginLeft: 24 }}>
+                            {doc.subopciones.map(sub => (
+                              <button key={sub} onClick={() => setFormVisita(f => ({ ...f, checksDocs: { ...f.checksDocs, [doc.id]: f.checksDocs[doc.id] === sub ? true : sub } }))}
+                                style={{ fontSize: 11, padding: "2px 10px", borderRadius: 10, border: "1.5px solid " + (subVal === sub ? "#7C3AED" : "#ddd"), background: subVal === sub ? "#7C3AED" : "#fff", color: subVal === sub ? "#fff" : "#555", cursor: "pointer", fontWeight: subVal === sub ? 700 : 400 }}>
+                                {sub}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Otros + Compromiso */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Otros (solicitudes adicionales)</label>
+                <textarea value={formVisita.otrosSolicitud} onChange={e => setFormVisita(f => ({ ...f, otrosSolicitud: e.target.value }))}
+                  placeholder="Solicitudes adicionales no listadas…"
+                  rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Compromiso del solicitante</label>
+                <textarea value={formVisita.compromiso} onChange={e => setFormVisita(f => ({ ...f, compromiso: e.target.value }))}
+                  placeholder="¿Qué comprometió el postulante?"
+                  rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+            </div>
+
+            {/* Documentos recibidos */}
+            <div style={{ marginTop: 4, marginBottom: 14, borderTop: "1.5px dashed #e5e7eb", paddingTop: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#059669", display: "block", marginBottom: 6, textTransform: "uppercase" }}>
+                Documentos recibidos en esta visita
+                {progLabel && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: "#059669", background: "#ecfdf5", borderRadius: 10, padding: "2px 8px" }}>{progLabel}</span>}
+              </label>
+              {progDocs.length === 0 ? (
+                <div style={{ fontSize: 12, color: "#aaa" }}>Sin programa detectado</div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 10 }}>
+                  {progDocs.map(doc => {
+                    const checked = !!formVisita.checksDocsRecibidos[doc.id];
+                    const subVal = typeof formVisita.checksDocsRecibidos[doc.id] === "string" ? formVisita.checksDocsRecibidos[doc.id] : "";
+                    return (
+                      <div key={doc.id} style={{ background: checked ? "#ecfdf5" : "#f9fafb", borderRadius: 8, padding: "6px 10px", border: "1.5px solid " + (checked ? "#059669" : "#e5e7eb") }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+                          onClick={() => setFormVisita(f => ({ ...f, checksDocsRecibidos: { ...f.checksDocsRecibidos, [doc.id]: f.checksDocsRecibidos[doc.id] ? false : true } }))}>
+                          <div style={{ width: 16, height: 16, borderRadius: 4, border: "2px solid " + (checked ? "#059669" : "#d1d5db"), background: checked ? "#059669" : "#fff", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {checked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>}
+                          </div>
+                          <span style={{ fontSize: 12, color: checked ? "#065f46" : "#374151", fontWeight: checked ? 600 : 400 }}>{doc.label}</span>
+                        </div>
+                        {doc.subopciones && checked && (
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5, marginLeft: 24 }}>
+                            {doc.subopciones.map(sub => (
+                              <button key={sub} onClick={() => setFormVisita(f => ({ ...f, checksDocsRecibidos: { ...f.checksDocsRecibidos, [doc.id]: f.checksDocsRecibidos[doc.id] === sub ? true : sub } }))}
+                                style={{ fontSize: 11, padding: "2px 10px", borderRadius: 10, border: "1.5px solid " + (subVal === sub ? "#059669" : "#ddd"), background: subVal === sub ? "#059669" : "#fff", color: subVal === sub ? "#fff" : "#555", cursor: "pointer", fontWeight: subVal === sub ? 700 : 400 }}>
+                                {sub}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Profesional que recibió los documentos</label>
+                <select value={formVisita.profesionalRecibio} onChange={e => setFormVisita(f => ({ ...f, profesionalRecibio: e.target.value }))}
+                  style={{ width: "100%", maxWidth: 340, padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.profesionalRecibio ? "#059669" : "#ddd"), fontSize: 13, background: "#fff" }}>
+                  <option value="">Seleccionar profesional…</option>
+                  {profesionales.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              {!canSave && <span style={{ fontSize: 11, color: "#B45309", alignSelf: "center" }}>⚠ Fecha y profesional son obligatorios</span>}
+              <button onClick={() => agregarVisita(progDocs)} disabled={!canSave || guardandoVisita}
+                style={{ background: canSave ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 700, cursor: canSave ? "pointer" : "not-allowed" }}>
+                {guardandoVisita ? "Guardando…" : "Guardar visita"}
+              </button>
+            </div>
+          </div>
+          );
+        })()}
+
+        <div style={{ padding: "0 22px 16px" }}>
+          {visitas.length === 0 ? (
+            <div style={{ textAlign: "center", color: "#aaa", fontSize: 13, padding: "24px 0" }}>Sin visitas registradas</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 16 }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #f0ede8" }}>
+                  {["Fecha", "Profesional", "Solicitud al postulante", "Compromiso del postulante", "Docs recibidos", ""].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visitas.map(v => (
+                  <tr key={v.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                    <td style={{ padding: "10px 8px", whiteSpace: "nowrap", color: "#1e3a5f", fontWeight: 600 }}>{fmtFecha(v.fecha)}</td>
+                    <td style={{ padding: "10px 8px", color: "#374151" }}>{v.profesional}</td>
+                    <td style={{ padding: "10px 8px", color: "#6b7280", maxWidth: 220 }}>{v.solicitud || <span style={{ color: "#d1d5db" }}>—</span>}</td>
+                    <td style={{ padding: "10px 8px", color: "#6b7280", maxWidth: 220 }}>{v.compromiso || <span style={{ color: "#d1d5db" }}>—</span>}</td>
+                    <td style={{ padding: "10px 8px", maxWidth: 180 }}>
+                      {v.docs_recibidos ? (
+                        <div>
+                          <div style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>
+                            {v.docs_recibidos.split("\n").filter(Boolean).length} doc(s)
+                          </div>
+                          {v.profesional_recibio && <div style={{ fontSize: 11, color: "#6b7280" }}>{v.profesional_recibio}</div>}
+                        </div>
+                      ) : <span style={{ color: "#d1d5db" }}>—</span>}
+                    </td>
+                    <td style={{ padding: "10px 8px", textAlign: "right" }}>
+                      <button onClick={() => imprimirVisita(v)}
+                        style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                        🖨 Imprimir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* FICHA COMPLETA RURAL */}
+      {(() => {
+        const tieneRural = misSols.some(s => s.programaId === "csp_rural");
+        const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
+        const tienePrograma = misSols.length > 0;
+        const comiteRural = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
+          (persona.tipoComite === "Rural" || persona.tipo_comite === "RURAL" ||
+           (comite && comite.nombre && comite.nombre.toUpperCase().includes("RURAL")));
+        // Solo usar como fallback cuando NO hay programa asignado todavía
+        const sinComite = !tienePrograma && (!persona.comiteId || persona.comiteId === "");
+        // Si hay programa pero es solo urbano, no mostrar Rural
+        if (tienePrograma && !tieneRural) return null;
+        return (tieneRural || comiteRural || sinComite) ? (
+          <FichaRural persona={persona} misSols={misSols} esCsp={tieneRural} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+        ) : null;
+      })()}
+
+      {/* FICHA COMPLETA URBANA */}
+      {(() => {
+        const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
+        const tieneRural = misSols.some(s => s.programaId === "csp_rural");
+        const tienePrograma = misSols.length > 0;
+        const comiteUrbano = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
+          (persona.tipoComite === "Urbano" || persona.tipo_comite === "URBANO" ||
+           (comite && comite.nombre && comite.nombre.toUpperCase().includes("URBANO")));
+        // Si hay programa pero es solo rural, no mostrar Urbana
+        if (tienePrograma && !tieneUrbano) return null;
+        return (tieneUrbano || comiteUrbano) ? (
+          <FichaUrbana persona={persona} misSols={misSols} esCsp={tieneUrbano} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+        ) : null;
+      })()}
+
+      {/* FICHAS PARA PROGRAMAS PERSONALIZADOS */}
+      {(() => {
+        const customIds = new Set((programasCustom || []).map(p => p.id));
+        const fichas = misSols
+          .filter(s => customIds.has(s.programaId))
+          .map(s => ({ solicitud: s, programa: todosProgramas.find(p => p.id === s.programaId) }))
+          .filter(x => x.programa);
+
+        if (comite && customIds.has(comite.programaId) && !fichas.some(x => x.programa.id === comite.programaId)) {
+          const programa = todosProgramas.find(p => p.id === comite.programaId);
+          if (programa) fichas.push({ solicitud: null, programa });
+        }
+
+        return fichas.map(({ programa, solicitud }) => (
+          <FichaProgramaCustom key={programa.id + "-" + (solicitud ? solicitud.id : "comite")} persona={persona} programa={programa} solicitud={solicitud} />
+        ));
+      })()}
+
+      {/* FICHA COMPLETA DESMARQUE */}
+      {persona.comiteId === "comite_desmarque" && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "20px 24px", marginBottom: 20, border: "1px solid #e8e3de" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#1e3a5f" }}>📋 Ficha Desmarque</div>
+            <button onClick={() => {
+              const sol = misSols[0];
+              const docs = sol ? sol.documentos : [];
+              const memo = docs.find(d => d.nombre && d.nombre.includes("Memo DOM"));
+              const carta = docs.find(d => d.nombre && d.nombre.includes("Carta SERVIU"));
+              const informe = docs.find(d => d.nombre && d.nombre.includes("Informe DOM"));
+              setFichaForm({
+                rut: persona.rut||"",
+                direccion: persona.direccion||"",
+                telefono: persona.telefono||"",
+                tipo_comite: persona.tipo_comite||"",
+                sector: persona.sector||"",
+                rol_propiedad: persona.rol_propiedad||"",
+                coordenadas: persona.coordenadas||"",
+                puntaje_rsh: persona.puntajeRSH||"",
+                dominio_terreno: persona.dominio_terreno||"",
+                anio_subsidio: persona.anio_subsidio||"",
+                observaciones: persona.observaciones||"",
+                fecha_visita: sol ? sol.fecha_visita||"" : "",
+                numero_informe_dom: informe ? informe.valor||"" : "",
+                numero_memo_dom: memo ? memo.valor||"" : "",
+                numero_carta_serviu: carta ? carta.valor||"" : "",
+              });
+              setCamposDesmarqueDesbloqueados(false);
+              setShowFichaEdit(true);
+            }}
+              style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>✏️ Editar datos</button>
+          </div>
+          {(() => {
+            const campo = (label, valor) => (
+              <div key={label} style={{ display: "flex", borderBottom: "1px solid #f0f0f0", padding: "7px 0" }}>
+                <div style={{ width: 220, fontSize: 12, fontWeight: 700, color: "#555", flexShrink: 0 }}>{label}</div>
+                <div style={{ fontSize: 12, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 400 : 600 }}>{valor || "⚠ Falta trámite o documento"}</div>
+              </div>
+            );
+            const sol = misSols[0];
+            const docs = sol ? sol.documentos : [];
+            const memo = docs.find(d => d.nombre && d.nombre.includes("Memo DOM"));
+            const carta = docs.find(d => d.nombre && d.nombre.includes("Carta SERVIU"));
+            const informe = docs.find(d => d.nombre && d.nombre.includes("Informe DOM"));
+            // Supabase usa snake_case, el objeto local puede usar camelCase
+            const getVal = (campo1, campo2) => persona[campo1] || persona[campo2] || "";
+            return (
+              <div>
+                {campo("Estado", getVal("estado_desmarque","estadoDesmarque"))}
+                {campo("N° Recepción", getVal("numero_recepcion","numeroRecepcion"))}
+                {campo("Fecha Recepción", getVal("fecha_recepcion","fechaRecepcion"))}
+                {campo("Nombre", persona.nombre)}
+                {campo("Cédula de identidad", persona.rut)}
+                {campo("Teléfono", persona.telefono)}
+                {campo("U/R", getVal("tipo_comite","tipoComite") || persona.tipo)}
+                {campo("Comunidad/Dirección", persona.direccion)}
+                {campo("Rol Propiedad", getVal("rol_propiedad","rolPropiedad"))}
+                {campo("Coordenadas", persona.coordenadas)}
+                {campo("Sector", persona.sector)}
+                {campo("RSH", persona.puntajeRSH ? persona.puntajeRSH + "%" : (persona.puntaje_rsh ? persona.puntaje_rsh + "%" : ""))}
+                {campo("Dominio del Terreno", getVal("dominio_terreno","dominioTerreno"))}
+                {campo("Año de Subsidio", getVal("anio_subsidio","anioSubsidio"))}
+                {campo("Fecha Visita", sol && sol.fecha_visita ? fmtFecha(sol.fecha_visita) : "")}
+                {campo("N° Informe DOM", informe && informe.valor ? informe.valor : "")}
+                {campo("N° Memorando DOM y Fecha", memo && memo.valor ? memo.valor : "")}
+                {campo("N° Carta SERVIU y Fecha", carta && carta.valor ? carta.valor : "")}
+                {campo("Observaciones", persona.observaciones)}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       <div style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 20, border: "1px solid #e8e3de" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1e3a5f" }}>Carpeta de documentos</div>
             <div style={{ fontSize: 12, color: "#888" }}>Carpeta: {carpeta}</div>
           </div>
-          <div>
-            <input ref={fileRef} type="file" style={{ display: "none" }} onChange={subirArchivo} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {persona && persona.comiteId === "comite_desmarque" && (
+              <>
+                <button onClick={() => { setInformeSubsidioTexto(persona.anio_subsidio || ""); setShowModalInformeJACC(true); }} style={{ background: "#166534", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📋 Generar Informe JACC</button>
+                <button onClick={() => setShowModalMemo(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Memo DOM</button>
+                <button onClick={() => setShowModalCarta(true)} style={{ background: "#0891B2", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Carta SERVIU</button>
+                <button onClick={() => { setFormSolicitud(prev => ({ ...prev, anioSubsidio: persona.anio_subsidio || "" })); setShowModalSolicitud(true); }} style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Solicitud</button>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#DC2626", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  📎 Subir Informe DOM
+                  <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={async e => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      setSubiendo(true);
+                      const fd = new FormData(); fd.append("archivo", file);
+                      const r = await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                      const rd = await r.json().catch(() => ({}));
+                      await _registrarArchivoSupa(rd.nombre || file.name, carpeta);
+                      await cargarArchivos();
+                      setSubiendo(false);
+                      setShowModalInformeDom(true);
+                      e.target.value = "";
+                    }} />
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#B45309", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  📎 Subir Respuesta SERVIU
+                  <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={async e => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      setSubiendo(true);
+                      const fd = new FormData(); fd.append("archivo", file);
+                      const r = await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                      const rd = await r.json().catch(() => ({}));
+                      await _registrarArchivoSupa(rd.nombre || file.name, carpeta);
+                      await cargarArchivos();
+                      setSubiendo(false);
+                      setShowModalRespuestaServiu(true);
+                      e.target.value = "";
+                    }} />
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#7C3AED", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Sube el memorando firmado/recibido — activa el VB automáticamente">
+                  📎 Subir Memo recibido
+                  <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={async e => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      setSubiendo(true);
+                      const fd = new FormData(); fd.append("archivo", file);
+                      const r = await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                      const rd = await r.json().catch(() => ({}));
+                      await _registrarArchivoSupa(rd.nombre || file.name, carpeta);
+                      await cargarArchivos();
+                      setSubiendo(false);
+                      await _activarVb("Memo DOM");
+                      e.target.value = "";
+                    }} />
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#0891B2", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Sube el comprobante de ingreso SERVIU — activa el VB automáticamente">
+                  📎 Subir comprobante Carta
+                  <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={async e => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      setSubiendo(true);
+                      const fd = new FormData(); fd.append("archivo", file);
+                      const r = await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                      const rd = await r.json().catch(() => ({}));
+                      await _registrarArchivoSupa(rd.nombre || file.name, carpeta);
+                      await cargarArchivos();
+                      setSubiendo(false);
+                      await _activarVb("Carta SERVIU");
+                      e.target.value = "";
+                    }} />
+                </label>
+              </>
+            )}
+            <input ref={fileRef} type="file" style={{ display: "none" }} onChange={subirArchivo} accept=".pdf,.jpg,.jpeg,.png" />
             <button onClick={() => fileRef.current.click()} disabled={subiendo} style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              {subiendo ? "Subiendo..." : "Subir documento"}
+              {subiendo ? "Subiendo..." : "⬆ Subir documento"}
+            </button>
+            <button onClick={() => { setZipSeleccionados([persona]); setShowModalZip(true); }} style={{ background: "#374151", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              🗜 Descargar ZIP
             </button>
           </div>
         </div>
         {archivos.length === 0 ? (
           <div style={{ textAlign: "center", padding: "28px 0", color: "#bbb" }}>No hay archivos subidos aun. Haz clic en Subir documento.</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-            {archivos.map(arch => (
-              <div key={arch} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 9, border: "1px solid #e5e7eb", background: "#fafafa" }}>
-                <a href={API + "/archivos/" + encodeURIComponent(carpeta) + "/" + encodeURIComponent(arch)} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 500, color: "#1e3a5f", textDecoration: "none", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{arch}</a>
-                <button onClick={() => eliminarArchivo(arch)} style={{ background: "transparent", border: "none", color: "#DC2626", cursor: "pointer", marginLeft: 6 }}>X</button>
-              </div>
-            ))}
+          <div style={{ position: "relative" }} onClick={e => { if (!e.target.closest("[data-docmenu]")) setDocMenu(null); }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              {archivos.map(arch => {
+                const fileUrl = API + "/files/" + encodeURIComponent(archivosRutas[arch] || carpeta) + "/" + encodeURIComponent(arch);
+                const esGenerado = arch.startsWith("MEMO_") || arch.startsWith("CARTA_") || arch.startsWith("SOLICITUD_") || arch.startsWith("INFORME_JACC_");
+                const esMemoDom      = arch.startsWith("MEMO_");
+                const esCartaServ    = arch.startsWith("CARTA_");
+                const esSolicitud    = arch.startsWith("SOLICITUD_");
+                const esInformeJACC  = arch.startsWith("INFORME_JACC_");
+                const isMenuOpen   = docMenu && docMenu.arch === arch;
+                return (
+                  <div key={arch} style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 9, border: "1px solid " + (isMenuOpen ? "#7C3AED" : "#e5e7eb"), background: isMenuOpen ? "#F5F3FF" : "#fafafa" }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); setDocMenu(isMenuOpen ? null : { arch, x: e.clientX, y: e.clientY }); }}
+                      title="Opciones"
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, color: "#1e3a5f", flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0 }}>
+                      {arch.endsWith(".html") ? "🌐 " : arch.endsWith(".pdf") ? "📋 " : "📎 "}{arch}
+                    </button>
+                    <button onClick={() => eliminarArchivo(arch)} style={{ background: "transparent", border: "none", color: "#DC2626", cursor: "pointer", marginLeft: 6, fontSize: 13 }}>✕</button>
+                    {isMenuOpen && (
+                      <div data-docmenu="1" style={{ position: "fixed", top: docMenu.y + 6, left: Math.min(docMenu.x, window.innerWidth - 200), zIndex: 9999, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.13)", minWidth: 180, overflow: "hidden" }}>
+                        <div style={{ padding: "6px 0" }}>
+                          <button onClick={() => { window.open(fileUrl, "_blank"); setDocMenu(null); }}
+                            style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#1e3a5f", fontWeight: 500 }}>
+                            👁 Ver documento
+                          </button>
+                          {esGenerado && (
+                            <button onClick={() => {
+                              if (esMemoDom)     setShowModalMemo(true);
+                              if (esCartaServ)   setShowModalCarta(true);
+                              if (esSolicitud)   setShowModalSolicitud(true);
+                              if (esInformeJACC) setShowModalInformeJACC(true);
+                              setDocMenu(null);
+                            }}
+                              style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#059669", fontWeight: 500 }}>
+                              ✏️ Editar / Regenerar
+                            </button>
+                          )}
+                          <button onClick={() => {
+                            const isPdf = arch.toLowerCase().endsWith(".pdf");
+                            if (isPdf) {
+                              const iframe = document.createElement("iframe");
+                              iframe.style.display = "none";
+                              iframe.src = fileUrl;
+                              document.body.appendChild(iframe);
+                              iframe.onload = () => { try { iframe.contentWindow.print(); } catch { window.open(fileUrl, "_blank"); } setTimeout(() => document.body.removeChild(iframe), 8000); };
+                            } else {
+                              window.open(fileUrl, "_blank");
+                            }
+                            setDocMenu(null);
+                          }}
+                            style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#B45309", fontWeight: 500 }}>
+                            🖨 Imprimir
+                          </button>
+                          <div style={{ height: 1, background: "#f0f0f0", margin: "4px 0" }} />
+                          <button onClick={() => { eliminarArchivo(arch); setDocMenu(null); }}
+                            style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#DC2626", fontWeight: 500 }}>
+                            🗑 Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1e3a5f" }}>Solicitudes activas</div>
-        {disponibles.length > 0 && <button onClick={() => setShowModal(true)} style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>+ Agregar programa</button>}
-      </div>
+      {(() => {
+        const tieneCsp = misSols.some(s => s.programaId === "csp_rural" || s.programaId === "csp_urbano");
+        return (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#1e3a5f" }}>Solicitudes activas</div>
+            {disponibles.length > 0 && (
+              <button onClick={() => setShowModal(true)}
+                style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                + Agregar programa
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {misSols.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 40, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>No tiene programas asignados aun.</div>}
 
       {misSols.map(sol => {
-        const prog = PROGRAMAS.find(p => p.id === sol.programaId);
+        const prog = todosProgramas.find(p => p.id === sol.programaId);
         const p = pct(sol.documentos);
         const ok = sol.documentos.filter(d => d.entregado).length;
+        const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano";
+        const esCustom = !!(prog && prog.esCustom);
         return (
           <div key={sol.id} style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 16, border: "1px solid #e8e3de" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
@@ -487,15 +3315,325 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ background: statusBg(p), color: statusColor(p), borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>{statusLabel(p)}</div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{sol.documentos.length}</div>
+                <button onClick={() => setSolsEditando(prev => ({ ...prev, [sol.id]: !prev[sol.id] }))}
+                  style={{ padding: "5px 14px", borderRadius: 8, border: "1.5px solid " + (solsEditando[sol.id] ? "#059669" : "#1e3a5f"), background: solsEditando[sol.id] ? "#059669" : "#1e3a5f", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {solsEditando[sol.id] ? "✓ Editando" : "✏ Editar"}
+                </button>
+                {solsEditando[sol.id] && (
+                  <button onClick={async () => {
+                    const docs = sol.documentos || [];
+                    const db = {}; // campos para Supabase (snake_case)
+                    const lc = {}; // campos para estado local (camelCase)
+                    for (const d of docs) {
+                      const n = (d.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                      const t = d.tipo || "";
+                      const v = d.valor || "";
+                      const p = v.split("|");
+                      // Cédula → rut + fecha_nacimiento
+                      if (n.includes("cedula")) {
+                        if (p[0]) { db.rut = p[0].trim(); lc.rut = p[0].trim(); }
+                        if (p[1] && p[1].length === 10) {
+                          db.fecha_nacimiento = p[1];
+                          lc.fechaNacimiento = p[1];
+                          const edad = calcularEdad(p[1]);
+                          db.adultomayor = lc.adultoMayor = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : "";
+                        }
+                      }
+                      // Fecha de nacimiento sola
+                      if (n.includes("fecha de nacimiento") && v.length === 10) {
+                        db.fecha_nacimiento = v; lc.fechaNacimiento = v;
+                        const edad = calcularEdad(v);
+                        db.adultomayor = lc.adultoMayor = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : "";
+                      }
+                      // RSH → puntaje, comuna, estado civil, integrantes, subsidio
+                      if (n.includes("registro social") || n.includes("rsh")) {
+                        if (p[0]) { db.puntaje_rsh = p[0].trim(); lc.puntajeRSH = p[0].trim(); }
+                        if (p[1]) { db.comuna = p[1].trim(); lc.comuna = p[1].trim(); }
+                        if (p[2]) { db.estadocivil = p[2]; lc.estadoCivil = p[2]; }
+                        if (p[3]) { db.integrantes_familiares = p[3].trim(); lc.integrantesFamiliares = p[3].trim(); }
+                        if (p[4]) { db.subsidio_anterior = p[4]; lc.subsidioAnterior = p[4]; }
+                      }
+                      // Luz / empalme → proveedor + n° cliente
+                      if (t === "luz") {
+                        if (p[0]) { db.proveedorelectrico = p[0].trim(); lc.proveedorElectrico = p[0].trim(); }
+                        if (p[1]) { db.nclienteelectricidad = p[1].trim(); lc.nClienteElectricidad = p[1].trim(); }
+                      }
+                      // Agua con arranque → empresa + n° servicio
+                      if (t === "agua" && v.includes("|")) {
+                        if (p[0]) { db.sistemaagua = p[0].trim(); lc.sistemaAgua = p[0].trim(); }
+                        if (p[1]) { db.nservicioagua = p[1].trim(); lc.nServicioAgua = p[1].trim(); }
+                      }
+                      // Agua sin arranque (Pozo u otro)
+                      if (t === "agua" && v && !v.includes("|")) { db.sistemaagua = v; lc.sistemaAgua = v; }
+                      // Discapacidad → usa opcionSeleccionada (no d.opcion)
+                      if (t === "discapacidad") {
+                        const opSel = d.opcionSeleccionada || "";
+                        if (opSel === "Con discapacidad") {
+                          db.discapacidad = "S"; lc.discapacidad = "S";
+                          if (p[0]) { db.credencialdiscapacidad = p[0].trim(); lc.credencialDiscapacidad = p[0].trim(); }
+                          if (p[1]) { db.movilidadreducida = p[1].toLowerCase().startsWith("s") ? "SI" : "NO"; lc.movilidadReducida = db.movilidadreducida; }
+                        }
+                        if (opSel === "Sin discapacidad") {
+                          db.discapacidad = "N/A"; lc.discapacidad = "N/A";
+                          db.movilidadreducida = "N/A"; lc.movilidadReducida = "N/A";
+                          db.credencialdiscapacidad = "N/A"; lc.credencialDiscapacidad = "N/A";
+                        }
+                      }
+                      // Movilidad reducida (doc separado)
+                      if (n.includes("movilidad")) {
+                        const opSel = d.opcionSeleccionada || v;
+                        if (opSel) { db.movilidadreducida = opSel === "Sí" ? "SI" : opSel; lc.movilidadReducida = db.movilidadreducida; }
+                      }
+                      // Dominio de la propiedad / Título de dominio
+                      if (n.includes("dominio") || n.includes("titulo")) {
+                        const val = p[1] ? "Otro: " + p[1] : p[0];
+                        if (val) { db.dominiopropiedad = val; lc.dominiopropiedad = val; }
+                      }
+                      // Avalúo fiscal
+                      if (n.includes("avaluo")) {
+                        if (p[0]) { db.rol_propiedad = p[0].trim(); lc.rol_propiedad = p[0].trim(); }
+                        if (p[1]) {
+                          const valorAvaluo = formatPesosChilenos(p[1]);
+                          db.avaluofiscal = valorAvaluo;
+                          lc.avaluoFiscal = valorAvaluo;
+                        }
+                        if (p[2]) { db.coordenadas = p[2].trim(); lc.coordenadas = p[2].trim(); }
+                      }
+                      // Certificado ruralidad
+                      if (n.includes("ruralidad") && p[0]) { db.certruralidad = p[0].trim() + (p[1] ? " — " + p[1] : ""); lc.certRuralidad = db.certruralidad; }
+                      // Cuenta de ahorro → número en p[0], banco en p[1]
+                      if (n.includes("cuenta de ahorro")) {
+                        if (p[0]) { db.cuentaahorro = p[0].trim(); lc.cuentaAhorro = p[0].trim(); }
+                        if (p[1]) { db.banco = p[1].trim(); lc.banco = p[1].trim(); }
+                      }
+                      // Rol
+                      if (n.includes("rol") && v) { db.rol = v; lc.rol = v; }
+                    }
+                    if (Object.keys(db).length > 0) {
+                      await supabase.from("personas").update(db).eq("id", persona.id);
+                      onSavePersonas(personas.map(p2 => p2.id === persona.id ? { ...p2, ...lc } : p2));
+                    }
+                    setSolsEditando(prev => ({ ...prev, [sol.id]: false }));
+                    alert("✓ Datos guardados en la ficha del solicitante");
+                  }}
+                    style={{ padding: "5px 14px", borderRadius: 8, border: "1.5px solid #059669", background: "#059669", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    💾 Guardar
+                  </button>
+                )}
               </div>
             </div>
-            <div style={{ height: 8, background: "#f0ede8", borderRadius: 4, marginBottom: 18, overflow: "hidden" }}>
+            <div style={{ height: 8, background: "#f0ede8", borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
               <div style={{ height: "100%", width: p + "%", background: statusColor(p), borderRadius: 4 }} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {/* Campo Fecha de Visita inline para Desmarque */}
+            {sol.programaId === "habitabilidad" && (
+              <div style={{ marginBottom: 14, padding: "10px 14px", background: sol.fecha_visita ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (sol.fecha_visita ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", whiteSpace: "nowrap" }}>📅 Fecha de Visita</div>
+                <input type="date" value={sol.fecha_visita || ""}
+                  onClick={e => e.stopPropagation()}
+                  onChange={async e => {
+                    const val = e.target.value;
+                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, fecha_visita: val });
+                    onSaveSolicitudes(nuevasSols);
+                    if (val && !["NO CALIFICA","APELAR SERVIU","DESMARCADO","INFORME EN DOM","INFORME EN SERVIU"].includes(persona.estado_desmarque)) {
+                      const nuevoEstado = "VISITA HECHA FALTA INFORME";
+                      if (nuevoEstado !== persona.estado_desmarque) {
+                        await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
+                        onSavePersonas(personas.map(p2 => p2.id === persona.id ? { ...p2, estado_desmarque: nuevoEstado } : p2));
+                      }
+                    }
+                  }}
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (sol.fecha_visita ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
+                {sol.fecha_visita
+                  ? <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Visita registrada</span>
+                  : <span style={{ fontSize: 11, color: "#B45309" }}>⚠ Sin fecha de visita — estado: No Visitado</span>}
+              </div>
+            )}
+            {solsEditando[sol.id] && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {sol.documentos.map((doc, i) => {
+                // ── PROGRAMA PERSONALIZADO: renderizado genérico ──────────────
+                if (esCustom) {
+                  const reqArch = !!doc.requiereArchivo;
+                  const reqTxt  = !!doc.requiereTexto;
+                  const nomDoc  = (doc.nombre || "").toLowerCase();
+
+                  // Detectar tipo especial por nombre
+                  const esCedula    = nomDoc.includes("cedula") || nomDoc.includes("cédula") || nomDoc.includes("identidad");
+                  const esAhorro    = nomDoc.includes("ahorro");
+                  const esRsh       = nomDoc.includes("rsh") || nomDoc.includes("registro social");
+                  const esIngreso   = nomDoc.includes("ingreso familiar") || nomDoc.includes("ingreso");
+
+                  // Valor extra guardado en doc.valor como JSON cuando hay múltiples campos
+                  const valObj = (() => { try { return doc.valor ? JSON.parse(doc.valor) : {}; } catch { return { raw: doc.valor }; } })();
+
+                  const archivoOk = reqArch || esCedula || esAhorro ? archivos.some(a => {
+                    const key = nomDoc.replace(/\s/g,'').slice(0,6);
+                    return a.toLowerCase().includes(key.slice(0,5));
+                  }) : true;
+                  const textoOk = reqTxt ? !!(doc.valor && doc.valor.trim()) : true;
+
+                  // Validaciones específicas
+                  const cedulaOk    = esCedula  ? archivoOk : true;
+                  const ahorroOk    = esAhorro  ? (archivoOk && !!(valObj.numeroCuenta || "").trim()) : true;
+                  const rshOk       = esRsh     ? !!(valObj.porcentaje || doc.valor || "").toString().trim() : true;
+                  const ingresoOk   = esIngreso ? !!(valObj.monto || doc.valor || "").toString().trim() : true;
+                  const requisitosOk = cedulaOk && ahorroOk && rshOk && ingresoOk;
+
+                  const bgColor    = doc.entregado ? "#ECFDF5" : requisitosOk ? "#FFFBEB" : "#FAFAFA";
+                  const bordeColor = doc.entregado ? "#6EE7B7" : requisitosOk ? "#FCD34D" : "#e5e7eb";
+
+                  const guardarValorYFicha = async (nuevoValor, campoFicha, valorFicha) => {
+                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d, j) => j === i ? { ...d, valor: nuevoValor } : d) });
+                    onSaveSolicitudes(nuevasSols);
+                    await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
+                    if (campoFicha && valorFicha !== undefined) {
+                      const update = { [campoFicha]: valorFicha };
+                      await supabase.from("personas").update(update).eq("id", persona.id);
+                      onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...update } : p));
+                    }
+                  };
+
+                  const marcarVB = async () => {
+                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d, j) => j === i ? { ...d, entregado: true } : d) });
+                    onSaveSolicitudes(nuevasSols);
+                    await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
+                  };
+
+                  return (
+                    <div key={i} style={{ borderRadius: 9, border: "1.5px solid " + bordeColor, background: bgColor, padding: "10px 14px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (doc.entregado ? "#059669" : requisitosOk ? "#D97706" : "#D1D5DB"), background: doc.entregado ? "#059669" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 13, flexShrink: 0 }}>
+                          {doc.entregado ? "✓" : ""}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: doc.entregado ? "#065f46" : "#374151" }}>{doc.nombre}</div>
+                          {!doc.obligatorio && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
+                          {requisitosOk && !doc.entregado && <div style={{ fontSize: 10, color: "#D97706", fontWeight: 700 }}>✓ Listo para marcar VB</div>}
+                        </div>
+                        {!doc.entregado && requisitosOk && (
+                          <button onClick={marcarVB} style={{ padding: "4px 12px", borderRadius: 6, background: "#059669", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓ VB</button>
+                        )}
+                      </div>
+
+                      {!doc.entregado && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+
+                          {/* CÉDULA: solo subir archivo */}
+                          {esCedula && (
+                            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#f0f0f0", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: archivoOk ? "#059669" : "#555", fontWeight: 600 }}>
+                              📎 {archivoOk ? "Archivo subido ✓" : "Subir cédula de identidad"}
+                              {!archivoOk && <input type="file" style={{ display: "none" }} onChange={async e => {
+                                const file = e.target.files[0]; if (!file) return;
+                                const fd = new FormData(); fd.append("archivo", file);
+                                await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                await cargarArchivos();
+                                await marcarVB();
+                                e.target.value = "";
+                              }} />}
+                            </label>
+                          )}
+
+                          {/* AHORRO: subir archivo + número de cuenta */}
+                          {esAhorro && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#f0f0f0", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: archivoOk ? "#059669" : "#555", fontWeight: 600 }}>
+                                📎 {archivoOk ? "Comprobante subido ✓" : "Subir libreta/comprobante de ahorro"}
+                                {!archivoOk && <input type="file" style={{ display: "none" }} onChange={async e => {
+                                  const file = e.target.files[0]; if (!file) return;
+                                  const fd = new FormData(); fd.append("archivo", file);
+                                  await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                  await cargarArchivos();
+                                  if ((valObj.numeroCuenta || "").trim()) await marcarVB();
+                                  e.target.value = "";
+                                }} />}
+                              </label>
+                              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                <input value={valObj.numeroCuenta || ""} placeholder="N° de cuenta de ahorro"
+                                  onChange={async e => {
+                                    const numeroCuenta = e.target.value;
+                                    const nuevo = JSON.stringify({ ...valObj, numeroCuenta });
+                                    await guardarValorYFicha(nuevo, "numero_cuenta_ahorro", numeroCuenta);
+                                    if (archivoOk && numeroCuenta.trim()) await marcarVB();
+                                  }}
+                                  style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
+                                {!(valObj.numeroCuenta||"").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° de cuenta</div>}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* RSH: ingresar porcentaje */}
+                          {esRsh && (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <input value={valObj.porcentaje || doc.valor || ""} placeholder="% RSH (ej: 45)"
+                                onChange={async e => {
+                                  const v = e.target.value.replace(/[^0-9.]/g, "");
+                                  await guardarValorYFicha(v, "puntajeRSH", v);
+                                }}
+                                style={{ width: 100, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
+                              <span style={{ fontSize: 11, color: "#555" }}>%</span>
+                              {!(valObj.porcentaje || doc.valor || "").toString().trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa el porcentaje RSH</div>}
+                            </div>
+                          )}
+
+                          {/* INGRESO FAMILIAR: ingresar monto en UF */}
+                          {esIngreso && (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <input value={valObj.monto || doc.valor || ""} placeholder="Monto ingreso familiar (UF)"
+                                onChange={async e => {
+                                  const v = e.target.value.replace(/[^0-9.]/g, "");
+                                  await guardarValorYFicha(v, "ingreso_familiar_uf", v);
+                                }}
+                                style={{ width: 160, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
+                              <span style={{ fontSize: 11, color: "#555" }}>UF</span>
+                              {!(valObj.monto || doc.valor || "").toString().trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa el ingreso familiar en UF</div>}
+                            </div>
+                          )}
+
+                          {/* Documento genérico con archivo */}
+                          {reqArch && !esCedula && !esAhorro && (
+                            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#f0f0f0", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: archivoOk ? "#059669" : "#555" }}>
+                              📎 {archivoOk ? "Archivo subido ✓" : "Subir archivo"}
+                              {!archivoOk && <input type="file" style={{ display: "none" }} onChange={async e => {
+                                const file = e.target.files[0]; if (!file) return;
+                                const fd = new FormData(); fd.append("archivo", file);
+                                await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                await cargarArchivos();
+                                const txtOkNow = reqTxt ? !!(doc.valor && doc.valor.trim()) : true;
+                                if (txtOkNow) await marcarVB();
+                                e.target.value = "";
+                              }} />}
+                            </label>
+                          )}
+
+                          {/* Texto adicional genérico */}
+                          {reqTxt && !esRsh && !esIngreso && !esAhorro && (
+                            <div style={{ display: "flex", gap: 5 }}>
+                              <input value={doc.valor || ""} placeholder={doc.etiquetaTexto || "Ingresar valor..."}
+                                onChange={e => guardarValorYFicha(e.target.value, null, null)}
+                                style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
+                            </div>
+                          )}
+
+                          {/* Solo checkbox */}
+                          {!reqArch && !reqTxt && !esCedula && !esAhorro && !esRsh && !esIngreso && (
+                            <button onClick={marcarVB} style={{ marginTop: 2, padding: "4px 12px", borderRadius: 6, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 11, cursor: "pointer" }}>Marcar VB</button>
+                          )}
+
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                // ── FIN PROGRAMA PERSONALIZADO ────────────────────────────────
+
+                // Ocultar documentos obsoletos de CSP Rural (preservando índice original para updates)
+                if (sol.programaId === "csp_rural") {
+                  const n = (doc.nombre||"").toLowerCase();
+                  if (n.includes("fecha de nacimiento")) return null;
+                  if (n.includes("titulo de dominio") || n.includes("título de dominio")) return null;
+                }
                 // Detectar tipo especial por nombre (independiente del campo tipo)
-                const nom = doc.nombre.toLowerCase();
+                const nom = doc.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 const tipoReal = doc.tipo ||
                   (nom.includes("boleta de luz") ? "luz" :
                    nom.includes("boleta de agua") || nom.includes("agua (apr") ? "agua" :
@@ -516,30 +3654,250 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
                   (tipoReal === "discapacidad" && opSel === "Con discapacidad")
                 );
 
+                // Documentos que requieren subir archivo antes del VB
+                const esDocArchivo = !esEspecial && doc.nombre && (
+                  doc.nombre.toLowerCase().includes("cedula") ||
+                  doc.nombre.toLowerCase().includes("título") ||
+                  doc.nombre.toLowerCase().includes("titulo") ||
+                  doc.nombre.toLowerCase().includes("avaluo") ||
+                  doc.nombre.toLowerCase().includes("dominio") ||
+                  doc.nombre.toLowerCase().includes("derecho real") ||
+                  (esCsp && doc.nombre.toLowerCase().includes("ruralidad")) ||
+                  (esCsp && doc.nombre.toLowerCase().includes("informaciones previas")) ||
+                  (esCsp && doc.nombre.toLowerCase().includes("vivienda") && !doc.nombre.toLowerCase().includes("ahorro"))
+                );
+                // Verificar si ya tiene archivo en la carpeta
+                const tieneArchivo = archivos.some(a => {
+                  const al = a.toLowerCase();
+                  const dn = doc.nombre.toLowerCase();
+                  if (dn.includes("cedula")) return al.includes("cedula") || al.includes("rut") || al.includes("ci");
+                  if (dn.includes("avaluo")) return al.includes("avaluo") || al.includes("avalúo");
+                  if (dn.includes("dominio") || dn.includes("derecho real"))
+                    return al.includes("escritura") || al.includes("dru") || al.includes("titulo") || al.includes("dominio") || al.includes("goce") || al.includes("usufructo");
+                  if (dn.includes("ruralidad")) return al.includes("ruralidad") || al.includes("rural");
+                  if (dn.includes("informaciones previas")) return al.includes("informaciones") || al.includes("previas");
+                  if (dn.includes("vivienda")) return al.includes("vivienda");
+                  if (dn.includes("cuenta de ahorro")) return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola");
+                  return false;
+                });
+
+                // Para documentos especiales, también exigir archivo real cuando corresponde
+                const tieneArchivoEspecial = esEspecial && archivos.some(a => {
+                  const al = a.toLowerCase();
+                  if (tipoReal === "luz") return al.includes("luz") || al.includes("boleta") || al.includes("empalme");
+                  if (tipoReal === "agua") return al.includes("agua") || al.includes("arranque") || al.includes("apr");
+                  if (tipoReal === "discapacidad") return al.includes("discapacidad") || al.includes("credencial");
+                  return false;
+                });
+
+                // Documentos CSP con lógica propia
+                const esRsh = esCsp && nom.includes("registro social de hogares");
+                const esFechaNac = esCsp && nom.includes("fecha de nacimiento");
+                const esSinDiscapacidad = tipoReal === "discapacidad" && opSel === "Sin discapacidad";
+                const esConDiscapacidad = tipoReal === "discapacidad" && opSel === "Con discapacidad";
+                const esConArranque = esCsp && tipoReal === "agua" && opSel === "Con arranque";
+                const esCertRuralidad = esCsp && nom.includes("certificado de ruralidad");
+                const esCuentaAhorro = esCsp && nom.includes("cuenta de ahorro");
+                const esTituloDominio = esCsp && (nom.includes("titulo de dominio") || nom.includes("título de dominio"));
+                // "Dominio de la propiedad" (nuevo en CSP Rural, reemplaza Título de dominio)
+                const esDominioProp = esCsp && nom.includes("dominio de la propiedad");
+                const esLuz = esCsp && tipoReal === "luz";
+                const luzPartes = esLuz ? (doc.valor || "").split("|") : [];
+                const proveedorLuz = luzPartes[0] || "";
+                const nClienteLuz = luzPartes[1] || "";
+                const esCedula = esCsp && nom.includes("cedula");
+                const esAvaluo = esCsp && nom.includes("avaluo");
+                const esInfoPrevias = esCsp && nom.includes("informaciones previas");
+                const esAntecedentesVivienda = esCsp && nom.includes("antecedentes de la vivienda");
+
+                // Tipo de dominio: "DV" | "DRU" | "Usufructo" | "Goce con resolución" | "Goce sin resolución" | "Otro|descripción"
+                const tituloPartes = esTituloDominio ? (doc.valor || "").split("|") : [];
+                const tituloTipo = tituloPartes[0] || "";
+                const tituloDesc = tituloPartes[1] || "";
+
+                // Dominio de la propiedad (CSP Rural): "tipo|descripcion"
+                const dominioPartes = esDominioProp ? (doc.valor || "").split("|") : [];
+                const dominioTipo = dominioPartes[0] || "";
+                const dominioDesc = dominioPartes[1] || "";
+
+                // Cédula CSP: "rut|fechaNacimiento" — auto-rellena RUT del solicitante
+                const cedPartes = esCedula ? (doc.valor || "").split("|") : [];
+                const cedRut = cedPartes[0] || persona.rut || "";
+                // Normalizar fecha a YYYY-MM-DD para el input type="date"
+                const _rawFecha = cedPartes[1] || persona.fechaNacimiento || "";
+                const cedFecha = (() => {
+                  if (!_rawFecha) return "";
+                  // Si viene como DD/MM/YYYY → convertir a YYYY-MM-DD
+                  if (/^\d{2}\/\d{2}\/\d{4}$/.test(_rawFecha)) {
+                    const [d, m, y] = _rawFecha.split("/");
+                    return y + "-" + m + "-" + d;
+                  }
+                  return _rawFecha; // ya es YYYY-MM-DD
+                })();
+                const cedRutValido = rutFormatoChilenoValido(cedRut);
+                const cedCompleto = !!(cedRutValido && cedFecha.trim());
+                // Compatibilidad backward (código que usa cedulaRut)
+                const cedulaRut = cedRut;
+
+                // Certificado de ruralidad: "numero|YYYY-MM-DD"
+                const certRuralPartes = esCertRuralidad ? (doc.valor || "").split("|") : [];
+                const certRuralNum = certRuralPartes[0] || "";
+                const certRuralFecha = certRuralPartes[1] || "";
+                const certRuralCompleto = !!(certRuralNum.trim() && certRuralFecha.trim());
+
+                // Avalúo: doc.valor = "rol|valor$|coordenadas"
+                const avaluoPartes = esAvaluo ? (doc.valor || "").split("|") : [];
+                const avaluoRol = avaluoPartes[0] || "";
+                const avaluoValor = formatPesosChilenos(avaluoPartes[1] || "");
+                const avaluoCoordenadas = avaluoPartes[2] || "";
+                const avaluoRolPartes = avaluoRol.split("-");
+                const avaluoRolPrimero = avaluoRolPartes[0] || "";
+                const avaluoRolSegundo = avaluoRolPartes.slice(1).join("-") || "";
+                const armarRolAvaluo = (primero, segundo) => [primero, segundo].map(x => x.trim()).filter(Boolean).join("-");
+                const avaluoCompleto = !!(avaluoRol.trim() && avaluoValor.trim());
+
+                // Informaciones previas: doc.valor = "numero|año"
+                const infoPartes = esInfoPrevias ? (doc.valor || "").split("|") : [];
+                const infoNumero = infoPartes[0] || "";
+                const infoAnio = infoPartes[1] || "";
+                const infoCompleto = !!(infoNumero.trim() && infoAnio.trim());
+
+                // Antecedentes de la vivienda (Urbano): "NA" | "numero|año"
+                const antecPartes = esAntecedentesVivienda ? (doc.valor || "").split("|") : [];
+                const antecNumero = antecPartes[0] || "";
+                const antecAnio = antecPartes[1] || "";
+                const antecEsNA = esAntecedentesVivienda && antecNumero.trim() === "N/A";
+                const antecOpcion = antecEsNA ? "NA" : (antecNumero.trim() || antecAnio.trim() ? "SI" : "");
+                const antecCompleto = antecEsNA || !!(antecNumero.trim() && antecAnio.trim());
+
+                // Documentos de trámite Desmarque: "numero|YYYY-MM-DD"
+                const esInformeDOM = !esCsp && doc.nombre && doc.nombre.includes("Informe DOM");
+                const esMemoDOM    = !esCsp && doc.nombre && doc.nombre.includes("Memo DOM");
+                const esCartaServiu= !esCsp && doc.nombre && doc.nombre.includes("Carta SERVIU");
+                const esTramite    = esInformeDOM || esMemoDOM || esCartaServiu;
+                const tramitePartes= esTramite ? (doc.valor || "").split("|") : [];
+                const tramiteNum   = tramitePartes[0] || "";
+                const tramiteFecha = tramitePartes[1] || "";
+                const tramiteCompleto = !!(tramiteNum.trim() && tramiteFecha.trim());
+
+                // Valores APR: "nombreAPR|nServicio" en doc.valor
+                const aprPartes = esConArranque ? (doc.valor || "").split("|") : [];
+                const aprNombre = aprPartes[0] || "";
+                const aprServicio = aprPartes[1] || "";
+                const aprCompleto = !!(aprNombre.trim() && aprServicio.trim());
+
+                // Valores discapacidad con folio: "folio|movilidad" en doc.valor
+                const discPartes = esConDiscapacidad ? (doc.valor || "").split("|") : [];
+                const discFolio = discPartes[0] || "";
+                const discMovilidad = discPartes[1] || "";
+                const discCompleto = !!(discFolio.trim() && discMovilidad);
+
+                // Valores cuenta ahorro: "cuenta|banco|ok" en doc.valor (el "|ok" se añade al subir archivo)
+                const cuentaPartes = esCuentaAhorro ? (doc.valor || "").split("|") : [];
+                const cuentaNum = cuentaPartes[0] || "";
+                const cuentaBanco = cuentaPartes[1] || "";
+                const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
+
+                // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio"
+                const rshPartes = esRsh ? (doc.valor || "").split("|") : [];
+                const rshPct = rshPartes[0] || "";
+                const rshComuna = rshPartes[1] || "";
+                const rshEstCivil = rshPartes[2] || "";
+                const rshIntegrantes = rshPartes[3] || "";
+                const rshSubsidio = rshPartes[4] || "";
+                const rshComunaEsLautaro = rshComuna.trim().toUpperCase() === "LAUTARO";
+                const rshComunaEsOtra = rshComuna.startsWith("OTRA: ");
+                const rshOtraComuna = rshComunaEsOtra ? rshComuna.replace(/^OTRA:\s*/, "") : "";
+                const rshComunaLista = rshComunaEsLautaro || (rshComunaEsOtra && rshOtraComuna.trim());
+                const rshCompleto = !!(rshPct.trim() && rshComunaLista && rshEstCivil.trim() && rshIntegrantes.trim() && rshSubsidio.trim());
+                const setRsh = (idx, val) => {
+                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio];
+                  p[idx] = val;
+                  const newValor = p.join("|");
+                  const completo = p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim();
+                  onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                    ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor, entregado: !!completo })
+                  }));
+                };
+
+                // Tooltip según el motivo del bloqueo
+                const tooltipBloqueado = esRsh ? "Ingresa el RSH primero"
+                  : esFechaNac ? "Ingresa la fecha primero"
+                  : esTituloDominio && !tituloTipo ? "Selecciona el tipo de dominio primero"
+                  : esDominioProp && !dominioTipo ? "Selecciona el tipo de dominio primero"
+                  : esCedula && !cedCompleto ? "Ingresa cédula chilena válida con puntos, guion, dígito verificador y fecha de nacimiento"
+                  : esCertRuralidad && !certRuralCompleto ? "Ingresa N° y fecha del certificado primero"
+                  : esAvaluo && !avaluoCompleto ? "Ingresa rol y valor de avalúo primero"
+                  : esInfoPrevias && !infoCompleto ? "Ingresa N° y año del documento primero"
+                  : esAntecedentesVivienda && !antecCompleto ? "Ingresa N° y año del documento primero"
+                  : esLuz && !nClienteLuz.trim() ? "Ingresa el N° de cliente de electricidad primero"
+                  : "Sube el documento primero";
+
+                // Checkbox bloqueado si falta archivo o datos requeridos (CSP)
+                const bloqueadoPorArchivo =
+                  (esCedula && !cedCompleto && !doc.entregado) ||
+                  (esCertRuralidad && !certRuralCompleto && !doc.entregado) ||
+                  (esDominioProp && !dominioTipo && !doc.entregado) ||
+                  (esAvaluo && !avaluoCompleto && !doc.entregado) ||
+                  (esInfoPrevias && !infoCompleto && !doc.entregado) ||
+                  (esAntecedentesVivienda && !antecCompleto && !doc.entregado) ||
+                  (esTituloDominio && !tituloTipo && !doc.entregado) ||
+                  (esDocArchivo && !esTituloDominio && !esDominioProp && !esCedula && !esAvaluo && !esInfoPrevias && !esAntecedentesVivienda && !esCertRuralidad && !tieneArchivo && !doc.entregado) ||
+                  (esDocArchivo && (esTituloDominio || esDominioProp || esCedula || esAvaluo || esInfoPrevias || esAntecedentesVivienda || esCertRuralidad) && !tieneArchivo && (tituloTipo || dominioTipo || cedCompleto || avaluoCompleto || infoCompleto || antecCompleto || certRuralCompleto) && !doc.entregado) ||
+                  (esCsp && necesitaArchivo && !esSinDiscapacidad && !tieneArchivoEspecial && !doc.entregado) ||
+                  (esLuz && !nClienteLuz.trim() && !doc.entregado) ||
+                  (esRsh && !rshCompleto && !doc.entregado) ||
+                  (esFechaNac && !(doc.valor || "").trim() && !doc.entregado) ||
+                  (esConArranque && (!aprCompleto || !tieneArchivoEspecial) && !doc.entregado) ||
+                  (esConDiscapacidad && (!discCompleto || !tieneArchivoEspecial) && !doc.entregado) ||
+                  (esCuentaAhorro && (!tieneArchivoCuenta || !cuentaNum.trim() || !cuentaBanco.trim()) && !doc.entregado);
+
                 const bordeColor = doc.entregado ? "#BBF7D0" : sinOpcion ? "#FDE68A" : doc.obligatorio ? "#FED7D7" : "#E5E7EB";
                 const bgColor = doc.entregado ? "#F0FDF4" : sinOpcion ? "#FFFBEB" : doc.obligatorio ? "#FFF5F5" : "#FAFAFA";
 
                 return (
                   <div key={i} style={{ borderRadius: 9, border: "1.5px solid " + bordeColor, background: bgColor, padding: "10px 14px" }}>
                     {/* Fila superior: checkbox + nombre */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: esEspecial ? 8 : 0,
-                      cursor: !esEspecial ? "pointer" : "default" }}
-                      onClick={() => { if (!esEspecial) toggleDoc(sol.id, i); }}>
-                      <div style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (doc.entregado ? "#059669" : "#D1D5DB"), background: doc.entregado ? "#059669" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0, fontSize: 13 }}>
-                        {doc.entregado ? "✓" : ""}
-                      </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: (esEspecial || esRsh || esFechaNac) ? 8 : 0,
+                      cursor: bloqueadoPorArchivo ? "not-allowed" : (!esEspecial && !esRsh && !esFechaNac ? "pointer" : "default") }}
+                      onClick={() => {
+                        if (bloqueadoPorArchivo) return;
+                        const esDesmarque = sol.programaId === "habitabilidad";
+                        if (!esEspecial && !esDocArchivo && !esRsh && !esFechaNac) {
+                          toggleDoc(sol.id, i);
+                        }
+                        if (esDocArchivo && tieneArchivo && !doc.entregado) {
+                          if (sol.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
+                          toggleDoc(sol.id, i);
+                        }
+                        if (esCsp && esEspecial && tieneArchivoEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) toggleDoc(sol.id, i);
+                      }}>
+                      {esSinDiscapacidad ? (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>N/A</span>
+                      ) : (
+                        <div title={bloqueadoPorArchivo ? tooltipBloqueado : ""} style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (doc.entregado ? "#059669" : bloqueadoPorArchivo ? "#9ca3af" : "#D1D5DB"), background: doc.entregado ? "#059669" : bloqueadoPorArchivo ? "#f3f4f6" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0, fontSize: 13, opacity: bloqueadoPorArchivo ? 0.5 : 1 }}>
+                          {doc.entregado ? "✓" : ""}
+                        </div>
+                      )}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, color: doc.entregado ? "#065f46" : "#374151", fontWeight: 600 }}>{doc.nombre}</div>
-                        {doc.etiqueta && <div style={{ fontSize: 12, fontWeight: 800, color: "#059669", marginTop: 2 }}>{doc.etiqueta}</div>}
-                        {!doc.obligatorio && !opSel && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
+                        {bloqueadoPorArchivo && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{tooltipBloqueado}</div>}
+                        {doc.etiqueta && !esSinDiscapacidad && <div style={{ fontSize: 12, fontWeight: 800, color: "#059669", marginTop: 2 }}>{doc.etiqueta}</div>}
+                        {esSinDiscapacidad && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>Sin discapacidad — no requiere documento</div>}
+                        {!doc.obligatorio && !opSel && !bloqueadoPorArchivo && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
                       </div>
                     </div>
 
                     {/* Botones de opción para docs especiales — siempre visibles */}
                     {esEspecial && opcionesReal && (
-                      <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+                      <div style={{ display: "flex", gap: 6, marginBottom: esLuz ? 6 : 4 }}>
                         {opcionesReal.map((op, oi) => (
-                          <button key={oi} onClick={() => setDocOpcion(sol.id, i, op, tipoReal)}
+                          <button key={oi} onClick={async () => {
+                            setDocOpcion(sol.id, i, op, tipoReal);
+                            if (esCsp && tipoReal === "agua" && op === "Pozo") await syncPersona({ sistemaAgua: "Pozo" });
+                            if (tipoReal === "discapacidad" && op === "Sin discapacidad") await syncPersona({ discapacidad: "N/A", movilidadReducida: "N/A", credencialDiscapacidad: "N/A" });
+                            if (tipoReal === "discapacidad" && op === "Con discapacidad") await syncPersona({ discapacidad: "S", movilidadReducida: "", credencialDiscapacidad: "" });
+                          }}
                             style={{
                               flex: 1, padding: "6px 4px", borderRadius: 6,
                               border: "2px solid " + (opSel === op ? "#1e3a5f" : "#ddd"),
@@ -553,46 +3911,1067 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
                       </div>
                     )}
 
-                    {/* Input de número/valor para documentos de trámite */}
-                    {(doc.nombre && (doc.nombre.includes("Memo DOM") || doc.nombre.includes("Carta SERVIU") || doc.nombre.includes("Informe DOM") || doc.nombre.includes("fecha_visita"))) && (
-                      <div style={{ marginTop: 6 }}>
-                        <input
-                          type="text"
-                          placeholder={doc.nombre.includes("Informe DOM") ? "N° y fecha informe..." : doc.nombre.includes("Memo") ? "N° memo DOM..." : "N° y fecha carta SERVIU..."}
-                          value={doc.valor || ""}
-                          onChange={e => setDocValor(sol.id, i, e.target.value)}
+                    {/* Selector proveedor eléctrico + N° cliente (Boleta de luz CSP) */}
+                    {esLuz && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <input type="text" placeholder="N° de cliente electricidad (obligatorio)" value={nClienteLuz}
                           onClick={e => e.stopPropagation()}
-                          style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, background:"#fff" }}
-                        />
+                          onChange={async e => {
+                            const val = e.target.value;
+                            const newValor = proveedorLuz + "|" + val;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (val.trim()) await syncPersona({ nClienteElectricidad: val.trim() });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (nClienteLuz.trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        {!nClienteLuz.trim() && <div style={{ fontSize: 10, color: "#B45309", marginTop: 1 }}>⚠ Ingresa el N° de cliente para habilitar el VB</div>}
+                        <select value={proveedorLuz} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const val = e.target.value;
+                            const newValor = val + "|" + nClienteLuz;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (val) await syncPersona({ proveedorElectrico: val });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (proveedorLuz ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
+                          <option value="">Seleccionar proveedor eléctrico…</option>
+                          {["CODINER","FRONTEL","CGE"].map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        {proveedorLuz && <div style={{ fontSize: 10, color: "#059669", marginTop: 2 }}>✓ Proveedor: {proveedorLuz}</div>}
+                      </div>
+                    )}
+
+                    {/* Campos RSH: porcentaje, comuna, estado civil, integrantes, subsidio anterior */}
+                    {esRsh && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <input type="text" placeholder="Porcentaje RSH (ej: 65%)" value={rshPct}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const val = e.target.value;
+                            setRsh(0, val);
+                            if (val.trim()) {
+                              const ahorro = calcularAhorro(val);
+                              await syncPersona({ puntajeRSH: val.trim(), ...(ahorro ? { ahorroPostular: ahorro } : {}) });
+                            }
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshPct.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={async e => {
+                            e.stopPropagation();
+                            setRsh(1, "LAUTARO");
+                            await syncPersona({ comuna: "LAUTARO" });
+                          }}
+                            style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshComunaEsLautaro ? "#1e3a5f" : "#ddd"), background: rshComunaEsLautaro ? "#1e3a5f" : "#fff", color: rshComunaEsLautaro ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            LAUTARO
+                          </button>
+                          <button onClick={e => {
+                            e.stopPropagation();
+                            setRsh(1, rshComunaEsOtra ? rshComuna : "OTRA: ");
+                          }}
+                            style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshComunaEsOtra ? "#1e3a5f" : "#ddd"), background: rshComunaEsOtra ? "#1e3a5f" : "#fff", color: rshComunaEsOtra ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            Otra comuna
+                          </button>
+                        </div>
+                        {rshComunaEsOtra && (
+                          <input type="text" placeholder="Completa nombre de la comuna" value={rshOtraComuna}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const val = e.target.value;
+                              setRsh(1, "OTRA: " + val);
+                              if (val.trim()) await syncPersona({ comuna: val.trim() });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshOtraComuna.trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        )}
+                        {rshComunaEsOtra && !rshOtraComuna.trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa el nombre de la comuna para habilitar el VB</div>}
+                        <select value={rshEstCivil} onClick={e => e.stopPropagation()}
+                          onChange={async e => { setRsh(2, e.target.value); if (e.target.value) await syncPersona({ estadoCivil: e.target.value }); }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshEstCivil ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
+                          <option value="">Estado civil…</option>
+                          {["SOLTERO/A","CASADO/A","CONVIVIENTE CIVIL","DIVORCIADO/A","VIUDO/A"].map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <input type="number" min="1" placeholder="N° integrantes grupo familiar" value={rshIntegrantes}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => { setRsh(3, e.target.value); if (e.target.value.trim()) await syncPersona({ integrantesFamiliares: e.target.value.trim() }); }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshIntegrantes.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <div style={{ fontSize: 10, color: "#6b7280" }}>Subsidio anterior:</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {["S","N"].map(op => (
+                            <button key={op} onClick={async e => { e.stopPropagation(); setRsh(4, op); await syncPersona({ subsidioAnterior: op }); }}
+                              style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshSubsidio === op ? "#1e3a5f" : "#ddd"), background: rshSubsidio === op ? "#1e3a5f" : "#fff", color: rshSubsidio === op ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {op === "S" ? "S — Sí" : "N — No"}
+                            </button>
+                          ))}
+                        </div>
+                        {!rshCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa todos los campos para habilitar el VB</div>}
+                      </div>
+                    )}
+
+                    {/* Campo fecha de nacimiento */}
+                    {esFechaNac && (() => {
+                      const [fY, fM, fD] = (doc.valor||"").length===10 ? (doc.valor||"").split("-") : ["","",""];
+                      const guardarFecha = async (dia, mes, anio) => {
+                        const fechaCompleta = anio.length===4 && mes.length===2 && dia.length===2 ? anio+"-"+mes+"-"+dia : "";
+                        setDocValor(sol.id, i, fechaCompleta || (anio+"-"+mes+"-"+dia));
+                        if (fechaCompleta) {
+                          const edad = calcularEdad(fechaCompleta);
+                          const am = edad!==null ? (edad>=60?"ADULTO MAYOR":"NO") : "";
+                          await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
+                          onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
+                        }
+                      };
+                      return (
+                      <div style={{ marginBottom: 4 }}>
+                        <div style={{ fontSize: 10, color: "#555", fontWeight: 700, marginBottom: 3, textTransform: "uppercase" }}>DD / MM / AAAA</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 4 }}>
+                          <input type="text" placeholder="DD" maxLength={2} value={fD||""}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => guardarFecha(e.target.value.replace(/\D/g,"").slice(0,2), fM||"", fY||"")}
+                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
+                          <input type="text" placeholder="MM" maxLength={2} value={fM||""}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => guardarFecha(fD||"", e.target.value.replace(/\D/g,"").slice(0,2), fY||"")}
+                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
+                          <input type="text" placeholder="AAAA" maxLength={4} value={fY||""}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => guardarFecha(fD||"", fM||"", e.target.value.replace(/\D/g,"").slice(0,4))}
+                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
+                        </div>
+                        {!doc.valor && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Ingresa la fecha para habilitar el VB</div>}
+                        {fY&&fM&&fD && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {fD}/{fM}/{fY}</div>}
+                      </div>
+                      );
+                    })()}
+
+                    {/* Inputs APR (Con arranque) */}
+                    {esConArranque && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <input type="text" placeholder="Nombre Empresa Sanitaria" value={aprNombre} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = e.target.value + "|" + aprServicio;
+                            const completo = e.target.value.trim() && aprServicio.trim();
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (e.target.value.trim()) await syncPersona({ sistemaAgua: e.target.value.trim() });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (aprNombre.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <input type="text" placeholder="N° de servicio agua" value={aprServicio} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = aprNombre + "|" + e.target.value;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (e.target.value.trim()) await syncPersona({ nServicioAgua: e.target.value.trim() });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (aprServicio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        {!aprCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa nombre empresa sanitaria y N° servicio</div>}
+                      </div>
+                    )}
+
+                    {/* Inputs discapacidad Con discapacidad */}
+                    {esConDiscapacidad && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <input type="text" placeholder="N° de folio credencial" value={discFolio} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = e.target.value + "|" + discMovilidad;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (e.target.value.trim()) await syncPersona({ credencialDiscapacidad: e.target.value.trim() });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (discFolio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>Movilidad reducida:</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {["Sí", "No"].map(op => (
+                            <button key={op} onClick={async e => { e.stopPropagation();
+                              const newValor = discFolio + "|" + op;
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              await syncPersona({ movilidadReducida: op.toLowerCase().startsWith("s") ? "SI" : "NO" });
+                            }}
+                              style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (discMovilidad === op ? "#7C3AED" : "#ddd"), background: discMovilidad === op ? "#7C3AED" : "#fff", color: discMovilidad === op ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {op}
+                            </button>
+                          ))}
+                        </div>
+                        {!discCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa el folio y la movilidad reducida</div>}
+                      </div>
+                    )}
+
+                    {/* Certificado de Ruralidad: N° + Fecha */}
+                    {esCertRuralidad && (
+                      <div style={{ marginBottom: 4, display: "grid", gap: 4 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>N° Certificado</div>
+                        <input type="text" placeholder="N° certificado (ej: 25/2026)" value={certRuralNum}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = e.target.value + "|" + certRuralFecha;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (e.target.value.trim()) await syncPersona({ certRuralidad: e.target.value.trim() + (certRuralFecha ? " — " + certRuralFecha : "") });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (certRuralNum.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha del Certificado</div>
+                        <input type="date" value={certRuralFecha}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = certRuralNum + "|" + e.target.value;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (certRuralFecha ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        {certRuralCompleto
+                          ? <div style={{ fontSize: 10, color: "#059669" }}>✓ N° {certRuralNum} — {certRuralFecha}</div>
+                          : <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para habilitar el upload</div>}
+                      </div>
+                    )}
+
+                    {/* Cuenta de ahorro — archivo + número + banco */}
+                    {esCuentaAhorro && !doc.entregado && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <input type="text" placeholder="N° cuenta de ahorro" value={cuentaNum} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = e.target.value + "|" + cuentaBanco;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (e.target.value.trim()) await syncPersona({ cuentaAhorro: e.target.value.trim() });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaNum.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <select value={cuentaBanco} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = cuentaNum + "|" + e.target.value;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (e.target.value) await syncPersona({ banco: e.target.value });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaBanco.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
+                          <option value="">Seleccionar banco…</option>
+                          {["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","Itaú","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"].map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                        {!tieneArchivoCuenta && (
+                          <label style={{ display: "inline-block", background: "#1e3a5f", color: "#fff", borderRadius: 7, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
+                            📎 Subir cartola / certificado
+                            <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={async e => {
+                                const file = e.target.files[0]; if (!file) return;
+                                const fd = new FormData(); fd.append("archivo", file);
+                                await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                await cargarArchivos();
+                                // Marcar flag de archivo subido en doc.valor
+                                const newValor = cuentaNum + "|" + cuentaBanco + "|ok";
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                e.target.value = "";
+                              }} />
+                          </label>
+                        )}
+                        {tieneArchivoCuenta && cuentaNum.trim() && cuentaBanco.trim() && (
+                          <button onClick={() => toggleDoc(sol.id, i)}
+                            style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
+                            Marcar VB ✓
+                          </button>
+                        )}
+                        {(!cuentaNum.trim() || !cuentaBanco.trim() || !tieneArchivoCuenta) && (
+                          <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa N° cuenta, banco y sube el archivo</div>
+                        )}
+                      </div>
+                    )}
+                    {esCuentaAhorro && doc.entregado && (
+                      <div style={{ fontSize: 11, color: "#059669", marginTop: 4 }}>✓ Cuenta: {cuentaNum} — {cuentaBanco}</div>
+                    )}
+
+                    {/* Campos N°+Fecha para Informe DOM, Memo DOM, Carta SERVIU (Desmarque) */}
+                    {esTramite && (
+                      <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                        <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.3px" }}>
+                          {esInformeDOM ? "N° Informe DOM" : esMemoDOM ? "N° Memorando DOM" : "N° Carta SERVIU"}
+                        </div>
+                        <input type="text"
+                          placeholder={esInformeDOM ? "N° del informe (ej: 15/2026)" : esMemoDOM ? "N° del memorando (ej: 25/2026)" : "N° de la carta (ej: 45/2026)"}
+                          value={tramiteNum}
+                          onChange={e => { const v = e.target.value + "|" + tramiteFecha; setDocValor(sol.id, i, v); }}
+                          onClick={e => e.stopPropagation()}
+                          style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid " + (tramiteNum.trim()?"#059669":"#ddd"), fontSize:12, background:"#fff", boxSizing:"border-box" }} />
+                        <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha</div>
+                        <input type="date"
+                          value={tramiteFecha}
+                          onChange={e => { const v = tramiteNum + "|" + e.target.value; setDocValor(sol.id, i, v); }}
+                          onClick={e => e.stopPropagation()}
+                          style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid " + (tramiteFecha?"#059669":"#ddd"), fontSize:12, background:"#fff", boxSizing:"border-box" }} />
+                        {tramiteCompleto
+                          ? <div style={{ fontSize:10, color:"#059669" }}>✓ {tramiteNum} — {tramiteFecha}</div>
+                          : <div style={{ fontSize:10, color:"#B45309" }}>⚠ Ingresa N° y fecha para activar el VB</div>}
+                      </div>
+                    )}
+
+                    {/* Sección especial Respuesta SERVIU */}
+                    {doc.nombre && doc.nombre.includes("Respuesta SERVIU") && (
+                      <div style={{ marginTop: 8 }}>
+                        {!doc.entregado && (
+                          <div style={{ marginBottom: 6, display: "grid", gap: 4 }}>
+                            <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>N° Ordinario (opcional)</div>
+                            <input type="text" placeholder="Ej: 1234/2026" value={doc.num_ord || ""}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, num_ord: e.target.value})
+                              }))}
+                              style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, boxSizing:"border-box" }} />
+                            <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>Fecha Respuesta (opcional)</div>
+                            <input type="date" value={doc.fecha_resp || ""}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, fecha_resp: e.target.value})
+                              }))}
+                              style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, boxSizing:"border-box" }} />
+                            <div style={{ fontSize: 11, color: "#B45309", fontWeight: 600, marginTop: 2 }}>
+                              ⚠ Use el botón "Subir Respuesta SERVIU" para registrar el resultado
+                            </div>
+                          </div>
+                        )}
+                        {doc.entregado && (
+                          <div style={{ background: doc.valor && doc.valor.includes("APROBADO") ? "#E0F7FA" : "#FEF2F2", borderRadius: 7, padding: "8px 12px" }}>
+                            <div style={{ fontSize: 12, color: doc.valor && doc.valor.includes("APROBADO") ? "#0891B2" : "#DC2626", fontWeight: 700, marginBottom: 4 }}>
+                              {doc.valor && doc.valor.includes("APROBADO") ? "✅" : "❌"} {doc.valor}
+                            </div>
+                            {(doc.num_ord || doc.fecha_resp) && (
+                              <div style={{ fontSize: 10, color: "#555", marginBottom: 4 }}>
+                                {doc.num_ord && <span>N° Ord: {doc.num_ord} </span>}
+                                {doc.fecha_resp && <span>· Fecha: {doc.fecha_resp}</span>}
+                              </div>
+                            )}
+                            <button onClick={async () => {
+                                const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
+                                  ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, entregado: false, valor: "" } : d2)
+                                });
+                                onSaveSolicitudes(nuevasSols);
+                                await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s2=>s2.id===sol.id).documentos }).eq("id", sol.id);
+                              }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "#DC2626", color: "#fff", border: "none", cursor: "pointer", marginTop: 4 }}>
+                                Modificar resultado
+                              </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Selector tipo de dominio para Título de dominio CSP */}
+                    {esTituloDominio && (
+                      <div style={{ marginTop: 8, marginBottom: 4 }}>
+                        <select value={tituloTipo} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const tipo = e.target.value;
+                            const newValor = tipo === "Otro" ? "Otro|" : tipo;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                              ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                            }));
+                            if (tipo && tipo !== "Otro") await syncPersona({ dominiopropiedad: tipo });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloTipo ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
+                          <option value="">Selecciona tipo de dominio…</option>
+                          {["D.V.", "DRU", "Usufructo", "Goce con resolución", "Goce sin resolución", "Otro"].map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        {tituloTipo === "Otro" && (
+                          <input type="text" placeholder="Describe el tipo de dominio…" value={tituloDesc}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = "Otro|" + e.target.value;
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                              }));
+                              if (e.target.value.trim()) await syncPersona({ dominiopropiedad: "Otro: " + e.target.value.trim() });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloDesc.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box", marginTop: 4 }} />
+                        )}
+                        {!tituloTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para habilitar el upload</div>}
+                        {tituloTipo && doc.entregado && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ Tipo: {tituloTipo === "Otro" ? "Otro: " + tituloDesc : tituloTipo}</div>}
+                      </div>
+                    )}
+
+                    {/* Cédula: cédula de identidad + Fecha de Nacimiento */}
+                    {esCedula && (() => {
+                      const cedPartes2 = (doc.valor || "").split("|");
+                      const rut2 = cedPartes2[0] || persona.rut || "";
+                      const fecha2 = cedPartes2[1] || "";
+                      // fecha2 es YYYY-MM-DD
+                      const [fY, fM, fD] = fecha2 ? fecha2.split("-") : ["","",""];
+                      const guardarCedula = async (rut, dia, mes, anio) => {
+                        const fechaCompleta = anio.length===4 && mes.length===2 && dia.length===2
+                          ? anio+"-"+mes+"-"+dia : (anio+"-"+mes+"-"+dia).replace(/^-+|-+$/g,"") || "";
+                        const rutOk = rutFormatoChilenoValido(rut);
+                        const rutFinal = rutOk ? formatRut(rut) : rut;
+                        const newValor = rutFinal + "|" + fechaCompleta;
+                        onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : { ...d2, valor: newValor, entregado: !!(rutOk && fechaCompleta.length===10) }) }));
+                        if (fechaCompleta.length===10) {
+                          const edad = calcularEdad(fechaCompleta);
+                          const am = edad!==null ? (edad>=60?"ADULTO MAYOR":"NO") : "";
+                          await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
+                          onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
+                        }
+                        if (rutOk) await syncPersona({ rut: rutFinal });
+                      };
+                      const rut2Valido = rutFormatoChilenoValido(rut2);
+                      return (
+                      <div style={{ marginTop: 8, marginBottom: 4, display: "grid", gap: 5 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>Cédula de identidad del solicitante</div>
+                        <input type="text" placeholder="ej: 10.398.338-K" value={formatRut(rut2)}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => guardarCedula(e.target.value, fD||"", fM||"", fY||"")}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid "+(rut2Valido?"#059669":"#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha de Nacimiento</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 4 }}>
+                          <input type="text" placeholder="DD" maxLength={2} value={fD||""}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => guardarCedula(rut2, e.target.value.replace(/\D/g,"").slice(0,2), fM||"", fY||"")}
+                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
+                          <input type="text" placeholder="MM" maxLength={2} value={fM||""}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => guardarCedula(rut2, fD||"", e.target.value.replace(/\D/g,"").slice(0,2), fY||"")}
+                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
+                          <input type="text" placeholder="AAAA" maxLength={4} value={fY||""}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => guardarCedula(rut2, fD||"", fM||"", e.target.value.replace(/\D/g,"").slice(0,4))}
+                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
+                        </div>
+                        {!rut2Valido && <div style={{ fontSize: 10, color: "#DC2626", marginTop: 2 }}>⚠ La cédula debe ser chilena válida, con puntos, guion y dígito verificador correcto.</div>}
+                        {!(rut2Valido && fecha2.length===10) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>⚠ Ingresa cédula de identidad válida y fecha completa para habilitar el upload</div>}
+                        {rut2Valido && fecha2.length===10 && <div style={{ fontSize: 10, color: "#059669" }}>✓ Cédula de identidad: {formatRut(rut2)} — Nacimiento: {fD}/{fM}/{fY}</div>}
+                      </div>
+                      );
+                    })()}
+
+                    {/* Dominio de la propiedad (CSP Rural): dropdown + upload */}
+                    {esDominioProp && (
+                      <div style={{ marginTop: 8, marginBottom: 4 }}>
+                        <select value={dominioTipo} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const tipo = e.target.value;
+                            const newValor = tipo === "Otro" ? "Otro|" : tipo;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                              ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                            }));
+                            if (tipo && tipo !== "Otro") await syncPersona({ dominiopropiedad: tipo });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioTipo ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
+                          <option value="">Selecciona tipo de dominio…</option>
+                          {["D.V.","DRU","Goce con resolución","Goce sin resolución","Usufructo","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        {dominioTipo === "Otro" && (
+                          <input type="text" placeholder="Describe el tipo de dominio…" value={dominioDesc}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = "Otro|" + e.target.value;
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                              }));
+                              if (e.target.value.trim()) await syncPersona({ dominiopropiedad: "Otro: " + e.target.value.trim() });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioDesc.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box", marginTop: 4 }} />
+                        )}
+                        {!dominioTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para habilitar el upload</div>}
+                        {dominioTipo && doc.entregado && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {dominioTipo === "Otro" ? "Otro: " + dominioDesc : dominioTipo}</div>}
+                      </div>
+                    )}
+
+                    {/* Campos rol + valor de avalúo antes del upload */}
+                    {esAvaluo && (
+                      <div style={{ display: "grid", gap: 5, marginTop: 8, marginBottom: 4 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5 }}>
+                          <input type="text" value="Lautaro" readOnly
+                            onClick={e => e.stopPropagation()}
+                            title="Comuna fija para consulta en SII Mapas"
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid #e5e7eb", fontSize: 12, background: "#f9fafb", color: "#555", boxSizing: "border-box" }} />
+                          <input type="text" placeholder="Primer rol" value={avaluoRolPrimero}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const rol = armarRolAvaluo(e.target.value, avaluoRolSegundo);
+                              const newValor = rol + "|" + avaluoValor + "|" + avaluoCoordenadas;
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              if (rol) await syncPersona({ rol });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoRolPrimero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                          <input type="text" placeholder="Segundo rol" value={avaluoRolSegundo}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const rol = armarRolAvaluo(avaluoRolPrimero, e.target.value);
+                              const newValor = rol + "|" + avaluoValor + "|" + avaluoCoordenadas;
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              if (rol) await syncPersona({ rol });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoRolSegundo.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5 }}>
+                          {[
+                            ["1. Copiar comuna", "LAUTARO", "#1e3a5f"],
+                            ["2. Copiar primer rol", avaluoRolPrimero, "#2563EB"],
+                            ["3. Copiar segundo rol", avaluoRolSegundo, "#059669"],
+                          ].map(([label, value, color]) => (
+                            <button key={label} type="button"
+                              onClick={async e => {
+                                e.stopPropagation();
+                                try { await navigator.clipboard.writeText(value || ""); } catch {}
+                              }}
+                              disabled={!value}
+                              title={value ? `Copiar: ${value}` : "Completa este dato primero"}
+                              style={{ padding: "6px 8px", borderRadius: 6, border: "1.5px solid " + (value ? color : "#d1d5db"), background: value ? color : "#f3f4f6", color: value ? "#fff" : "#9ca3af", fontSize: 10, fontWeight: 700, cursor: value ? "pointer" : "not-allowed" }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <button type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            window.open(SII_MAPAS_URL, "_blank", "noopener,noreferrer");
+                          }}
+                          title="Abre SII Mapas para pegar comuna, manzana y predio en ese orden."
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1.5px solid #D97706", background: "#D97706", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          Abrir SII Mapas
+                        </button>
+                        <div style={{ fontSize: 10, color: "#6b7280" }}>
+                          En SII Mapas pega en este orden: LAUTARO, {avaluoRolPrimero || "___"}, {avaluoRolSegundo || "___"}.
+                        </div>
+                        <input type="text" placeholder="Valor $ del avalúo (ej: $45.000.000)" value={avaluoValor}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const valorFormateado = formatPesosChilenos(e.target.value);
+                            const newValor = avaluoRol + "|" + valorFormateado + "|" + avaluoCoordenadas;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (valorFormateado) await syncPersona({ avaluoFiscal: valorFormateado });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoValor.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <input type="text" placeholder="Coordenadas (ej: -38.516023, -72.374214)" value={avaluoCoordenadas}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = avaluoRol + "|" + avaluoValor + "|" + e.target.value;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (e.target.value.trim()) await syncPersona({ coordenadas: e.target.value.trim() });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoCoordenadas.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        {!avaluoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa rol y valor de avalúo para habilitar el upload</div>}
+                      </div>
+                    )}
+
+                    {/* Antecedentes de la vivienda (Urbano): N/A o SÍ + N° y Año */}
+                    {esAntecedentesVivienda && (
+                      <div style={{ marginTop: 8, marginBottom: 4 }}>
+                        {/* Selector N/A | SÍ */}
+                        <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                          {[["NA","N/A — No aplica"],["SI","SÍ — Tiene documento"]].map(([op, lbl]) => (
+                            <button key={op} onClick={e => {
+                              e.stopPropagation();
+                              if (op === "NA") {
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                  ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"N/A", entregado:true})
+                                }));
+                                syncPersona({ antecedentesVivienda: "N/A" });
+                              } else {
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                  ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"", entregado:false})
+                                }));
+                              }
+                            }}
+                              style={{ flex:1, padding:"4px 8px", borderRadius:6, border:"2px solid "+(antecOpcion===op?"#059669":"#ddd"),
+                                background:antecOpcion===op?"#059669":"#fff", color:antecOpcion===op?"#fff":"#555",
+                                fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                        {antecEsNA && <div style={{ fontSize:10, color:"#059669", fontWeight:600 }}>✓ Marcado como N/A — VB activado sin archivo</div>}
+                        {antecOpcion === "SI" && (
+                          <div style={{ display: "grid", gap: 5 }}>
+                            <input type="text" placeholder="N° del documento (ej: 25)" value={antecNumero}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => {
+                                const newValor = e.target.value + "|" + antecAnio;
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            <input type="text" placeholder="Año (ej: 2026)" value={antecAnio}
+                              onClick={e => e.stopPropagation()}
+                              onChange={async e => {
+                                const newValor = antecNumero + "|" + e.target.value;
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                if (antecNumero.trim() && e.target.value.trim()) {
+                                  await syncPersona({ antecedentesVivienda: antecNumero.trim() + "/" + e.target.value.trim() });
+                                }
+                              }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {antecNumero}/{antecAnio}</div>}
+                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y año, luego sube el archivo para el VB</div>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Campos N° + año de informaciones previas antes del upload */}
+                    {esInfoPrevias && (
+                      <div style={{ display: "grid", gap: 5, marginTop: 8, marginBottom: 4 }}>
+                        <input type="text" placeholder="N° del documento (ej: 25)" value={infoNumero}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => {
+                            const newValor = e.target.value + "|" + infoAnio;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (infoNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <input type="text" placeholder="Año (ej: 2026)" value={infoAnio}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const newValor = infoNumero + "|" + e.target.value;
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            if (infoNumero.trim() && e.target.value.trim()) {
+                              const formatted = infoNumero.trim() + "/" + e.target.value.trim();
+                              await syncPersona({ informacionesPrevias: formatted });
+                            }
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (infoAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        {infoCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {infoNumero}/{infoAnio}</div>}
+                        {!infoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y año para habilitar el upload</div>}
+                      </div>
+                    )}
+
+                    {/* Botón subir archivo para Cédula, Avalúo, Título, Dominio, Ruralidad, Antecedentes */}
+                    {esDocArchivo && !doc.entregado &&
+                      (!esTituloDominio || !!tituloTipo) &&
+                      (!esDominioProp || !!dominioTipo) &&
+                      (!esCedula || cedCompleto) &&
+                      (!esCertRuralidad || certRuralCompleto) &&
+                      (!esAvaluo || avaluoCompleto) &&
+                      (!esInfoPrevias || infoCompleto) &&
+                      (!esAntecedentesVivienda || antecCompleto) && (
+                      <div style={{ marginTop: 8 }}>
+                        {!tieneArchivo ? (
+                          <div>
+                            <div style={{ fontSize: 11, color: "#B45309", marginBottom: 6 }}>⚠ Suba el archivo para marcar el VB</div>
+                            <label style={{ display: "inline-block", background: "#1e3a5f", color: "#fff", borderRadius: 7, padding: "6px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                              📎 Subir archivo
+                              <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={async e => {
+                                  const file = e.target.files[0];
+                                  if (!file) return;
+                                  const fd = new FormData(); fd.append("archivo", file);
+                                  await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                  await cargarArchivos();
+                                  // Marcar como entregado
+                                  const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
+                                    ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, entregado: true } : d2)
+                                  });
+                                  onSaveSolicitudes(nuevasSols);
+                                  e.target.value = "";
+                                }} />
+                            </label>
+                          </div>
+                        ) : (
+                          esAvaluo ? (
+                            <div style={{ fontSize: 11, color: "#059669", fontWeight: 700, background: "#ECFDF5", borderRadius: 6, padding: "6px 10px" }}>
+                              ✓ Archivo encontrado: VB automático. Para quitar el VB, elimina el documento subido.
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: 11, color: "#059669", marginBottom: 4 }}>✓ Archivo encontrado en carpeta</div>
+                              <button onClick={() => { toggleDoc(sol.id, i); }}
+                                style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                                Marcar VB ✓
+                              </button>
+                            </div>
+                          )
+                        )}
                       </div>
                     )}
 
                     {/* Mensaje según opción seleccionada */}
-                    {necesitaArchivo && !doc.entregado && (
-                      <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
-                        <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>⬆ Debe subir el archivo</span>
-                        <button onClick={() => toggleDoc(sol.id, i)}
-                          style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
-                          ✓ Marcar subido
-                        </button>
-                      </div>
-                    )}
-                    {necesitaArchivo && doc.entregado && (
+                    {necesitaArchivo && !doc.entregado && !esSinDiscapacidad && (
+                      <>{esCsp ? (
+                        /* CSP: exige archivo real antes del VB */
+                        !tieneArchivoEspecial ? (
+                          <div style={{ marginTop: 4, background: "#FFFBEB", borderRadius: 6, padding: "6px 10px" }}>
+                            <div style={{ fontSize: 11, color: "#B45309", marginBottom: 5 }}>⚠ Suba el archivo para marcar el VB</div>
+                            <label style={{ display: "inline-block", background: "#1e3a5f", color: "#fff", borderRadius: 7, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                              📎 Subir archivo
+                              <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={async e => {
+                                  const file = e.target.files[0];
+                                  if (!file) return;
+                                  const fd = new FormData(); fd.append("archivo", file);
+                                  await fetch(API + "/subir/" + encodeURIComponent(carpeta), { method: "POST", body: fd });
+                                  await cargarArchivos();
+                                  const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
+                                    ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, entregado: true } : d2)
+                                  });
+                                  onSaveSolicitudes(nuevasSols);
+                                  e.target.value = "";
+                                }} />
+                            </label>
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#ECFDF5", borderRadius: 6, padding: "5px 10px" }}>
+                            <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Archivo encontrado</span>
+                            <button onClick={() => toggleDoc(sol.id, i)}
+                              style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
+                              Marcar VB ✓
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        /* Otros programas: comportamiento original */
+                        <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
+                          <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>⬆ Debe subir el archivo</span>
+                          <button onClick={() => toggleDoc(sol.id, i)}
+                            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
+                            ✓ Marcar subido
+                          </button>
+                        </div>
+                      )}
+                    </> )}
+                    {necesitaArchivo && doc.entregado && !esSinDiscapacidad && (
                       <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#F0FDF4", borderRadius: 6, padding: "5px 8px" }}>
                         <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Archivo subido</span>
-                        <button onClick={() => toggleDoc(sol.id, i)}
-                          style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#DC2626", color: "#fff", border: "none", cursor: "pointer", marginLeft: "auto" }}>
-                          Desmarcar
-                        </button>
                       </div>
                     )}
                   </div>
                 );
-              })}
-            </div>
+              }).filter(Boolean)}
+            </div>}
           </div>
         );
       })}
+
+      {showFichaEdit && (
+        <Modal title="Editar Ficha Desmarque" onClose={() => setShowFichaEdit(false)}>
+          <div style={{ display: "grid", gap: 10, maxHeight: "70vh", overflowY: "auto", paddingRight: 8 }}>
+            {[
+              ["rut","Cédula de identidad","Ej: 10398338-K"],
+              ["direccion","Comunidad/Dirección",""],
+              ["telefono","Teléfono",""],
+              ["sector","Sector *",""],
+              ["coordenadas","Coordenadas (opcional)","Ej: C=-38.516023,-72.374214"],
+              ["puntaje_rsh","RSH (%)","Ej: 40"],
+              ["anio_subsidio","Año de Subsidio *","Ej: 1989"],
+              ["rol_propiedad","Rol de la Propiedad","Ej: 300-39"],
+              ["numero_informe_dom","N° Informe DOM","Ej: N°15 del 10-03-2025"],
+            ].map(([key, label, ph]) => {
+              return (
+                <div key={key}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 3 }}>{label}</div>
+                  <input value={fichaForm[key] || ""} onChange={e => setFichaForm({...fichaForm, [key]: e.target.value})}
+                    placeholder={ph}
+                    style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, background: "#fff" }} />
+                </div>
+              );
+            })}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 3 }}>Fecha Visita</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", background: "#f9fafb", fontSize: 13, color: fichaForm.fecha_visita ? "#1e3a5f" : "#9ca3af" }}>
+                <span style={{ flex: 1 }}>{fmtFecha(fichaForm.fecha_visita) || "No registrada"}</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>🔒 Solo desde Solicitudes activas</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 3 }}>U/R (URBANO o RURAL)</div>
+              <select value={fichaForm.tipo_comite || ""} onChange={e => setFichaForm({...fichaForm, tipo_comite: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #DC2626", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                <option value="RURAL">RURAL</option>
+                <option value="URBANO">URBANO</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 3 }}>Documento de Propiedad</div>
+              <select value={fichaForm.dominio_terreno || ""} onChange={e => setFichaForm({...fichaForm, dominio_terreno: e.target.value})}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, background: "#fff" }}>
+                <option value="">-- Seleccionar --</option>
+                <option value="DV">DV - Dominio Vigente</option>
+                <option value="DRU">DRU - Derecho Real de Uso</option>
+                <option value="USUFRUCTO">Usufructo</option>
+                <option value="GOCE">Goce de Tierra</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 3 }}>Observaciones (opcional)</div>
+              <textarea value={fichaForm.observaciones || ""} onChange={e => setFichaForm({...fichaForm, observaciones: e.target.value})}
+                style={{ width: "100%", minHeight: 70, padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, resize: "vertical" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+            <button onClick={() => setShowFichaEdit(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={() => { if (window["confirm"]("¿Está seguro de guardar los cambios?")) guardarFichaDesmarque(); }}
+              style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Guardar</button>
+          </div>
+          {/* clave desmarque eliminada */}
+        </Modal>
+      )}
+
+      {showModalMemo && (
+        <Modal title="Generar Memorando DOM" onClose={() => setShowModalMemo(false)}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>N° del Memorando *</div>
+              <input value={formMemo.numero} onChange={e => setFormMemo({...formMemo, numero: e.target.value})}
+                placeholder="Ej: 15/2026"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
+            </div>
+            <div style={{ background: "#EDE9FE", borderRadius: 7, padding: "7px 12px", fontSize: 12, color: "#7C3AED" }}>
+              <b>Coordenadas:</b> {persona.coordenadas || <span style={{ color: "#aaa" }}>No registradas en la ficha</span>}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 6 }}>Problemas de la vivienda</div>
+              {formMemo.problemas.length > 0 && (
+                <div style={{ marginBottom: 8, display: "grid", gap: 5 }}>
+                  {formMemo.problemas.map((p, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "#F5F3FF", borderRadius: 7, padding: "7px 10px", fontSize: 13 }}>
+                      <span style={{ fontWeight: 700, color: "#7C3AED", whiteSpace: "nowrap", minWidth: 28 }}>{i + 1}.-</span>
+                      <span style={{ flex: 1, color: "#333" }}>{p}</span>
+                      <button onClick={() => setFormMemo({...formMemo, problemas: formMemo.problemas.filter((_, j) => j !== i)})}
+                        style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={formMemo.nuevoProblema}
+                  onChange={e => setFormMemo({...formMemo, nuevoProblema: e.target.value})}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && formMemo.nuevoProblema.trim()) {
+                      setFormMemo({...formMemo, problemas: [...formMemo.problemas, formMemo.nuevoProblema.trim()], nuevoProblema: ""});
+                    }
+                  }}
+                  placeholder="Describe el problema de la vivienda..."
+                  style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }}
+                />
+                <button
+                  onClick={() => {
+                    if (formMemo.nuevoProblema.trim())
+                      setFormMemo({...formMemo, problemas: [...formMemo.problemas, formMemo.nuevoProblema.trim()], nuevoProblema: ""});
+                  }}
+                  disabled={!formMemo.nuevoProblema.trim()}
+                  style={{ padding: "8px 14px", borderRadius: 8, background: formMemo.nuevoProblema.trim() ? "#7C3AED" : "#ccc", color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: formMemo.nuevoProblema.trim() ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}>
+                  + Agregar
+                </button>
+              </div>
+            </div>
+            <div style={{ background: "#F5F3FF", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#7C3AED" }}>
+              <div><strong>Nombre:</strong> {persona.nombre}</div>
+              <div><strong>Cédula de identidad:</strong> {persona.rut}</div>
+              <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setShowModalMemo(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={generarMemo} disabled={!formMemo.numero || generando}
+                style={{ padding: "9px 20px", borderRadius: 8, background: formMemo.numero ? "#7C3AED" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: formMemo.numero ? "pointer" : "not-allowed" }}>
+                {generando ? "Generando..." : "Generar y Descargar"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showModalCarta && (
+        <Modal title="Generar Carta SERVIU" onClose={() => setShowModalCarta(false)}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>N° de la Carta *</div>
+              <input value={formCarta.numero} onChange={e => setFormCarta({...formCarta, numero: e.target.value})}
+                placeholder="Ej: 45/2026"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
+            </div>
+            <div style={{ background: "#E0F7FA", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#0891B2" }}>
+              <div><strong>Nombre:</strong> {persona.nombre}</div>
+              <div><strong>Cédula de identidad:</strong> {persona.rut}</div>
+              <div><strong>Fecha:</strong> {new Date().toLocaleDateString("es-CL")}</div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setShowModalCarta(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={generarCarta} disabled={!formCarta.numero || generando}
+                style={{ padding: "9px 20px", borderRadius: 8, background: formCarta.numero ? "#0891B2" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: formCarta.numero ? "pointer" : "not-allowed" }}>
+                {generando ? "Generando..." : "Generar y Descargar"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showModalSolicitud && (
+        <Modal title="Generar Solicitud 2026" onClose={() => setShowModalSolicitud(false)}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Subsidio Adjudicado *</div>
+              <input value={formSolicitud.subsidio} onChange={e => setFormSolicitud({...formSolicitud, subsidio: e.target.value})}
+                placeholder="Ej: SUBSIDIO RURAL - SUB. RURALES TITULO I"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Año del Subsidio *</div>
+              <input value={formSolicitud.anioSubsidio} onChange={e => setFormSolicitud({...formSolicitud, anioSubsidio: e.target.value})}
+                placeholder="Ej: 1989"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
+            </div>
+            <div style={{ background: "#ECFDF5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#059669" }}>
+              <div><strong>Nombre:</strong> {persona.nombre}</div>
+              <div><strong>Cédula de identidad:</strong> {persona.rut}</div>
+              <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
+              <div><strong>Teléfono:</strong> {persona.telefono || "-"}</div>
+              <div><strong>Correo:</strong> Jcampos@munilautaro.cl</div>
+              <div><strong>Comuna:</strong> LAUTARO</div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setShowModalSolicitud(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={generarSolicitud} disabled={!formSolicitud.subsidio || !formSolicitud.anioSubsidio || generando}
+                style={{ padding: "9px 20px", borderRadius: 8, background: (formSolicitud.subsidio && formSolicitud.anioSubsidio) ? "#059669" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: (formSolicitud.subsidio && formSolicitud.anioSubsidio) ? "pointer" : "not-allowed" }}>
+                {generando ? "Generando..." : "Generar y Descargar"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showModalInformeJACC && (
+        <Modal title="Generar Informe JACC" onClose={() => setShowModalInformeJACC(false)}>
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ background: "#F0FDF4", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#166534", lineHeight: 1.7 }}>
+              <div><strong>Beneficiario:</strong> {persona.nombre || ""}</div>
+              <div><strong>Cédula de identidad:</strong> {persona.rut || "-"}</div>
+              <div><strong>Teléfono:</strong> {persona.telefono || "-"}</div>
+              <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
+              <div><strong>Coordenadas:</strong> {persona.coordenadas || "-"}</div>
+              <div><strong>Fecha de visita:</strong> {(() => { const s = misSols[0]; return s && s.fecha_visita ? s.fecha_visita : <span style={{ color: "#dc2626" }}>No registrada en la ficha</span>; })()}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Año y Tipo de Subsidio</div>
+              <input
+                value={informeSubsidioTexto}
+                onChange={e => setInformeSubsidioTexto(e.target.value)}
+                placeholder="Ej: SUBSIDIOS RURALES TITULO I Llamado N°1 Año 1992"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Estado de la vivienda *</div>
+              <input
+                value={informeEstadoVivienda}
+                onChange={e => setInformeEstadoVivienda(e.target.value)}
+                placeholder="Ej: DETERIORADA / HABITABLE / INHABITABLE"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid " + (informeEstadoVivienda ? "#166534" : "#ddd"), fontSize: 13, boxSizing: "border-box" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 8 }}>Fotografías de la vivienda</div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#1e3a5f", color: "#fff" }}>
+                      <th style={{ padding: "7px 10px", textAlign: "center", width: 36 }}>N°</th>
+                      <th style={{ padding: "7px 10px", textAlign: "left" }}>Estado de la vivienda</th>
+                      <th style={{ padding: "7px 10px", textAlign: "left", width: 155 }}>Fotografía</th>
+                      <th style={{ padding: "7px 10px", width: 32 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filasInforme.map((fila, i) => (
+                      <tr key={fila.id} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                        <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 700, color: "#1e3a5f" }}>{i + 1}</td>
+                        <td style={{ padding: "8px 10px" }}>
+                          <input
+                            value={fila.descripcion}
+                            onChange={e => setFilasInforme(prev => prev.map(f => f.id === fila.id ? { ...f, descripcion: e.target.value } : f))}
+                            placeholder="Describa el estado..."
+                            style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12, boxSizing: "border-box" }}
+                          />
+                        </td>
+                        <td style={{ padding: "8px 10px" }}>
+                          {fila.imagenNombre ? (
+                            <div style={{ fontSize: 11, color: "#059669", display: "flex", alignItems: "center", gap: 4 }}>
+                              <span>✓</span>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 }}>{fila.imagenNombre}</span>
+                              <button onClick={() => setFilasInforme(prev => prev.map(f => f.id === fila.id ? { ...f, imagenBase64: null, imagenNombre: "", mimeType: "" } : f))}
+                                style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 13, flexShrink: 0 }}>✕</button>
+                            </div>
+                          ) : (
+                            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#f0f0f0", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 12, color: "#555" }}>
+                              📷 Buscar
+                              <input type="file" accept="image/*" style={{ display: "none" }}
+                                onChange={e => handleImagenFilaJACC(fila.id, e.target.files[0])} />
+                            </label>
+                          )}
+                        </td>
+                        <td style={{ padding: "8px 6px", textAlign: "center" }}>
+                          {filasInforme.length > 1 && (
+                            <button onClick={() => setFilasInforme(prev => prev.filter(f => f.id !== fila.id))}
+                              style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16 }}>✕</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                onClick={() => setFilasInforme(prev => [...prev, { id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }])}
+                style={{ marginTop: 8, padding: "7px 14px", borderRadius: 7, border: "1.5px dashed #1e3a5f", background: "transparent", color: "#1e3a5f", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                + Agregar fila
+              </button>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setShowModalInformeJACC(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={generarInformeJACC} disabled={generandoInforme}
+                style={{ padding: "9px 20px", borderRadius: 8, background: "#166534", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: generandoInforme ? "not-allowed" : "pointer" }}>
+                {generandoInforme ? "Generando..." : "Generar Word"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showModalInformeDom && (
+        <Modal title="Resultado Informe DOM" onClose={() => { setShowModalInformeDom(false); setResultadoInformeDom(""); setNotaResultado(""); }}>
+          <div style={{ fontSize: 14, color: "#444", marginBottom: 16 }}>¿Cuál es el resultado del <strong>Informe DOM</strong>?</div>
+          <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+            {[
+              { k: "APROBADO", label: "✅ Aprobado", color: "#059669", bg: "#ECFDF5" },
+              { k: "RECHAZADO_APELABLE", label: "🟡 Rechazado - Apelable", color: "#B45309", bg: "#FFFBEB" },
+              { k: "RECHAZADO_SIN_APELACION", label: "🔴 Rechazado Sin Apelación", color: "#DC2626", bg: "#FEF2F2" },
+            ].map(op => (
+              <div key={op.k} onClick={() => setResultadoInformeDom(op.k)}
+                style={{ padding: "12px 16px", borderRadius: 10, border: "2px solid " + (resultadoInformeDom === op.k ? op.color : "#e5e7eb"),
+                  background: resultadoInformeDom === op.k ? op.bg : "#fff", cursor: "pointer", fontWeight: 700, color: op.color, fontSize: 14 }}>
+                {op.label}
+              </div>
+            ))}
+          </div>
+          {(resultadoInformeDom === "RECHAZADO_APELABLE" || resultadoInformeDom === "RECHAZADO_SIN_APELACION") && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Razón del rechazo (opcional)</div>
+              <textarea value={notaResultado} onChange={e => setNotaResultado(e.target.value)}
+                placeholder="Ingrese la razón del rechazo..."
+                style={{ width: "100%", minHeight: 70, borderRadius: 8, border: "1.5px solid #ddd", padding: "8px 10px", fontSize: 13, resize: "vertical" }} />
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button onClick={() => { setShowModalInformeDom(false); setResultadoInformeDom(""); setNotaResultado(""); }}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={guardarResultadoInformeDom} disabled={!resultadoInformeDom}
+              style={{ padding: "9px 20px", borderRadius: 8, background: resultadoInformeDom ? "#1e3a5f" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: resultadoInformeDom ? "pointer" : "not-allowed" }}>Guardar</button>
+          </div>
+        </Modal>
+      )}
+
+      {showModalRespuestaServiu && (
+        <Modal title="Resultado Respuesta SERVIU" onClose={() => { setShowModalRespuestaServiu(false); setResultadoRespuestaServiu(""); setNotaResultado(""); }}>
+          <div style={{ fontSize: 14, color: "#444", marginBottom: 16 }}>¿Cuál es el resultado de la <strong>Respuesta SERVIU</strong>?</div>
+          <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+            {[
+              { k: "APROBADO", label: "✅ Aprobado — Desmarcado", color: "#0891B2", bg: "#E0F7FA" },
+              { k: "RECHAZADO_APELABLE", label: "🟡 Rechazado — Para Apelar", color: "#B45309", bg: "#FFFBEB" },
+              { k: "RECHAZADO_SIN_APELACION", label: "🔴 Rechazado Sin Apelación", color: "#DC2626", bg: "#FEF2F2" },
+            ].map(op => (
+              <div key={op.k} onClick={() => setResultadoRespuestaServiu(op.k)}
+                style={{ padding: "12px 16px", borderRadius: 10, border: "2px solid " + (resultadoRespuestaServiu === op.k ? op.color : "#e5e7eb"),
+                  background: resultadoRespuestaServiu === op.k ? op.bg : "#fff", cursor: "pointer", fontWeight: 700, color: op.color, fontSize: 14 }}>
+                {op.label}
+              </div>
+            ))}
+          </div>
+          {(resultadoRespuestaServiu === "RECHAZADO_APELABLE" || resultadoRespuestaServiu === "RECHAZADO_SIN_APELACION") && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Motivo (opcional)</div>
+              <textarea value={notaResultado} onChange={e => setNotaResultado(e.target.value)}
+                placeholder="Ingrese el motivo..."
+                style={{ width: "100%", minHeight: 70, borderRadius: 8, border: "1.5px solid #ddd", padding: "8px 10px", fontSize: 13, resize: "vertical" }} />
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button onClick={() => { setShowModalRespuestaServiu(false); setResultadoRespuestaServiu(""); setNotaResultado(""); }}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={guardarResultadoRespuestaServiu} disabled={!resultadoRespuestaServiu}
+              style={{ padding: "9px 20px", borderRadius: 8, background: resultadoRespuestaServiu ? "#1e3a5f" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: resultadoRespuestaServiu ? "pointer" : "not-allowed" }}>Guardar</button>
+          </div>
+        </Modal>
+      )}
 
       {showModalComprobante && (
         <Modal title="Resultado Comprobante SERVIU" onClose={() => { setShowModalComprobante(false); setNotaRechazo(""); setResultadoComp(""); }}>
@@ -649,82 +5028,868 @@ function DetallePersona({ personaId, personas, solicitudes, comites, onBack, onS
           </div>
         </Modal>
       )}
+
+      {/* claves VB eliminadas */}
+
+      {/* modales clave programa y tipo comité eliminados */}
+
+      {/* MODAL DESBLOQUEAR RESPUESTA SERVIU */}
+      {/* modal clave Respuesta SERVIU eliminado */}
+
+      {/* MODAL EMIGRAR A PROGRAMA */}
+      {showModalEmigrar && (
+        <Modal title="Solicitante Aprobado — Emigrar a Programa" onClose={() => { setShowModalEmigrar(false); setProgramaEmigrar(""); }}>
+          <div style={{ background: "#E0F7FA", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#0891B2", fontWeight: 600 }}>
+            ✅ {persona.nombre} fue Aprobado/Desmarcado.<br />
+            <span style={{ fontWeight: 400, color: "#555" }}>Seleccione el programa al que emigrará este solicitante:</span>
+          </div>
+          <div style={{ display: "grid", gap: 12, marginBottom: 20 }}>
+            {PROGRAMAS.filter(p => p.id !== "habitabilidad").map(p => (
+              <div key={p.id} onClick={() => setProgramaEmigrar(p.id)}
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", borderRadius: 11, border: "2px solid " + (programaEmigrar === p.id ? p.color : "#e5e7eb"), background: programaEmigrar === p.id ? p.colorLight : "#fff", cursor: "pointer" }}>
+                <div style={{ width: 40, height: 40, borderRadius: 20, background: programaEmigrar === p.id ? p.color : p.colorLight, color: programaEmigrar === p.id ? "#fff" : p.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.icon}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#1e3a5f" }}>{p.nombre}</div>
+                  <div style={{ fontSize: 12, color: "#888" }}>{p.descripcion}</div>
+                </div>
+              </div>
+            ))}
+            <div onClick={() => setProgramaEmigrar("sin_programa")}
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", borderRadius: 11, border: "2px solid " + (programaEmigrar === "sin_programa" ? "#555" : "#e5e7eb"), background: programaEmigrar === "sin_programa" ? "#f5f5f5" : "#fff", cursor: "pointer" }}>
+              <div style={{ width: 40, height: 40, borderRadius: 20, background: "#f0ede8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>—</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "#555" }}>Solo desbloquear / Sin emigrar</div>
+                <div style={{ fontSize: 12, color: "#888" }}>Desbloquear la ficha sin asignar nuevo programa</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button onClick={() => { setShowModalEmigrar(false); setProgramaEmigrar(""); }}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button disabled={!programaEmigrar} onClick={async () => {
+              // Desbloquear: quitar VB de Respuesta SERVIU
+              const sol = misSols.find(s => s.programaId === "habitabilidad");
+              if (sol) {
+                const docsActualizados = sol.documentos.map(d =>
+                  d.nombre && d.nombre.includes("Respuesta SERVIU")
+                    ? { ...d, entregado: false, valor: "" }
+                    : d
+                );
+                await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", sol.id);
+                onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? { ...s, documentos: docsActualizados } : s));
+              }
+              // Agregar nuevo programa si corresponde
+              if (programaEmigrar && programaEmigrar !== "sin_programa") {
+                const prog = PROGRAMAS.find(p => p.id === programaEmigrar);
+                if (prog && !misSols.find(s => s.programaId === programaEmigrar)) {
+                  const nueva = {
+                    id: uid(), personaId, personaNombre: persona.nombre,
+                    programaId: prog.id, fecha: today(),
+                    documentos: prog.documentos.map(d => ({
+                      nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
+                      tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null
+                    }))
+                  };
+                  const { data: inserted } = await supabase.from("solicitudes").insert([{
+                    id: nueva.id, persona_id: personaId, persona_nombre: persona.nombre,
+                    programa_id: prog.id, fecha: today(), documentos: nueva.documentos
+                  }]).select();
+                  onSaveSolicitudes([...solicitudes, nueva]);
+                }
+              }
+              // Actualizar estado persona a POSTULANDO
+              if (programaEmigrar !== "sin_programa") {
+                await supabase.from("personas").update({ estado_desmarque: "POSTULANDO" }).eq("id", persona.id);
+                onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: "POSTULANDO" } : p));
+              }
+              setShowModalEmigrar(false);
+              setProgramaEmigrar("");
+            }} style={{ padding: "9px 22px", borderRadius: 8, background: programaEmigrar ? "#059669" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: programaEmigrar ? "pointer" : "not-allowed" }}>
+              {programaEmigrar === "sin_programa" ? "Solo desbloquear" : "Emigrar al programa"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {showModalZip && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9500, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowModalZip(false)}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: "28px 32px", width: 560, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#1e3a5f", marginBottom: 6 }}>🗜 Descargar ZIP de documentos</div>
+            <div style={{ fontSize: 13, color: "#666", marginBottom: 18 }}>Selecciona los solicitantes cuyos documentos quieres incluir en el ZIP.</div>
+
+            {/* Buscador */}
+            <div style={{ marginBottom: 12 }}>
+              <input
+                autoFocus
+                value={zipSearch}
+                onChange={e => setZipSearch(e.target.value)}
+                placeholder="Buscar por nombre o RUT..."
+                style={{ width: "100%", padding: "9px 13px", borderRadius: 9, border: "1.5px solid #ddd", fontSize: 14, boxSizing: "border-box" }}
+              />
+            </div>
+
+            {/* Lista de resultados */}
+            {zipSearch.trim().length >= 2 && (
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 9, overflow: "hidden", marginBottom: 14, maxHeight: 220, overflowY: "auto" }}>
+                {personas
+                  .filter(p => {
+                    const q = zipSearch.toLowerCase();
+                    return (p.nombre || "").toLowerCase().includes(q) || (p.rut || "").toLowerCase().includes(q);
+                  })
+                  .slice(0, 20)
+                  .map(p => {
+                    const yaSelec = zipSeleccionados.some(s => s.id === p.id);
+                    return (
+                      <div key={p.id} onClick={() => {
+                        if (!yaSelec) setZipSeleccionados(prev => [...prev, p]);
+                      }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: yaSelec ? "default" : "pointer", background: yaSelec ? "#F0FDF4" : "#fff", borderBottom: "1px solid #f0f0f0" }}>
+                        <div style={{ width: 20, height: 20, borderRadius: 5, border: "2px solid " + (yaSelec ? "#059669" : "#D1D5DB"), background: yaSelec ? "#059669" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, flexShrink: 0 }}>
+                          {yaSelec ? "✓" : ""}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#1e3a5f" }}>{p.nombre}</div>
+                          <div style={{ fontSize: 11, color: "#888" }}>{p.rut}</div>
+                        </div>
+                        {!yaSelec && <span style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>+ Agregar</span>}
+                      </div>
+                    );
+                  })}
+                {personas.filter(p => { const q = zipSearch.toLowerCase(); return (p.nombre||"").toLowerCase().includes(q)||(p.rut||"").toLowerCase().includes(q); }).length === 0 && (
+                  <div style={{ padding: "16px", textAlign: "center", color: "#aaa", fontSize: 13 }}>No se encontraron solicitantes</div>
+                )}
+              </div>
+            )}
+
+            {/* Seleccionados */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 8 }}>
+                Seleccionados ({zipSeleccionados.length})
+              </div>
+              {zipSeleccionados.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#bbb", fontStyle: "italic" }}>Busca y agrega solicitantes arriba</div>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {zipSeleccionados.map(p => (
+                    <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1e3a5f" }}>{p.nombre}</div>
+                        <div style={{ fontSize: 11, color: "#6B7280" }}>{p.rut}</div>
+                      </div>
+                      <button onClick={() => setZipSeleccionados(prev => prev.filter(s => s.id !== p.id))}
+                        style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => { setShowModalZip(false); setZipSearch(""); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={descargarZip} disabled={zipSeleccionados.length === 0 || generandoZip}
+                style={{ padding: "9px 22px", borderRadius: 8, background: zipSeleccionados.length > 0 && !generandoZip ? "#1e3a5f" : "#aaa", color: "#fff", border: "none", fontSize: 14, fontWeight: 700, cursor: zipSeleccionados.length > 0 && !generandoZip ? "pointer" : "not-allowed" }}>
+                {generandoZip ? "Generando ZIP..." : `🗜 Descargar ZIP (${zipSeleccionados.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {htmlPreview && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", background: "#111" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", background: "#1e3a5f", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
+            <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>📄 Vista previa del documento</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => { if (iframePreviewRef.current) iframePreviewRef.current.contentWindow.print(); }}
+                style={{ padding: "8px 22px", borderRadius: 7, background: "#fff", color: "#1e3a5f", border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                🖨 Imprimir
+              </button>
+              <button
+                onClick={() => setHtmlPreview(null)}
+                style={{ padding: "8px 16px", borderRadius: 7, background: "rgba(255,255,255,0.18)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                ✕ Cerrar
+              </button>
+            </div>
+          </div>
+          <iframe
+            ref={iframePreviewRef}
+            srcDoc={htmlPreview}
+            title="Vista previa documento"
+            style={{ flex: 1, border: "none", width: "100%", background: "#e8e8e8" }}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── VISTA PROGRAMAS ─────────────────────────────────────────────────────────
-function ProgramasView({ solicitudes }) {
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Programas</div>
-        <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>Programas de subsidio y documentos requeridos</div>
-      </div>
-      <div style={{ display: "grid", gap: 16 }}>
-        {PROGRAMAS.map(prog => {
-          const sols = solicitudes.filter(s => s.programaId === prog.id);
-          const comp = sols.filter(s => pct(s.documentos) === 100).length;
-          return (
-            <div key={prog.id} style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", overflow: "hidden" }}>
-              <div style={{ background: prog.colorLight, padding: "18px 24px", borderBottom: "3px solid " + prog.color, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 20, background: prog.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{prog.icon}</div>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 17, color: "#1e3a5f" }}>{prog.nombre}</div>
-                    <div style={{ fontSize: 13, color: "#666" }}>{prog.descripcion}</div>
+const COLORES_PROG = [
+  { color: "#2563EB", colorLight: "#EFF6FF" },
+  { color: "#059669", colorLight: "#ECFDF5" },
+  { color: "#D97706", colorLight: "#FFFBEB" },
+  { color: "#DC2626", colorLight: "#FEF2F2" },
+  { color: "#7C3AED", colorLight: "#F5F3FF" },
+  { color: "#0891B2", colorLight: "#E0F7FA" },
+  { color: "#B45309", colorLight: "#FEF9C3" },
+  { color: "#166534", colorLight: "#F0FDF4" },
+];
+
+function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePrograma, onUpdatePrograma }) {
+  const todosProg = [...PROGRAMAS, ...(programasCustom || [])];
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [claveAdmin, setClaveAdmin] = useState("");
+  const [pedirClave, setPedirClave] = useState(false);
+  const [claveError, setClaveError] = useState(false);
+  const [accionPendiente, setAccionPendiente] = useState(null);
+  const [editandoProg, setEditandoProg] = useState(null); // prog que se está editando
+  const [formEdit, setFormEdit] = useState(null);
+  const CLAVE_ADMIN = "196560";
+  const pedirClaveAdmin = (tipo, progId, prog) => { setAccionPendiente({ tipo, progId, prog }); setClaveAdmin(""); setClaveError(false); setPedirClave(true); };
+  const confirmarClave = async () => {
+    if (claveAdmin !== CLAVE_ADMIN) { setClaveError(true); return; }
+    setPedirClave(false);
+    if (accionPendiente?.tipo === "eliminar") { await onDeletePrograma(accionPendiente.progId); }
+    if (accionPendiente?.tipo === "agregar") { setMostrarForm(true); }
+    if (accionPendiente?.tipo === "editar") {
+      const p = accionPendiente.prog;
+      setFormEdit({ id: p.id, nombre: p.nombre, descripcion: p.descripcion || "", color: p.color || "#2563EB", colorLight: p.colorLight || p.colorlight || "#EFF6FF", icon: p.icon || "P", documentos: (p.documentos || []).map(d => ({ ...d })) });
+      setEditandoProg(p.id);
+    }
+    setAccionPendiente(null);
+  };
+  const addDocEdit = () => setFormEdit(f => ({ ...f, documentos: [...f.documentos, { nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] }));
+  const removeDocEdit = (i) => setFormEdit(f => ({ ...f, documentos: f.documentos.filter((_, j) => j !== i) }));
+  const setDocEdit = (i, key, val) => setFormEdit(f => ({ ...f, documentos: f.documentos.map((d, j) => j === i ? { ...d, [key]: val } : d) }));
+  const guardarEdicion = async () => {
+    if (!formEdit.nombre.trim()) { alert("El nombre es obligatorio."); return; }
+    if (formEdit.documentos.some(d => !d.nombre.trim())) { alert("Todos los documentos deben tener nombre."); return; }
+    await onUpdatePrograma(formEdit);
+    setEditandoProg(null); setFormEdit(null);
+  };
+  const [form, setForm] = useState({
+    nombre: "", descripcion: "", color: "#2563EB", colorLight: "#EFF6FF", icon: "N",
+    documentos: [{ nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }]
+  });
+
+  const colIdx = COLORES_PROG.findIndex(c => c.color === form.color);
+  const addDoc = () => setForm(f => ({ ...f, documentos: [...f.documentos, { nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] }));
+  const removeDoc = (i) => setForm(f => ({ ...f, documentos: f.documentos.filter((_, j) => j !== i) }));
+  const setDoc = (i, key, val) => setForm(f => ({ ...f, documentos: f.documentos.map((d, j) => j === i ? { ...d, [key]: val } : d) }));
+
+  const guardar = async () => {
+    if (!form.nombre.trim()) { alert("El nombre del programa es obligatorio."); return; }
+    if (form.documentos.some(d => !d.nombre.trim())) { alert("Todos los documentos deben tener nombre."); return; }
+    setGuardando(true);
+    await onAddPrograma({ ...form, documentos: form.documentos });
+    setForm({ nombre: "", descripcion: "", color: "#2563EB", colorLight: "#EFF6FF", icon: "N", documentos: [{ nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] });
+    setMostrarForm(false);
+    setGuardando(false);
+  };
+
+  const tarjeta = (prog) => {
+    const sols = solicitudes.filter(s => s.programaId === prog.id);
+    const comp = sols.filter(s => pct(s.documentos) === 100).length;
+    return (
+      <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", overflow: "hidden" }}>
+        <div style={{ background: prog.colorLight || "#F9FAFB", padding: "18px 24px", borderBottom: "3px solid " + (prog.color || "#6B7280"), display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 20, background: prog.color || "#6B7280", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{prog.icon || "P"}</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 17, color: "#1e3a5f" }}>{prog.nombre}</div>
+              <div style={{ fontSize: 13, color: "#666" }}>{prog.descripcion}</div>
+              {prog.esCustom && <div style={{ fontSize: 10, color: "#7C3AED", fontWeight: 700 }}>Programa personalizado</div>}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ display: "flex", gap: 20, textAlign: "center" }}>
+              <div><div style={{ fontSize: 22, fontWeight: 800, color: prog.color || "#6B7280" }}>{sols.length}</div><div style={{ fontSize: 11, color: "#888" }}>SOLICITUDES</div></div>
+              <div><div style={{ fontSize: 22, fontWeight: 800, color: "#059669" }}>{comp}</div><div style={{ fontSize: 11, color: "#888" }}>COMPLETAS</div></div>
+            </div>
+            {prog.esCustom && (
+              <div style={{ display:"flex", gap:6 }}>
+                <button onClick={() => pedirClaveAdmin("editar", prog.id, prog)}
+                  style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", color:"#1e3a5f", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Editar programa">✏ Editar</button>
+                <button onClick={() => pedirClaveAdmin("eliminar", prog.id, null)}
+                  style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 18, lineHeight: 1 }} title="Eliminar programa">✕</button>
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ padding: "18px 24px" }}>
+          {editandoProg === prog.id && formEdit ? (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#1e3a5f", marginBottom: 14 }}>✏ Editando programa</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Nombre *</div>
+                  <input value={formEdit.nombre} onChange={e => setFormEdit(f => ({ ...f, nombre: e.target.value }))}
+                    style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:"1.5px solid #ddd", fontSize:13, boxSizing:"border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Descripción</div>
+                  <input value={formEdit.descripcion} onChange={e => setFormEdit(f => ({ ...f, descripcion: e.target.value }))}
+                    style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:"1.5px solid #ddd", fontSize:13, boxSizing:"border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Ícono</div>
+                  <input value={formEdit.icon} maxLength={2} onChange={e => setFormEdit(f => ({ ...f, icon: e.target.value.toUpperCase() }))}
+                    style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:"1.5px solid #ddd", fontSize:13, boxSizing:"border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Color</div>
+                  <div style={{ display:"flex", gap:6 }}>
+                    {COLORES_PROG.map((c, i) => (
+                      <div key={i} onClick={() => setFormEdit(f => ({ ...f, color: c.color, colorLight: c.colorLight }))}
+                        style={{ width:24, height:24, borderRadius:12, background:c.color, cursor:"pointer", border: formEdit.color===c.color?"3px solid #000":"2px solid transparent" }} />
+                    ))}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 20, textAlign: "center" }}>
-                  <div><div style={{ fontSize: 22, fontWeight: 800, color: prog.color }}>{sols.length}</div><div style={{ fontSize: 11, color: "#888" }}>SOLICITUDES</div></div>
-                  <div><div style={{ fontSize: 22, fontWeight: 800, color: "#059669" }}>{comp}</div><div style={{ fontSize: 11, color: "#888" }}>COMPLETAS</div></div>
-                </div>
               </div>
-              <div style={{ padding: "18px 24px" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", marginBottom: 12 }}>Documentos requeridos</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {prog.documentos.map((doc, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 12px", borderRadius: 8, background: "#F8FAFC", border: "1px solid #E2E8F0" }}>
-                      <div style={{ width: 6, height: 6, borderRadius: 3, background: doc.obligatorio ? prog.color : "#CBD5E0", marginTop: 5, flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontSize: 12, color: "#374151" }}>{doc.nombre}</div>
-                        {!doc.obligatorio && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform:"uppercase", marginBottom: 8 }}>Documentos requeridos</div>
+              {formEdit.documentos.map((doc, i) => (
+                <div key={i} style={{ background:"#F8FAFC", borderRadius:9, padding:"10px 12px", marginBottom:7, border:"1px solid #E2E8F0" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:6, marginBottom:6 }}>
+                    <input value={doc.nombre} onChange={e => setDocEdit(i, "nombre", e.target.value)} placeholder={`Documento ${i+1}`}
+                      style={{ padding:"6px 9px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12 }} />
+                    <button onClick={() => removeDocEdit(i)} disabled={formEdit.documentos.length===1}
+                      style={{ background: formEdit.documentos.length===1?"#f0f0f0":"#FEF2F2", border:"none", borderRadius:6, color: formEdit.documentos.length===1?"#aaa":"#DC2626", cursor: formEdit.documentos.length===1?"default":"pointer", padding:"0 10px", fontWeight:700 }}>✕</button>
+                  </div>
+                  <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+                    <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, cursor:"pointer" }}>
+                      <input type="checkbox" checked={doc.obligatorio} onChange={e => setDocEdit(i,"obligatorio",e.target.checked)} /> Obligatorio
+                    </label>
+                    <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, cursor:"pointer" }}>
+                      <input type="checkbox" checked={doc.requiereArchivo} onChange={e => setDocEdit(i,"requiereArchivo",e.target.checked)} /> 📎 Archivo
+                    </label>
+                    <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, cursor:"pointer" }}>
+                      <input type="checkbox" checked={doc.requiereTexto} onChange={e => setDocEdit(i,"requiereTexto",e.target.checked)} /> 📝 Texto
+                    </label>
+                  </div>
+                </div>
+              ))}
+              <button onClick={addDocEdit} style={{ padding:"6px 14px", borderRadius:7, border:"1.5px dashed #1e3a5f", background:"transparent", color:"#1e3a5f", fontSize:12, fontWeight:600, cursor:"pointer", marginBottom:12 }}>+ Agregar documento</button>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button onClick={() => { setEditandoProg(null); setFormEdit(null); }} style={{ padding:"7px 16px", borderRadius:7, border:"1px solid #ddd", background:"#fff", fontSize:13, cursor:"pointer" }}>Cancelar</button>
+                <button onClick={guardarEdicion} style={{ padding:"7px 18px", borderRadius:7, background:"#059669", color:"#fff", border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>💾 Guardar cambios</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", marginBottom: 12 }}>Documentos requeridos ({prog.documentos.length})</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {prog.documentos.map((doc, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 12px", borderRadius: 8, background: "#F8FAFC", border: "1px solid #E2E8F0" }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 3, background: doc.obligatorio ? (prog.color || "#6B7280") : "#CBD5E0", marginTop: 5, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 12, color: "#374151" }}>{doc.nombre}</div>
+                      <div style={{ fontSize: 10, color: "#aaa" }}>
+                        {!doc.obligatorio && "Opcional · "}
+                        {doc.requiereArchivo && "📎 Archivo · "}
+                        {doc.requiereTexto && "📝 Texto"}
+                        {!doc.requiereArchivo && !doc.requiereTexto && "Checkbox"}
                       </div>
                     </div>
-                  ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Programas</div>
+          <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>Programas de subsidio y documentos requeridos</div>
+        </div>
+        <button onClick={() => { if (mostrarForm) setMostrarForm(false); else pedirClaveAdmin("agregar", null); }}
+          style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          {mostrarForm ? "✕ Cancelar" : "+ Agregar Programa"}
+        </button>
+      </div>
+
+      {mostrarForm && (
+        <div style={{ background: "#fff", borderRadius: 14, border: "2px solid #1e3a5f", padding: "24px 28px", marginBottom: 24 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#1e3a5f", marginBottom: 20 }}>Nuevo Programa</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Nombre del programa *</div>
+              <input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: Subsidio Vivienda Rural"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Descripción</div>
+              <input value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Breve descripción del programa"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Ícono (letra)</div>
+              <input value={form.icon} maxLength={2} onChange={e => setForm(f => ({ ...f, icon: e.target.value.toUpperCase() }))} placeholder="Ej: S"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Color</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {COLORES_PROG.map((c, i) => (
+                  <div key={i} onClick={() => setForm(f => ({ ...f, color: c.color, colorLight: c.colorLight }))}
+                    style={{ width: 28, height: 28, borderRadius: 14, background: c.color, cursor: "pointer", border: form.color === c.color ? "3px solid #000" : "2px solid transparent" }} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>Documentos requeridos</div>
+            {form.documentos.map((doc, i) => (
+              <div key={i} style={{ background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 8, border: "1px solid #E2E8F0" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginBottom: 8 }}>
+                  <input value={doc.nombre} onChange={e => setDoc(i, "nombre", e.target.value)} placeholder={`Nombre del documento ${i + 1}`}
+                    style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13 }} />
+                  <button onClick={() => removeDoc(i)} disabled={form.documentos.length === 1}
+                    style={{ background: form.documentos.length === 1 ? "#f0f0f0" : "#FEF2F2", border: "none", borderRadius: 7, color: form.documentos.length === 1 ? "#aaa" : "#DC2626", cursor: form.documentos.length === 1 ? "default" : "pointer", padding: "0 12px", fontWeight: 700 }}>✕</button>
+                </div>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer" }}>
+                    <input type="checkbox" checked={doc.obligatorio} onChange={e => setDoc(i, "obligatorio", e.target.checked)} />
+                    Obligatorio
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer" }}>
+                    <input type="checkbox" checked={doc.requiereArchivo} onChange={e => setDoc(i, "requiereArchivo", e.target.checked)} />
+                    📎 Requiere subir archivo
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer" }}>
+                    <input type="checkbox" checked={doc.requiereTexto} onChange={e => setDoc(i, "requiereTexto", e.target.checked)} />
+                    📝 Requiere texto adicional
+                  </label>
+                  {doc.requiereTexto && (
+                    <input value={doc.etiquetaTexto} onChange={e => setDoc(i, "etiquetaTexto", e.target.value)} placeholder="Etiqueta del campo texto"
+                      style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12, width: 180 }} />
+                  )}
                 </div>
               </div>
+            ))}
+            <button onClick={addDoc}
+              style={{ padding: "8px 16px", borderRadius: 8, border: "1.5px dashed #1e3a5f", background: "transparent", color: "#1e3a5f", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              + Agregar documento
+            </button>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button onClick={() => setMostrarForm(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={guardar} disabled={guardando}
+              style={{ padding: "9px 22px", borderRadius: 8, background: guardando ? "#aaa" : "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 700, cursor: guardando ? "not-allowed" : "pointer" }}>
+              {guardando ? "Guardando..." : "Guardar Programa"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 16 }}>
+        {todosProg.map(prog => <div key={prog.id}>{tarjeta(prog)}</div>)}
+      </div>
+
+      {pedirClave && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:3000 }}
+          onClick={() => setPedirClave(false)}>
+          <div style={{ background:"#fff", borderRadius:14, padding:"28px 32px", width:360, boxShadow:"0 24px 64px rgba(0,0,0,0.3)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:16, fontWeight:800, color:"#1e3a5f", marginBottom:8 }}>🔒 Clave de administrador</div>
+            <div style={{ fontSize:13, color:"#555", marginBottom:16 }}>
+              {accionPendiente?.tipo === "eliminar" ? "Ingresa la clave para eliminar este programa." : "Ingresa la clave para agregar un nuevo programa."}
+            </div>
+            <input type="password" autoFocus value={claveAdmin}
+              onChange={e => { setClaveAdmin(e.target.value); setClaveError(false); }}
+              onKeyDown={e => e.key === "Enter" && confirmarClave()}
+              placeholder="Clave de administrador"
+              style={{ width:"100%", padding:"10px 12px", borderRadius:8, border: claveError ? "2px solid #DC2626" : "1.5px solid #ddd", fontSize:14, boxSizing:"border-box", marginBottom:6 }} />
+            {claveError && <div style={{ color:"#DC2626", fontSize:12, marginBottom:8 }}>Clave incorrecta.</div>}
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:12 }}>
+              <button onClick={() => setPedirClave(false)} style={{ padding:"8px 16px", borderRadius:8, border:"1px solid #ddd", background:"#fff", fontSize:13, cursor:"pointer" }}>Cancelar</button>
+              <button onClick={confirmarClave} style={{ padding:"8px 18px", borderRadius:8, background:"#1e3a5f", color:"#fff", border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── VISTA SIN COMITÉ ─────────────────────────────────────────────────────────
+function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveSolicitudes, onDetail }) {
+  const [search, setSearch] = useState("");
+  const [seleccionados, setSeleccionados] = useState([]);
+  const [comiteDestino, setComiteDestino] = useState("");
+  const [showModalMigrar, setShowModalMigrar] = useState(false);
+  const [migrando, setMigrando] = useState(false);
+  const [claveMigrar, setClaveMigrar] = useState("");
+  const [clavePaso, setClavePaso] = useState(false); // true = clave ya validada
+
+  const sinComite = personas.filter(p =>
+    !p.comiteId || p.comiteId === "" || p.comiteId === null
+  );
+
+  const filtered = sinComite.filter(p =>
+    p.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    (p.rut || "").toLowerCase().includes(search.toLowerCase()) ||
+    (p.comuna || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleSeleccionar = (id) => {
+    setSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const seleccionarTodos = () => {
+    if (seleccionados.length === filtered.length) {
+      setSeleccionados([]);
+    } else {
+      setSeleccionados(filtered.map(p => p.id));
+    }
+  };
+
+  const migrar = async () => {
+    if (!comiteDestino || seleccionados.length === 0) return;
+    setMigrando(true);
+    const comite = comites.find(c => c.id === comiteDestino);
+    const nuevasPersonas = personas.map(p => {
+      if (!seleccionados.includes(p.id)) return p;
+      return { ...p, comiteId: comiteDestino, comite: comite ? comite.nombre : "" };
+    });
+    // Actualizar en Supabase
+    const { supabase: sb } = await import("./supabaseClient");
+    for (const id of seleccionados) {
+      await sb.from("personas").update({ comite_id: comiteDestino, comite: comite ? comite.nombre : "" }).eq("id", id);
+    }
+    // Si el comité es de un programa, crear solicitudes automáticamente
+    if (comite && comite.programaId) {
+      const prog = PROGRAMAS.find(p2 => p2.id === comite.programaId);
+      if (prog) {
+        const nuevasSols = [...solicitudes];
+        for (const id of seleccionados) {
+          const persona = personas.find(p2 => p2.id === id);
+          const yaExiste = solicitudes.find(s => s.personaId === id && s.programaId === prog.id);
+          if (!yaExiste && persona) {
+            const nuevaSol = {
+              id: uid(), personaId: id, personaNombre: persona.nombre,
+              programaId: prog.id, fecha: today(),
+              documentos: prog.documentos.map(d => ({
+                nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
+                tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null, valor: d.valor || ""
+              }))
+            };
+            await sb.from("solicitudes").insert([{
+              id: nuevaSol.id, persona_id: nuevaSol.personaId, persona_nombre: nuevaSol.personaNombre,
+              programa_id: nuevaSol.programaId, fecha: nuevaSol.fecha, documentos: nuevaSol.documentos
+            }]);
+            nuevasSols.push(nuevaSol);
+          }
+        }
+        onSaveSolicitudes(nuevasSols);
+      }
+    }
+    onSavePersonas(nuevasPersonas);
+    setSeleccionados([]);
+    setComiteDestino("");
+    setShowModalMigrar(false);
+    setClaveMigrar("");
+    setClavePaso(false);
+    setMigrando(false);
+    alert(`✅ ${seleccionados.length} solicitante(s) migrado(s) al comité "${comite ? comite.nombre : comiteDestino}"`);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Sin Comité</div>
+          <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>
+            {sinComite.length} solicitante(s) pendientes de asignación
+          </div>
+        </div>
+        {seleccionados.length > 0 && (
+          <button onClick={() => setShowModalMigrar(true)}
+            style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+            📦 Migrar {seleccionados.length} seleccionado(s)
+          </button>
+        )}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de" }}>
+        <input placeholder="Buscar por nombre, RUT o comuna..." value={search} onChange={e => setSearch(e.target.value)}
+          style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
+        {filtered.length > 0 && (
+          <button onClick={seleccionarTodos}
+            style={{ background: "none", border: "1px solid #ddd", borderRadius: 7, padding: "5px 12px", fontSize: 12, cursor: "pointer", color: "#555", fontWeight: 600 }}>
+            {seleccionados.length === filtered.length ? "Deseleccionar todos" : "Seleccionar todos"}
+          </button>
+        )}
+      </div>
+
+      {filtered.length === 0 && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>
+          {sinComite.length === 0 ? "✅ Todos los solicitantes tienen comité asignado." : "No hay resultados para la búsqueda."}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {filtered.map(p => {
+          const sel = seleccionados.includes(p.id);
+          const misSols = solicitudes.filter(s => s.personaId === p.id);
+          return (
+            <div key={p.id} style={{
+              background: sel ? "#EFF6FF" : "#fff", borderRadius: 12, padding: "14px 18px",
+              border: "2px solid " + (sel ? "#2563EB" : "#e8e3de"),
+              display: "flex", alignItems: "center", gap: 14, cursor: "pointer"
+            }}
+              onClick={() => toggleSeleccionar(p.id)}
+            >
+              <div style={{
+                width: 22, height: 22, borderRadius: 6, border: "2px solid " + (sel ? "#2563EB" : "#ccc"),
+                background: sel ? "#2563EB" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+              }}>
+                {sel && <span style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>✓</span>}
+              </div>
+              <div style={{ width: 40, height: 40, borderRadius: 20, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
+                {p.nombre[0].toUpperCase()}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#1e3a5f" }}>{p.nombre}</div>
+                <div style={{ fontSize: 13, color: "#888" }}>
+                  RUT: {p.rut}{p.comuna ? " · " + p.comuna : ""}
+                  {p.fechaIngreso || p.fecha_ingreso ? " · Ingreso: " + (p.fechaIngreso || p.fecha_ingreso) : ""}
+                </div>
+                {misSols.length > 0 && (
+                  <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 2 }}>
+                    📋 {misSols.length} programa(s) asignado(s): {misSols.map(s => {
+                      const prog = PROGRAMAS.find(pr => pr.id === s.programaId);
+                      return prog ? prog.nombre.split(" ")[0] : s.programaId;
+                    }).join(", ")}
+                  </div>
+                )}
+              </div>
+              <button onClick={e => { e.stopPropagation(); onDetail(p.id); }}
+                style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+                Ver ficha
+              </button>
             </div>
           );
         })}
       </div>
+
+      {/* MODAL MIGRAR */}
+      {showModalMigrar && (
+        <Modal title="Migrar solicitantes a comité" onClose={() => { setShowModalMigrar(false); setClaveMigrar(""); setClavePaso(false); }}>
+          {!clavePaso ? (
+            <div>
+              <div style={{ background: "#FFF3CD", borderRadius: 10, padding: "12px 16px", marginBottom: 18, fontSize: 13, color: "#856404" }}>
+                ⚠️ Esta acción moverá <strong>{seleccionados.length}</strong> solicitante(s) a un comité.<br />Ingrese la clave de seguridad para continuar.
+              </div>
+              <input
+                type="password" autoComplete="new-password"
+                placeholder="Clave de seguridad"
+                value={claveMigrar}
+                onChange={e => setClaveMigrar(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    if (claveMigrar === "196560") { setClavePaso(true); setClaveMigrar(""); }
+                    else { alert("Clave incorrecta."); setClaveMigrar(""); }
+                  }
+                }}
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 9, border: "1.5px solid #ddd", fontSize: 15, boxSizing: "border-box", marginBottom: 14 }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button onClick={() => { setShowModalMigrar(false); setClaveMigrar(""); }}
+                  style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+                <button onClick={() => {
+                  if (claveMigrar === "196560") { setClavePaso(true); setClaveMigrar(""); }
+                  else { alert("Clave incorrecta."); setClaveMigrar(""); }
+                }}
+                  style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Confirmar</button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ background: "#E0F7FA", borderRadius: 10, padding: "12px 16px", marginBottom: 18, fontSize: 13, color: "#0891B2", fontWeight: 600 }}>
+                ✅ Clave correcta. Seleccione el comité de destino para {seleccionados.length} solicitante(s):
+              </div>
+              <select value={comiteDestino} onChange={e => setComiteDestino(e.target.value)}
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 9, border: "1.5px solid #ddd", fontSize: 14, background: "#fff", marginBottom: 14, boxSizing: "border-box" }}>
+                <option value="">-- Seleccionar comité --</option>
+                {comites.map(c => {
+                  const prog = PROGRAMAS.find(p2 => p2.id === c.programaId);
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre}{prog ? " (" + prog.nombre.split(" ")[0] + ")" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              {comiteDestino && (
+                <div style={{ background: "#F0FDF4", borderRadius: 9, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#059669" }}>
+                  📋 Comité seleccionado: <strong>{comites.find(c => c.id === comiteDestino)?.nombre}</strong>
+                  {(() => {
+                    const c = comites.find(c2 => c2.id === comiteDestino);
+                    const prog = c ? PROGRAMAS.find(p2 => p2.id === c.programaId) : null;
+                    return prog ? <span> · Programa: <strong>{prog.nombre}</strong></span> : null;
+                  })()}
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button onClick={() => { setShowModalMigrar(false); setClaveMigrar(""); setClavePaso(false); }}
+                  style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+                <button onClick={migrar} disabled={!comiteDestino || migrando}
+                  style={{ padding: "9px 20px", borderRadius: 8, background: comiteDestino ? "#059669" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: comiteDestino ? "pointer" : "not-allowed" }}>
+                  {migrando ? "Migrando..." : "✅ Migrar al comité"}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
 
 // ─── VISTA SOLICITUDES ────────────────────────────────────────────────────────
-function SolicitudesView({ solicitudes }) {
+function SolicitudesView({ solicitudes, personas = [], onDetail }) {
   const [filtProg, setFiltProg] = useState("todos");
   const [filtEst, setFiltEst] = useState("todos");
+  const [search, setSearch] = useState("");
+  const [personaSelId, setPersonaSelId] = useState(null);
 
-  const filtered = solicitudes.filter(s => {
-    const p = pct(s.documentos);
+  const normBuscar = (txt) => (txt || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9k]+/g, " ").trim();
+  const rutBuscar = (rut) => (rut || "").toString().toLowerCase().replace(/[^0-9k]/g, "");
+  const idsRelacionados = (persona) => {
+    if (!persona) return new Set();
+    const rk = rutBuscar(persona.rut);
+    const nk = normBuscar(persona.nombre);
+    return new Set(personas.filter(p => {
+      if (rk) return rutBuscar(p.rut) === rk;
+      return nk && normBuscar(p.nombre) === nk;
+    }).map(p => p.id));
+  };
+  const personaSeleccionada = personas.find(p => p.id === personaSelId) || null;
+  const personaIdsSeleccionados = idsRelacionados(personaSeleccionada);
+  const term = normBuscar(search);
+  const resultadosPersonas = term.length >= 2
+    ? personas.filter(p => normBuscar(`${p.nombre || ""} ${p.rut || ""}`).includes(term)).slice(0, 12)
+    : [];
+
+  const solicitudesBase = personaSeleccionada
+    ? solicitudes.filter(s => personaIdsSeleccionados.has(s.personaId) || personaIdsSeleccionados.has(s.persona_id))
+    : solicitudes;
+
+  const filtered = solicitudesBase.filter(s => {
+    const docs = s.documentos || [];
+    const p = pct(docs);
     if (filtProg !== "todos" && s.programaId !== filtProg) return false;
     if (filtEst === "completas" && p < 100) return false;
     if (filtEst === "incompletas" && p === 100) return false;
     return true;
   });
 
-  const completas = solicitudes.filter(s => pct(s.documentos) === 100).length;
+  const completas = solicitudesBase.filter(s => pct(s.documentos || []) === 100).length;
+  const totalDocs = solicitudesBase.flatMap(s => s.documentos || []);
+  const docsEntregados = solicitudesBase.reduce((acc, s) => {
+    const docs = s.documentos || [];
+    return acc + docs.filter(d => docCompletoEquivalente(d, docs)).length;
+  }, 0);
+  const docsPendientes = totalDocs.length - docsEntregados;
+
+  const seleccionarPersona = (persona) => {
+    setPersonaSelId(persona.id);
+    setSearch(`${persona.nombre || ""} ${persona.rut ? "- " + persona.rut : ""}`);
+  };
+
+  const limpiarPersona = () => {
+    setPersonaSelId(null);
+    setSearch("");
+  };
 
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Solicitudes</div>
-        <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>Todas las solicitudes y estado de documentacion</div>
+        <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>Busca un solicitante por nombre o cédula de identidad para ver sus solicitudes, programas y documentos.</div>
       </div>
+
+      <div style={{ background: "#fff", borderRadius: 14, padding: 18, border: "1px solid #e8e3de", marginBottom: 18 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#1e3a5f", marginBottom: 8, textTransform: "uppercase" }}>Buscar solicitante</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
+          <input
+            value={search}
+            onChange={e => { setSearch(e.target.value); if (personaSelId) setPersonaSelId(null); }}
+            placeholder="Escribe nombre o cédula/RUT"
+            style={{ padding: "11px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, background: "#fff" }}
+          />
+          <button onClick={limpiarPersona} style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid #ddd", background: "#f8fafc", color: "#555", fontWeight: 700, cursor: "pointer" }}>
+            Limpiar
+          </button>
+        </div>
+
+        {!personaSeleccionada && term.length > 0 && term.length < 2 && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "#888" }}>Escribe al menos 2 caracteres para buscar.</div>
+        )}
+
+        {!personaSeleccionada && resultadosPersonas.length > 0 && (
+          <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+            {resultadosPersonas.map(p => {
+              const idsPersona = idsRelacionados(p);
+              const solsPersona = solicitudes.filter(s => idsPersona.has(s.personaId) || idsPersona.has(s.persona_id));
+              const docsPersona = solsPersona.flatMap(s => s.documentos || []);
+              const entregados = solsPersona.reduce((acc, s) => {
+                const docs = s.documentos || [];
+                return acc + docs.filter(d => docCompletoEquivalente(d, docs)).length;
+              }, 0);
+              return (
+                <button key={p.id} onClick={() => seleccionarPersona(p)}
+                  style={{ textAlign: "left", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                  <span>
+                    <span style={{ display: "block", fontWeight: 800, color: "#111827" }}>{p.nombre}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "#6b7280" }}>Cédula: {p.rut || "—"} · {p.comite || "Sin comité"}</span>
+                  </span>
+                  <span style={{ fontSize: 12, color: "#1e3a5f", fontWeight: 800 }}>{solsPersona.length} programa(s) · {entregados}/{docsPersona.length} docs</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {!personaSeleccionada && term.length >= 2 && resultadosPersonas.length === 0 && (
+          <div style={{ marginTop: 12, color: "#999", fontSize: 13 }}>No se encontraron solicitantes con esa búsqueda.</div>
+        )}
+
+        {personaSeleccionada && (
+          <div style={{ marginTop: 14, background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 12, padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#1e3a5f" }}>{personaSeleccionada.nombre}</div>
+                <div style={{ fontSize: 13, color: "#475569", marginTop: 3 }}>
+                  Cédula: {personaSeleccionada.rut || "—"} · Comité: {personaSeleccionada.comite || "Sin comité"}
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                  Solicitudes activas: {solicitudesBase.length} · Documentos: {docsEntregados}/{totalDocs.length} · Pendientes: {docsPendientes}
+                </div>
+              </div>
+              {onDetail && (
+                <button onClick={() => onDetail(personaSeleccionada.id)}
+                  style={{ padding: "9px 16px", borderRadius: 8, border: "none", background: "#1e3a5f", color: "#fff", fontWeight: 800, cursor: "pointer" }}>
+                  Ver ficha completa
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 22 }}>
-        {[["Total", solicitudes.length, "#1e3a5f"], ["Completas", completas, "#059669"], ["Pendientes", solicitudes.length - completas, "#DC2626"]].map(([l, v, c]) => (
+        {[["Total", solicitudesBase.length, "#1e3a5f"], ["Completas", completas, "#059669"], ["Pendientes", solicitudesBase.length - completas, "#DC2626"]].map(([l, v, c]) => (
           <div key={l} style={{ background: "#fff", borderRadius: 12, padding: "16px 20px", border: "1px solid #e8e3de", display: "flex", gap: 14, alignItems: "center" }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: c }}>{v}</div>
             <div style={{ fontSize: 12, color: "#888", textTransform: "uppercase" }}>{l}</div>
@@ -746,8 +5911,9 @@ function SolicitudesView({ solicitudes }) {
       <div style={{ display: "grid", gap: 10 }}>
         {filtered.map(s => {
           const prog = PROGRAMAS.find(p => p.id === s.programaId);
-          const p = pct(s.documentos);
-          const ok = s.documentos.filter(d => d.entregado).length;
+          const docs = s.documentos || [];
+          const p = pct(docs);
+          const ok = docs.filter(d => docCompletoEquivalente(d, docs)).length;
           return (
             <div key={s.id} style={{ background: "#fff", borderRadius: 12, padding: "16px 22px", border: "1px solid #e8e3de" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -760,12 +5926,37 @@ function SolicitudesView({ solicitudes }) {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ background: statusBg(p), color: statusColor(p), borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 700 }}>{statusLabel(p)}</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{s.documentos.length}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{docs.length}</div>
                 </div>
               </div>
               <div style={{ height: 5, background: "#f0ede8", borderRadius: 3, overflow: "hidden" }}>
                 <div style={{ height: "100%", width: p + "%", background: statusColor(p), borderRadius: 3 }} />
               </div>
+
+              {personaSeleccionada && (
+                <div style={{ marginTop: 14, borderTop: "1px solid #f0ede8", paddingTop: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#444", textTransform: "uppercase", marginBottom: 8 }}>Documentos que debe presentar</div>
+                  <div style={{ display: "grid", gap: 7 }}>
+                    {docs.map((d, i) => {
+                      const completoDoc = docCompletoEquivalente(d, docs);
+                      return (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8, border: "1px solid " + (completoDoc ? "#BBF7D0" : "#FECACA"), background: completoDoc ? "#F0FDF4" : "#FEF2F2" }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#1f2937" }}>{d.nombre}</div>
+                          {d.valor && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{d.valor}</div>}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: d.obligatorio ? "#B45309" : "#64748b", textTransform: "uppercase" }}>
+                          {d.obligatorio ? "Obligatorio" : "Opcional"}
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 900, color: completoDoc ? "#047857" : "#DC2626" }}>
+                          {completoDoc ? "Entregado" : "Pendiente"}
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -779,6 +5970,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [showModalPersona, setShowModalPersona] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
+  const [claveInput, setClaveInput] = useState("");
+  const [claveError, setClaveError] = useState(false);
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId };
   const [form, setForm] = useState(EMPTY);
 
@@ -804,8 +5998,14 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
 
   const guardarPersona = async () => {
     if (!form.nombre.trim() || !form.rut.trim()) { alert("Nombre y RUT son obligatorios."); return; }
-    const nueva = { ...form, id: uid(), fechaIngreso: today(), comiteId };
-    const carpeta = carpetaNombre(form.nombre, form.rut);
+    if (!rutFormatoChilenoValido(form.rut)) {
+      alert("La cédula de identidad no es válida. Debe ingresar una cédula chilena con puntos, guion y dígito verificador correcto. Ejemplo: 10.398.338-K");
+      return;
+    }
+    const fechaSistema = today();
+    const rutFormateado = formatRut(form.rut);
+    const nueva = { ...form, rut: rutFormateado, id: uid(), fechaIngreso: fechaSistema, fecha_ingreso: fechaSistema, comiteId };
+    const carpeta = carpetaNombre(form.nombre, rutFormateado);
     try { await fetch(API + "/carpeta/" + encodeURIComponent(carpeta), { method: "POST" }); } catch (e) { }
     onSavePersonas([...personas, nueva]);
     setForm({ ...EMPTY });
@@ -814,8 +6014,18 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
 
   const eliminarPersona = (e, id) => {
     e.stopPropagation();
-    const ok = window["confirm"]("Eliminar este integrante del comité?");
-    if (ok) onSavePersonas(personas.filter(x => x.id !== id));
+    setPendingDeleteId(id);
+    setClaveInput("");
+    setClaveError(false);
+  };
+
+  const confirmarEliminarPersona = () => {
+    if (claveInput === "196560") {
+      onSavePersonas(personas.filter(x => x.id !== pendingDeleteId));
+      setPendingDeleteId(null);
+    } else {
+      setClaveError(true);
+    }
   };
 
   const completas = miembros.filter(p => {
@@ -878,18 +6088,34 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
       <div style={{ display: "grid", gap: 10 }}>
         {filtered.map(p => {
           const dp = getDocPct(p.id);
-          const sols = getSols(p.id).length;
+          const solsAll = getSols(p.id);
+          const sols = solsAll.length;
+          const tieneHabitabilidad = solsAll.some(s => s.programaId === "habitabilidad");
+          const tieneOtroPrograma = solsAll.some(s => s.programaId !== "habitabilidad");
+          const respuestaAprobada = solsAll.some(s =>
+            s.programaId === "habitabilidad" &&
+            (s.documentos || []).some(d =>
+              d.nombre && d.nombre.includes("Respuesta SERVIU") &&
+              d.valor && d.valor.toLowerCase().includes("aprobado")
+            )
+          );
+          const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
           return (
-            <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: "#fff", borderRadius: 12, padding: "16px 20px", border: "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+            <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: desmarqueEnTramite ? "#FFF7ED" : "#fff", borderRadius: 12, padding: "16px 20px", border: desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 22, background: "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: desmarqueEnTramite ? "#F97316" : "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
-                  <div style={{ fontSize: 13, color: "#888" }}>RUT: {p.rut}{p.comuna ? " - " + p.comuna : ""}</div>
+                  <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
                   {p.estado_desmarque && (() => {
                     const est = ESTADO_DESMARQUE[p.estado_desmarque] || ESTADO_DESMARQUE["NO VISITADO"];
                     return <span style={{ display:"inline-block", marginTop:4, background: est.bg, color: est.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>{est.label}</span>;
                   })()}
+                  {desmarqueEnTramite && (
+                    <div style={{ display: "inline-block", marginTop: 4, marginLeft: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                      ⚠ Desmarque en trámite
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -912,18 +6138,44 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, onBack, onSav
           <FormPersona form={form} setForm={setForm} onGuardar={guardarPersona} onCancelar={() => setShowModalPersona(false)} comiteIdFijo={comiteId} />
         </Modal>
       )}
+
+      {pendingDeleteId && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }}
+          onClick={() => setPendingDeleteId(null)}>
+          <div style={{ background:"#fff", borderRadius:14, padding:"28px 32px", width:400, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#DC2626", marginBottom:8 }}>🗑 Eliminar solicitante</div>
+            <div style={{ fontSize:13, color:"#555", marginBottom:18, lineHeight:1.6 }}>
+              Esta acción es irreversible. Ingresa la clave de administrador para confirmar la eliminación.
+            </div>
+            <input type="password" autoComplete="new-password" autoFocus value={claveInput}
+              onChange={e => { setClaveInput(e.target.value); setClaveError(false); }}
+              onKeyDown={e => e.key === "Enter" && confirmarEliminarPersona()}
+              placeholder="Clave de administrador"
+              style={{ width:"100%", padding:"10px 14px", borderRadius:8, border:"1.5px solid " + (claveError ? "#DC2626" : "#ddd"), fontSize:14, boxSizing:"border-box", marginBottom:claveError ? 6 : 20 }} />
+            {claveError && <div style={{ fontSize:12, color:"#DC2626", marginBottom:14 }}>⚠ Clave incorrecta. Intenta nuevamente.</div>}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+              <button onClick={() => setPendingDeleteId(null)}
+                style={{ padding:"9px 18px", borderRadius:8, border:"1px solid #ddd", background:"#fff", fontSize:14, fontWeight:600, cursor:"pointer" }}>Cancelar</button>
+              <button onClick={confirmarEliminarPersona}
+                style={{ padding:"9px 20px", borderRadius:8, background:"#DC2626", color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer" }}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── VISTA COMITÉS ────────────────────────────────────────────────────────────
-function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetalle, filtroPrograma }) {
+function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetalle, filtroPrograma, programasCustom }) {
+  const [subtab, setSubtab] = useState("gestion");
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ nombre: "", descripcion: "" });
+  const [form, setForm] = useState({ nombre: "", descripcion: "", tipo: "", programaId: "" });
 
   const [filtroProg, setFiltroProg] = useState(filtroPrograma || "todos");
-  const prog = filtroProg !== "todos" ? PROGRAMAS.find(p => p.id === filtroProg) : null;
+  const todosLosProgramas = [...PROGRAMAS, ...(programasCustom || [])];
+  const prog = filtroProg !== "todos" ? todosLosProgramas.find(p => p.id === filtroProg) : null;
   const comitesFiltrados = filtroProg !== "todos" ? comites.filter(c => c.programaId === filtroProg) : comites;
 
   const filtered = comitesFiltrados.filter(c =>
@@ -931,14 +6183,21 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
     (c.descripcion || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  // Código auto-correlativo según tipo
+  const calcCodigo = (tipo) => {
+    const esUrbano = tipo === "URBANO";
+    const progId = esUrbano ? "csp_urbano" : "csp_rural";
+    const staticCount = COMITES_FIJOS.filter(c => c.tipo === (esUrbano ? "Urbano" : "Rural")).length;
+    const newInSupa = comites.filter(c => c.programaId === progId && !COMITES_FIJOS.some(f => f.nombre.toLowerCase().trim() === (c.nombre || "").toLowerCase().trim())).length;
+    return `gr${staticCount + newInSupa + 1}${esUrbano ? "U" : "R"}`;
+  };
+
   const guardar = () => {
+    if (!form.programaId) { alert("Selecciona el programa del comité."); return; }
     if (!form.nombre.trim()) { alert("El nombre del comité es obligatorio."); return; }
-    const nom = form.nombre.toUpperCase();
-    const programaId = nom.includes("URBANO") ? "csp_urbano" :
-                       nom.includes("RURAL") ? "csp_rural" : "habitabilidad";
-    const nuevo = { id: uid(), nombre: form.nombre.trim(), descripcion: form.descripcion.trim(), fechaCreacion: today(), programaId };
+    const nuevo = { id: uid(), nombre: form.nombre.trim(), descripcion: form.descripcion.trim(), fechaCreacion: today(), programaId: form.programaId, tipo: form.tipo };
     onSaveComites([...comites, nuevo]);
-    setForm({ nombre: "", descripcion: "" });
+    setForm({ nombre: "", descripcion: "", tipo: "", programaId: "" });
     setShowModal(false);
   };
 
@@ -952,7 +6211,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>
             {prog ? prog.nombre : "Comités"}
@@ -961,29 +6220,45 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
             {filtered.length} comités{prog ? " en este programa" : " registrados"}
           </div>
         </div>
-        <button onClick={() => setShowModal(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo comité</button>
+        {subtab === "gestion" && (
+          <button onClick={() => setShowModal(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo comité</button>
+        )}
       </div>
 
-      {/* Filtros por programa */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        {[
-          ["todos", "Todos", "#1e3a5f"],
-          ["csp_rural", "Vivienda Rural", "#D97706"],
-          ["csp_urbano", "Vivienda Urbano", "#059669"],
-          ["habitabilidad", "Desmarque de Vivienda", "#2563EB"],
-        ].map(([id, label, color]) => {
-          const count = id === "todos" ? comites.length : comites.filter(c => c.programaId === id).length;
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {[["gestion", "Gestión"], ["directivas", "Directivas"]].map(([id, label]) => (
+          <button key={id} onClick={() => setSubtab(id)} style={{
+            fontSize: 13, padding: "6px 18px", borderRadius: 8, cursor: "pointer",
+            border: subtab === id ? "1px solid #7C3AED" : "1px solid #ddd",
+            background: subtab === id ? "#7C3AED" : "#fff",
+            color: subtab === id ? "#fff" : "#555",
+            fontWeight: subtab === id ? 700 : 400,
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {subtab === "directivas" && <ComitesVivienda comitesSupa={comites} />}
+      {subtab === "gestion" && <div>
+
+      {/* Pestañas dinámicas por programa */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {[{ id: "todos", nombre: "Todos", color: "#1e3a5f", colorLight: "#e8edf5" }, ...todosLosProgramas].map(p => {
+          const count = p.id === "todos" ? comites.length : comites.filter(c => c.programaId === p.id).length;
+          const color = p.color || "#1e3a5f";
+          const colorLight = p.colorLight || p.colorlight || "#f5f5f5";
+          const activa = filtroProg === p.id;
           return (
-            <button key={id} onClick={() => setFiltroProg(id)}
+            <button key={p.id} onClick={() => setFiltroProg(p.id)}
               style={{
                 padding: "9px 18px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
-                border: "2px solid " + (filtroProg === id ? color : "#ddd"),
-                background: filtroProg === id ? color : "#fff",
-                color: filtroProg === id ? "#fff" : "#555",
-                display: "flex", alignItems: "center", gap: 8
+                border: "2px solid " + color,
+                background: activa ? color : colorLight,
+                color: activa ? "#fff" : color,
+                display: "flex", alignItems: "center", gap: 8,
+                opacity: activa ? 1 : 0.85
               }}>
-              {label}
-              <span style={{ background: filtroProg === id ? "rgba(255,255,255,0.25)" : "#f0ede8", color: filtroProg === id ? "#fff" : "#888", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>
+              {p.icon && p.id !== "todos" ? p.icon + " " : ""}{p.nombre}
+              <span style={{ background: activa ? "rgba(255,255,255,0.3)" : color, color: "#fff", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 800 }}>
                 {count}
               </span>
             </button>
@@ -1056,52 +6331,297 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
       </div>
 
       {showModal && (
-        <Modal title="Crear nuevo comité" onClose={() => setShowModal(false)}>
+        <Modal title="Crear nuevo comité" onClose={() => { setShowModal(false); setForm({ nombre: "", descripcion: "", tipo: "", programaId: "" }); }}>
           <div style={{ display: "grid", gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Programa *</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {todosLosProgramas.map(p => (
+                  <button key={p.id} onClick={() => setForm(f => ({ ...f, programaId: p.id, tipo: p.id === "csp_urbano" ? "URBANO" : p.id === "csp_rural" ? "RURAL" : "OTRO" }))}
+                    style={{ padding: "10px 12px", borderRadius: 8, border: "2px solid " + (form.programaId === p.id ? (p.color || "#7C3AED") : "#ddd"), background: form.programaId === p.id ? (p.colorLight || p.color || "#7C3AED") : "#fff", color: form.programaId === p.id ? (p.color || "#7C3AED") : "#555", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left" }}>
+                    <span style={{ marginRight: 6 }}>{p.icon || "📋"}</span>{p.nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {form.programaId && (
+              <div style={{ background: "#f5f3ff", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>Código asignado automáticamente:</span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED", fontFamily: "monospace" }}>{calcCodigo(form.tipo || "RURAL")}</span>
+              </div>
+            )}
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Nombre del comité *</label>
               <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })}
-                placeholder="Ej: Comité de Vivienda Rural Mi Nuevo Hogar"
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+                placeholder="Ej: Comité de Vivienda Rural Küme Ruka"
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (form.nombre.trim() ? "#7C3AED" : "#ddd"), fontSize: 14, boxSizing: "border-box" }} />
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>El comité aparecerá en la pestaña Directivas una vez guardado con nombre.</div>
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Descripción</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Descripción / Notas</label>
               <input value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })}
-                placeholder="Descripción opcional"
+                placeholder="Notas adicionales (opcional)"
                 style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
             </div>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
-            <button onClick={() => setShowModal(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-            <button onClick={guardar} style={{ padding: "9px 20px", borderRadius: 8, background: "#7C3AED", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Crear comité</button>
+            <button onClick={() => { setShowModal(false); setForm({ nombre: "", descripcion: "", tipo: "" }); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={guardar} disabled={!form.programaId || !form.nombre.trim()}
+              style={{ padding: "9px 20px", borderRadius: 8, background: form.programaId && form.nombre.trim() ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: form.programaId && form.nombre.trim() ? "pointer" : "not-allowed" }}>
+              Crear comité
+            </button>
           </div>
         </Modal>
       )}
+      </div>}
+    </div>
+  );
+}
+
+// ─── PANTALLA DE BIENVENIDA ───────────────────────────────────────────────────
+function PantallaBienvenida({ onEntrar }) {
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(135deg, #1e3a5f 0%, #2563EB 60%, #1e3a5f 100%)",
+      fontFamily: "'Segoe UI', Arial, sans-serif", padding: 24, position: "relative"
+    }}>
+      {/* Fondo decorativo */}
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", top: -80, right: -80, width: 320, height: 320, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
+        <div style={{ position: "absolute", bottom: -60, left: -60, width: 240, height: 240, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
+      </div>
+
+      {/* Tarjeta principal */}
+      <div style={{
+        background: "#fff", borderRadius: 20, padding: "48px 56px", maxWidth: 720, width: "100%",
+        boxShadow: "0 24px 64px rgba(0,0,0,0.25)", textAlign: "center", position: "relative"
+      }}>
+        {/* Logos + Título */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, marginBottom: 28 }}>
+          {/* Logo izquierdo: Municipalidad */}
+          <img src={LOGO_MUNI} alt="Municipalidad de Lautaro" style={{ height: 110, objectFit: "contain" }} />
+
+          {/* Títulos centrales */}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: "#1e3a5f", lineHeight: 1.2, letterSpacing: 0.5 }}>
+              MUNICIPALIDAD DE LAUTARO
+            </div>
+            <div style={{ width: 60, height: 3, background: "#2563EB", margin: "12px auto", borderRadius: 2 }} />
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#2563EB", marginBottom: 4 }}>
+              UNIDAD DE VIVIENDA MUNICIPALIDAD DE LAUTARO
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", letterSpacing: 1 }}>
+              ENTIDAD PATROCINANTE
+            </div>
+          </div>
+
+          {/* Logo derecho: Unidad de Vivienda */}
+          <img src={LOGO_VIVIENDA} alt="Unidad de Vivienda" style={{ height: 110, objectFit: "contain" }} />
+        </div>
+
+        {/* Separador */}
+        <div style={{ height: 1, background: "#e5e7eb", margin: "0 0 28px 0" }} />
+
+        {/* Descripción */}
+        <div style={{ fontSize: 15, color: "#6B7280", marginBottom: 36, lineHeight: 1.7 }}>
+          Sistema de Gestión de Subsidios Habitacionales<br />
+          <span style={{ fontSize: 13, color: "#9CA3AF" }}>Control de familias, comités, documentos y solicitudes SERVIU</span>
+        </div>
+
+        {/* Botón entrar */}
+        <button onClick={onEntrar} style={{
+          padding: "14px 48px", borderRadius: 12, background: "linear-gradient(90deg, #1e3a5f, #2563EB)",
+          color: "#fff", border: "none", fontSize: 17, fontWeight: 700, cursor: "pointer",
+          boxShadow: "0 4px 16px rgba(37,99,235,0.35)", letterSpacing: 0.5,
+          transition: "opacity 0.2s"
+        }}
+          onMouseEnter={e => e.target.style.opacity = "0.88"}
+          onMouseLeave={e => e.target.style.opacity = "1"}
+        >
+          INGRESAR AL SISTEMA
+        </button>
+
+        {/* Pie de firma */}
+        <div style={{
+          marginTop: 36, paddingTop: 20, borderTop: "1px solid #f3f4f6",
+          fontSize: 11, color: "#9CA3AF", letterSpacing: 0.5
+        }}>
+          Propietario del software: <strong style={{ color: "#6B7280" }}>JORGE ANTONIO CAMPOS CAMPOS</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── INICIO DE SESIÓN ────────────────────────────────────────────────────────
+function LoginView({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [userClave, setUserClave] = useState(null);
+  const [actual, setActual] = useState("");
+  const [nueva, setNueva] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+
+  const ingresar = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { data, error: err } = await supabase.rpc("login_app_user", {
+      p_username: username.trim().toLowerCase(),
+      p_password: password,
+    });
+    setLoading(false);
+    if (err || !data || data.length === 0) {
+      setError("Usuario o clave incorrecta.");
+      return;
+    }
+    const usuario = data[0];
+    if (usuario.debe_cambiar_clave) {
+      setUserClave(usuario);
+      setActual(password);
+      return;
+    }
+    onLogin(usuario);
+  };
+
+  const cambiarClave = async () => {
+    setError("");
+    if (nueva.length < 8) {
+      setError("La nueva clave debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (nueva !== confirmar) {
+      setError("La confirmación no coincide con la nueva clave.");
+      return;
+    }
+    setLoading(true);
+    const { error: err } = await supabase.rpc("cambiar_clave_app_user", {
+      p_user_id: userClave.id,
+      p_actual: actual,
+      p_nueva: nueva,
+    });
+    setLoading(false);
+    if (err) {
+      setError(err.message || "No se pudo cambiar la clave.");
+      return;
+    }
+    onLogin({ ...userClave, debe_cambiar_clave: false });
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(135deg, #1e3a5f 0%, #2563EB 65%, #1e3a5f 100%)",
+      fontFamily: "'Segoe UI', Arial, sans-serif", padding: 24
+    }}>
+      <form onSubmit={ingresar} style={{ background: "#fff", width: "100%", maxWidth: 430, borderRadius: 18, padding: 34, boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
+          <img src={LOGO_MUNI} alt="Municipalidad de Lautaro" style={{ width: 70, height: 70, objectFit: "contain" }} />
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#1e3a5f" }}>Ingreso al sistema</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>Usuarios autorizados Unidad de Vivienda</div>
+          </div>
+        </div>
+
+        {!userClave ? (
+          <>
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#334155", display: "block", marginBottom: 6 }}>Usuario</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username"
+              style={{ width: "100%", padding: "12px 13px", border: "1.5px solid #cbd5e1", borderRadius: 10, fontSize: 15, marginBottom: 14 }} />
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#334155", display: "block", marginBottom: 6 }}>Clave</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"
+              style={{ width: "100%", padding: "12px 13px", border: "1.5px solid #cbd5e1", borderRadius: 10, fontSize: 15, marginBottom: 18 }} />
+            <button type="submit" disabled={loading || !username.trim() || !password}
+              style={{ width: "100%", padding: "13px 18px", borderRadius: 10, border: "none", background: "#1e3a5f", color: "#fff", fontSize: 15, fontWeight: 800, cursor: loading ? "wait" : "pointer" }}>
+              {loading ? "Validando..." : "Entrar"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", color: "#92400E", padding: 12, borderRadius: 10, fontSize: 13, marginBottom: 16 }}>
+              Debe cambiar la clave inicial antes de entrar.
+            </div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#334155", display: "block", marginBottom: 6 }}>Nueva clave</label>
+            <input type="password" value={nueva} onChange={e => setNueva(e.target.value)} autoComplete="new-password"
+              style={{ width: "100%", padding: "12px 13px", border: "1.5px solid #cbd5e1", borderRadius: 10, fontSize: 15, marginBottom: 14 }} />
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#334155", display: "block", marginBottom: 6 }}>Confirmar nueva clave</label>
+            <input type="password" value={confirmar} onChange={e => setConfirmar(e.target.value)} autoComplete="new-password"
+              style={{ width: "100%", padding: "12px 13px", border: "1.5px solid #cbd5e1", borderRadius: 10, fontSize: 15, marginBottom: 18 }} />
+            <button type="button" onClick={cambiarClave} disabled={loading}
+              style={{ width: "100%", padding: "13px 18px", borderRadius: 10, border: "none", background: "#059669", color: "#fff", fontSize: 15, fontWeight: 800, cursor: loading ? "wait" : "pointer" }}>
+              {loading ? "Guardando..." : "Cambiar clave y entrar"}
+            </button>
+          </>
+        )}
+        {error && <div style={{ marginTop: 14, color: "#DC2626", fontSize: 13, fontWeight: 700 }}>{error}</div>}
+      </form>
     </div>
   );
 }
 
 // ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 export default function App() {
+  const [pantalla, setPantalla] = useState("bienvenida");
   const [view, setView] = useState("dashboard");
   const [personas, setPersonas] = useState([]);
   const [solicitudes, setSolicitudes] = useState([]);
   const [comites, setComites] = useState([]);
   const [detailId, setDetailId] = useState(null);
   const [comiteDetailId, setComiteDetailId] = useState(null);
+  const [fromView, setFromView] = useState("personas");
   const [filtroPrograma, setFiltroPrograma] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [programasCustom, setProgramasCustom] = useState([]);
+  const [currentUser, setCurrentUser] = useState(() => DB.get("serviu_user"));
+
+  const login = (usuario) => {
+    setCurrentUser(usuario);
+    DB.set("serviu_user", usuario);
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    DB.set("serviu_user", null);
+    setPantalla("bienvenida");
+  };
+
+  const registrarAuditoria = async (accion, entidad, entidadId, detalle = {}) => {
+    if (!currentUser?.id) return;
+    try {
+      const { error } = await supabase.rpc("registrar_auditoria", {
+        p_user_id: currentUser.id,
+        p_accion: accion,
+        p_entidad: entidad,
+        p_entidad_id: entidadId || "",
+        p_detalle: detalle,
+      });
+      if (error) console.warn("[auditoria]", error.message);
+    } catch (err) {
+      console.warn("[auditoria]", err.message);
+    }
+  };
 
   // Cargar datos desde Supabase al iniciar
   useEffect(() => {
     const cargarDatos = async () => {
       setCargando(true);
       try {
-        const [{ data: c }, { data: p }, { data: s }] = await Promise.all([
+        const [{ data: c }, { data: p }, { data: s }, { data: pc }] = await Promise.all([
           supabase.from("comites").select("*"),
           supabase.from("personas").select("*"),
           supabase.from("solicitudes").select("*"),
+          supabase.from("programas_custom").select("*"),
         ]);
+        setProgramasCustom((pc || []).map(x => ({
+          ...x,
+          colorLight: x.colorlight || "#F9FAFB",
+          documentos: Array.isArray(x.documentos) ? x.documentos : [],
+          esCustom: true,
+        })));
         setComites((c || []).map(x => ({
           ...x,
           programaId: x.programa_id,
@@ -1109,21 +6629,81 @@ export default function App() {
         })));
         setPersonas((p || []).map(x => ({
           ...x,
-          comiteId: x.comite_id,
-          fechaNacimiento: x.fecha_nacimiento,
-          puntajeRSH: x.puntaje_rsh,
-          integrantesFamiliares: x.integrantes_familiares,
-          fechaIngreso: x.fecha_ingreso,
+          // Mapeos snake_case → camelCase (campos existentes)
+          comiteId:             x.comite_id,
+          fechaNacimiento:      x.fecha_nacimiento,
+          puntajeRSH:           x.puntaje_rsh,
+          integrantesFamiliares:x.integrantes_familiares,
+          fechaIngreso:         x.fecha_ingreso,
+          tipo_comite:          x.tipo_comite || x.tipo || "",
+          rol_propiedad:        x.rol_propiedad || "",
+          dominio_terreno:      x.dominio_terreno || "",
+          anio_subsidio:        x.anio_subsidio || "",
+          sector:               x.sector || "",
+          coordenadas:          x.coordenadas || "",
+          numero_recepcion:     x.numero_recepcion || "",
+          fecha_recepcion:      x.fecha_recepcion || "",
+          estado_desmarque:     x.estado_desmarque || "",
+          observaciones:        x.observaciones || "",
+          // Mapeos lowercase DB → camelCase app (campos de fichas técnicas)
+          dominiopropiedad:      x.dominiopropiedad || "",
+          nFJS:                  x.nfjs || "",
+          sistemaAgua:           x.sistemaagua || "",
+          nServicioAgua:         x.nservicioagua || "",
+          proveedorElectrico:    x.proveedorelectrico || "",
+          nClienteElectricidad:  x.nclienteelectricidad || "",
+          certRuralidad:         x.certruralidad || "",
+          avaluoFiscal:          x.avaluofiscal || "",
+          informacionesPrevias:  x.informacionesprevias || "",
+          infPrevias:            x.infprevias || x.informacionesprevias || "",
+          antecedentesVivienda:  x.antecedentesvivienda || "",
+          discapacidad:          x.discapacidad || "",
+          movilidadReducida:     x.movilidadreducida || "",
+          credencialDiscapacidad:x.credencialdiscapacidad || "",
+          cuentaAhorro:          x.cuentaahorro || "",
+          banco:                 x.banco || "",
+          subsidioAnterior:      x.subsidio_anterior || "",
+          estadoCivil:           x.estadocivil || "",
+          ahorroPostular:        x.ahorropostular || "",
+          adultoMayor:           x.adultomayor || "",
+          cargo_comite:          x.cargo_comite || "",
+          numero_lista:          x.numero_lista || "",
+          rol:                   x.rol || "",
+          permisoEdificacion:    x.permisoedificacion || "",
+          recepcionDefinitiva:   x.recepciondefinitiva || "",
+          constructoraSeleccionada: x.constructoraseleccionada || "",
+          metrosOriginal:        x.metrosoriginal || "",
+          metrosAmpl:            x.metrosampl || "",
+          metrosNoRegul:         x.metrosnoregul || "",
+          totalMetros:           x.totalmetros || "",
+          modalidadPostulacion:  x.modalidadpostulacion || "",
         })));
-        setSolicitudes((s || []).map(sol => ({
-          ...sol,
-          personaId: sol.persona_id,
-          personaNombre: sol.persona_nombre,
-          programaId: sol.programa_id,
-          codigoComite: sol.codigo_comite,
-          tipoComite: sol.tipo_comite,
-          profesionalComite: sol.profesional_comite,
-        })));
+        setSolicitudes((s || []).map(sol => {
+          const mapped = {
+            ...sol,
+            personaId: sol.persona_id,
+            personaNombre: sol.persona_nombre,
+            programaId: sol.programa_id,
+            codigoComite: sol.codigo_comite,
+            tipoComite: sol.tipo_comite,
+            profesionalComite: sol.profesional_comite,
+          };
+          // Migrar solicitudes CSP antiguas: agregar documentos que faltan según PROGRAMAS
+          if (mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") {
+            const prog = PROGRAMAS.find(p => p.id === mapped.programaId);
+            if (prog && mapped.documentos) {
+              const nombresExistentes = new Set(mapped.documentos.map(d => d.nombre));
+              const faltantes = prog.documentos.filter(d => !nombresExistentes.has(d.nombre));
+              if (faltantes.length > 0) {
+                mapped.documentos = [
+                  ...mapped.documentos,
+                  ...faltantes.map(d => ({ nombre: d.nombre, obligatorio: d.obligatorio, entregado: false, tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null }))
+                ];
+              }
+            }
+          }
+          return mapped;
+        }));
       } catch (err) {
         console.error("Error cargando datos:", err);
       }
@@ -1143,15 +6723,46 @@ export default function App() {
         email: ultima.email, direccion: ultima.direccion, comuna: ultima.comuna,
         puntaje_rsh: ultima.puntajeRSH, integrantes_familiares: ultima.integrantesFamiliares,
         comite_id: ultima.comiteId || null, comite: ultima.comite || null,
-        fecha_ingreso: ultima.fechaIngreso
+        fecha_ingreso: ultima.fechaIngreso || ultima.fecha_ingreso || today(),
+        tipo_comite: ultima.tipo_comite || "",
+        rol_propiedad: ultima.rol_propiedad || "",
+        dominio_terreno: ultima.dominio_terreno || "",
+        anio_subsidio: ultima.anio_subsidio || "",
+        sector: ultima.sector || "",
+        coordenadas: ultima.coordenadas || "",
+        numero_recepcion: ultima.numero_recepcion || "",
+        fecha_recepcion: ultima.fecha_recepcion || "",
+        estado_desmarque: ultima.estado_desmarque || "NO VISITADO",
+        observaciones: ultima.observaciones || "",
       }]);
-    } else {
-      // Actualizar o eliminar
-      const ids = lista.map(p => p.id);
-      const eliminados = personas.filter(p => !ids.includes(p.id));
-      for (const p of eliminados) {
-        await supabase.from("personas").delete().eq("id", p.id);
+      await registrarAuditoria("crear_solicitante", "personas", ultima.id, { nombre: ultima.nombre, rut: ultima.rut });
+      // Si es comité desmarque → crear solicitud Habitabilidad automáticamente
+      if (ultima.comiteId === "comite_desmarque") {
+        const progHab = PROGRAMAS.find(p => p.id === "habitabilidad");
+        const solExistente = solicitudes.find(s => s.personaId === ultima.id && s.programaId === "habitabilidad");
+        if (progHab && !solExistente) {
+          const nuevaSol = {
+            id: uid(),
+            personaId: ultima.id,
+            personaNombre: ultima.nombre,
+            programaId: "habitabilidad",
+            fecha: today(),
+            documentos: progHab.documentos.map(d => ({
+              nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
+              tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null, valor: d.valor || ""
+            }))
+          };
+          await supabase.from("solicitudes").insert([{
+            id: nuevaSol.id, persona_id: nuevaSol.personaId, persona_nombre: nuevaSol.personaNombre,
+            programa_id: nuevaSol.programaId, fecha: nuevaSol.fecha, documentos: nuevaSol.documentos
+          }]);
+          await registrarAuditoria("crear_solicitud_automatica", "solicitudes", nuevaSol.id, { persona: nuevaSol.personaNombre, programa: "habitabilidad" });
+          setSolicitudes(prev => [...prev, nuevaSol]);
+        }
       }
+    } else {
+      // Actualizar sin borrar registros ausentes de la lista local.
+      // En modo web multiusuario, una lista local incompleta no debe eliminar datos de Supabase.
       for (const p of lista) {
         await supabase.from("personas").upsert({
           id: p.id, nombre: p.nombre, rut: p.rut,
@@ -1159,9 +6770,10 @@ export default function App() {
           email: p.email, direccion: p.direccion, comuna: p.comuna,
           puntaje_rsh: p.puntajeRSH, integrantes_familiares: p.integrantesFamiliares,
           comite_id: p.comiteId || null, comite: p.comite || null,
-          fecha_ingreso: p.fechaIngreso
+          fecha_ingreso: p.fechaIngreso || p.fecha_ingreso || today()
         });
       }
+      await registrarAuditoria("actualizar_solicitantes", "personas", "", { cantidad: lista.length });
     }
   };
 
@@ -1174,33 +6786,28 @@ export default function App() {
         programa_id: s.programaId, fecha: s.fecha, comite: s.comite || null,
         codigo_comite: s.codigoComite || null, tipo_comite: s.tipoComite || null,
         profesional_comite: s.profesionalComite || null,
-        documentos: s.documentos
+        documentos: s.documentos,
+        fecha_visita: s.fecha_visita || null
       });
     }
-    const ids = lista.map(s => s.id);
-    const eliminados = solicitudes.filter(s => !ids.includes(s.id));
-    for (const s of eliminados) {
-      await supabase.from("solicitudes").delete().eq("id", s.id);
-    }
+    await registrarAuditoria("guardar_solicitudes", "solicitudes", "", { cantidad: lista.length });
+    // No borrar solicitudes ausentes de la lista local: protege datos en producción multiusuario.
   };
 
   // Guardar comités en Supabase
   const saveComites = async (lista) => {
     setComites(lista);
-    const ids = lista.map(c => c.id);
-    const eliminados = comites.filter(c => !ids.includes(c.id));
-    for (const c of eliminados) {
-      await supabase.from("comites").delete().eq("id", c.id);
-    }
+    // No borrar comités ausentes de la lista local: protege datos en producción multiusuario.
     for (const c of lista) {
       await supabase.from("comites").upsert({
         id: c.id, nombre: c.nombre, descripcion: c.descripcion || null,
         programa_id: c.programaId || null, fecha_creacion: c.fechaCreacion
       });
     }
+    await registrarAuditoria("guardar_comites", "comites", "", { cantidad: lista.length });
   };
 
-  const goDetail = (id) => { setDetailId(id); setView("detalle"); };
+  const goDetail = (id) => { setFromView(view); setDetailId(id); setView("detalle"); };
   const nav = (v) => {
     if (v.startsWith("comites_prog_")) {
       setFiltroPrograma(v.replace("comites_prog_", ""));
@@ -1215,18 +6822,30 @@ export default function App() {
 
   const verDetalleComite = (id) => { setComiteDetailId(id); setView("detalleComite"); };
 
+  const sinComiteCount = personas.filter(p => !p.comiteId || p.comiteId === "").length;
+
   const NAV_ITEMS = [
     ["dashboard", "Inicio"],
     ["personas", "Solicitantes"],
+    ["sincomite", "Sin Comité"],
     ["comites", "Comités"],
     ["programas", "Programas"],
     ["solicitudes", "Solicitudes"],
+    ["informes", "Informes"],
   ];
 
   const navActivo = (k) =>
     view === k ||
     (view === "detalle" && k === "personas") ||
     (view === "detalleComite" && k === "comites");
+
+  if (!currentUser) {
+    return <LoginView onLogin={login} />;
+  }
+
+  if (pantalla === "bienvenida") {
+    return <PantallaBienvenida onEntrar={() => setPantalla("sistema")} />;
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "Segoe UI, sans-serif", background: "#F0EDE8" }}>
@@ -1249,10 +6868,42 @@ export default function App() {
               {k === "comites" && comites.length > 0 && (
                 <span style={{ marginLeft: "auto", background: "rgba(255,255,255,0.15)", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>{comites.length}</span>
               )}
+              {k === "sincomite" && sinComiteCount > 0 && (
+                <span style={{ marginLeft: "auto", background: "#DC2626", borderRadius: 10, padding: "1px 8px", fontSize: 11, color: "#fff", fontWeight: 700 }}>{sinComiteCount}</span>
+              )}
             </div>
           ))}
         </nav>
         <div style={{ padding: "16px 24px 24px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 10, background: "rgba(255,255,255,0.08)", color: "#fff" }}>
+            <div style={{ fontSize: 10, color: "#7BAFD4", textTransform: "uppercase", letterSpacing: 1 }}>Usuario activo</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 3 }}>{currentUser.nombre}</div>
+            <div style={{ fontSize: 11, color: "#BBD7EA", marginTop: 2 }}>{currentUser.rol}</div>
+          </div>
+          <div
+            onClick={() => setPantalla("bienvenida")}
+            style={{
+              display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+              borderRadius: 10, cursor: "pointer", marginBottom: 10,
+              background: "rgba(220,38,38,0.15)", border: "1px solid rgba(220,38,38,0.35)",
+              color: "#FCA5A5", fontSize: 14, fontWeight: 600,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(220,38,38,0.3)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(220,38,38,0.15)"}
+          >
+            ⏻ Cerrar programa
+          </div>
+          <div
+            onClick={logout}
+            style={{
+              display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+              borderRadius: 10, cursor: "pointer", marginBottom: 10,
+              background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+              color: "#E0F2FE", fontSize: 14, fontWeight: 600,
+            }}
+          >
+            Cerrar sesión
+          </div>
           <div style={{ fontSize: 11, color: "#5A8BB0", lineHeight: 1.6 }}>Sistema de gestion de subsidios habitacionales</div>
         </div>
       </aside>
@@ -1265,13 +6916,42 @@ export default function App() {
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
+        {!cargando && view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
         {!cargando && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} onNav={nav} />}
-        {!cargando && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} />}
-        {!cargando && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} />}
+        {!cargando && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
+        {!cargando && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
         {!cargando && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
-        {!cargando && view === "programas" && <ProgramasView solicitudes={solicitudes} />}
-        {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} />}
-        {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} onBack={() => view === "detalleComite" ? setView("detalleComite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} />}
+        {!cargando && view === "programas" && <ProgramasView solicitudes={solicitudes} programasCustom={programasCustom} onAddPrograma={async (prog) => {
+          const { data, error } = await supabase.from("programas_custom").insert([{
+            id: uid(), nombre: prog.nombre, descripcion: prog.descripcion,
+            color: prog.color, colorlight: prog.colorLight, icon: prog.icon, documentos: prog.documentos
+          }]).select();
+          if (error) { alert("Error al guardar programa: " + error.message); return; }
+          if (data && data[0]) {
+            const np = { ...data[0], colorLight: data[0].colorlight || prog.colorLight, documentos: data[0].documentos || prog.documentos, esCustom: true };
+            setProgramasCustom(prev => [...prev, np]);
+            await registrarAuditoria("crear_programa", "programas_custom", np.id, { nombre: np.nombre });
+          } else {
+            const np = { id: uid(), ...prog, esCustom: true };
+            setProgramasCustom(prev => [...prev, np]);
+            await registrarAuditoria("crear_programa", "programas_custom", np.id, { nombre: np.nombre });
+          }
+        }} onDeletePrograma={async (id) => {
+          await supabase.from("programas_custom").delete().eq("id", id);
+          setProgramasCustom(prev => prev.filter(p => p.id !== id));
+          await registrarAuditoria("eliminar_programa", "programas_custom", id, {});
+        }} onUpdatePrograma={async (prog) => {
+          const { error } = await supabase.from("programas_custom").update({
+            nombre: prog.nombre, descripcion: prog.descripcion,
+            color: prog.color, colorlight: prog.colorLight, icon: prog.icon, documentos: prog.documentos
+          }).eq("id", prog.id);
+          if (error) { alert("Error al actualizar programa: " + error.message); return; }
+          setProgramasCustom(prev => prev.map(p => p.id !== prog.id ? p : { ...p, ...prog, colorLight: prog.colorLight, esCustom: true }));
+          await registrarAuditoria("actualizar_programa", "programas_custom", prog.id, { nombre: prog.nombre });
+        }} />}
+        {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} onDetail={goDetail} />}
+        {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} />}
       </main>
     </div>
   );
