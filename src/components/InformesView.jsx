@@ -332,12 +332,27 @@ function filasDatosFicha(persona, sols, comites, programaTxt) {
   return datos.map(([tipo, dato]) => filaInforme(tipo, !!primerDato(dato), dato)).join("");
 }
 
-function tablaIndividualHtml(persona, sols, docs, comites, programaTxt) {
+function tablaFichaHtml(persona, sols, comites, programaTxt) {
   const filasFicha = filasDatosFicha(persona, sols, comites, programaTxt);
-  const filasDocs = docs.length
-    ? docs.map(doc => filaInforme(`${doc.programa} - ${doc.nombre}`, documentoCompleto(doc), detalleDocumento(doc))).join("")
-    : filaInforme("Documentos del programa", false, "Sin documentos registrados");
-  return `<table class="tabla-individual"><thead><tr><th>Tipo documento</th><th>Estado</th><th>Datos del solicitante</th></tr></thead><tbody>${filasFicha}${filasDocs}</tbody></table>`;
+  return `<table class="tabla-individual"><thead><tr><th>Tipo documento</th><th>Estado</th><th>Datos del solicitante</th></tr></thead><tbody>${filasFicha}</tbody></table>`;
+}
+
+function tablasDocumentosIndividualHtml(docs) {
+  if (!docs.length) {
+    return `<table class="tabla-individual"><thead><tr><th>Tipo documento</th><th>Estado</th><th>Datos del solicitante</th></tr></thead><tbody>${filaInforme("Documentos del programa", false, "Sin documentos registrados")}</tbody></table>`;
+  }
+  const grupos = docs.reduce((acc, doc) => {
+    const programa = doc.programa || "Programa";
+    if (!acc[programa]) acc[programa] = [];
+    acc[programa].push(doc);
+    return acc;
+  }, {});
+  return Object.entries(grupos).map(([programa, items]) => `<div class="program-box">
+    <div class="program-title">${programa}</div>
+    <table class="tabla-individual"><thead><tr><th>Tipo documento</th><th>Estado</th><th>Datos del solicitante</th></tr></thead><tbody>
+      ${items.map(doc => filaInforme(doc.nombre, documentoCompleto(doc), detalleDocumento(doc))).join("")}
+    </tbody></table>
+  </div>`).join("");
 }
 
 function bloquePersonaHtml(persona, solicitudes, personas, comites = [], programaFiltro = "todos") {
@@ -354,7 +369,8 @@ function bloquePersonaHtml(persona, solicitudes, personas, comites = [], program
     <div class="bar"><span>${v(persona.nombre)}</span><span>${programaTxt}</span></div>
     <div style="font-weight:800;text-transform:uppercase;margin-bottom:8px">Programa informado: ${programaTxt}</div>
     <div class="stats"><div class="stat">Total documentos<b>${stats.total}</b></div><div class="stat">Completados<b>${stats.completos}</b></div><div class="stat">Faltan obligatorios<b>${stats.faltanObligatorios}</b></div><div class="stat">Opcionales pendientes<b>${stats.opcionalesPendientes}</b></div></div>
-    <div class="section"><h2>Ficha del solicitante y documentos</h2>${tablaIndividualHtml(persona, sols, docs, comites, programaTxt)}</div>
+    <div class="section"><h2>Ficha del solicitante</h2>${tablaFichaHtml(persona, sols, comites, programaTxt)}</div>
+    <div class="section"><h2>Documentos por programa</h2>${tablasDocumentosIndividualHtml(docs)}</div>
   </div>`;
 }
 
