@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabaseClient";
 
 const PROGRAMAS = {
   habitabilidad: "Habitabilidad de Vivienda (Desmarque de Vivienda)",
@@ -165,6 +166,70 @@ function imprimirVentana(titulo, html) {
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo}</title>${estilosImpresion()}</head><body>${html}</body></html>`);
   w.document.close();
   w.focus();
+}
+
+function formatFechaHora(value) {
+  if (!value) return "-";
+  try {
+    return new Date(value).toLocaleString("es-CL");
+  } catch {
+    return value;
+  }
+}
+
+function accionTexto(accion) {
+  const map = {
+    ingreso_sistema: "Ingreso al sistema",
+    cambio_clave: "Cambio de clave",
+    crear_solicitante: "Creacion de solicitante",
+    actualizar_solicitantes: "Actualizacion de solicitantes",
+    crear_solicitud_automatica: "Solicitud automatica creada",
+    guardar_solicitudes: "Solicitud/documentos guardados",
+    guardar_comites: "Comites guardados",
+    crear_programa: "Programa creado",
+    actualizar_programa: "Programa actualizado",
+    eliminar_programa: "Programa eliminado",
+    registrar_visita: "Visita registrada",
+    mover_solicitante: "Solicitante movido",
+  };
+  return map[accion] || accion || "-";
+}
+
+function detalleAuditoria(detalle) {
+  if (!detalle) return "";
+  if (typeof detalle === "string") return detalle;
+  const partes = [];
+  Object.entries(detalle || {}).forEach(([k, val]) => {
+    if (val === undefined || val === null || val === "") return;
+    partes.push(`${k}: ${typeof val === "object" ? JSON.stringify(val) : val}`);
+  });
+  return partes.join(" | ");
+}
+
+function imprimirAuditoria(fecha, logs) {
+  const grupos = logs.reduce((acc, log) => {
+    const usuario = log.usuario || "Usuario no identificado";
+    if (!acc[usuario]) acc[usuario] = [];
+    acc[usuario].push(log);
+    return acc;
+  }, {});
+  const totalIngresos = logs.filter(l => l.accion === "ingreso_sistema").length;
+  const html = `<div class="page">
+    <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe diario de usuarios</h1><div class="muted">Fecha: ${fecha}</div></div></div>
+    <div class="stats">
+      <div class="stat"><span class="k">Usuarios con actividad</span><b>${Object.keys(grupos).length}</b></div>
+      <div class="stat"><span class="k">Ingresos al sistema</span><b>${totalIngresos}</b></div>
+      <div class="stat"><span class="k">Acciones registradas</span><b>${logs.length}</b></div>
+      <div class="stat"><span class="k">Generado</span><b style="font-size:16px">${new Date().toLocaleTimeString("es-CL")}</b></div>
+    </div>
+    ${Object.entries(grupos).map(([usuario, items]) => `<div class="program-box">
+      <div class="program-title">${usuario} - ${items.length} accion(es)</div>
+      <table><thead><tr><th>Hora</th><th>Accion</th><th>Entidad</th><th>Detalle</th></tr></thead><tbody>
+        ${items.map(log => `<tr><td>${formatFechaHora(log.creado)}</td><td>${accionTexto(log.accion)}</td><td>${v(log.entidad)}</td><td>${v(detalleAuditoria(log.detalle))}</td></tr>`).join("")}
+      </tbody></table>
+    </div>`).join("")}
+  </div>`;
+  imprimirVentana("Informe diario de usuarios", html);
 }
 
 function estilosImpresion() {
@@ -388,7 +453,88 @@ function PanelIndividual({ personas, solicitudes }) {
   </div>;
 }
 
-export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [] }) {
+function PanelAuditoriaUsuarios({ currentUser }) {
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  const [fecha, setFecha] = useState(hoyIso);
+  const [logs, setLogs] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const cargar = async () => {
+      setCargando(true);
+      setError("");
+      const inicio = new Date(fecha + "T00:00:00");
+      const fin = new Date(inicio);
+      fin.setDate(fin.getDate() + 1);
+      const { data, error: err } = await supabase
+        .from("audit_log")
+        .select("*")
+        .gte("creado", inicio.toISOString())
+        .lt("creado", fin.toISOString())
+        .order("creado", { ascending: false });
+      if (err) {
+        setError(err.message);
+        setLogs([]);
+      } else {
+        setLogs(data || []);
+      }
+      setCargando(false);
+    };
+    cargar();
+  }, [fecha]);
+
+  const grupos = logs.reduce((acc, log) => {
+    const usuario = log.usuario || "Usuario no identificado";
+    if (!acc[usuario]) acc[usuario] = [];
+    acc[usuario].push(log);
+    return acc;
+  }, {});
+  const ingresos = logs.filter(l => l.accion === "ingreso_sistema").length;
+  const modificaciones = logs.filter(l => l.accion !== "ingreso_sistema").length;
+
+  return <div>
+    <div style={{ display: "grid", gridTemplateColumns: "220px auto", gap: 10, alignItems: "end", marginBottom: 14 }}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#374151", textTransform: "uppercase", marginBottom: 5 }}>Fecha del informe</div>
+        <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+          style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
+      </div>
+      <button onClick={() => imprimirAuditoria(fecha, logs)} disabled={!logs.length}
+        style={{ width: 210, padding: "10px 18px", border: "none", borderRadius: 8, background: logs.length ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: logs.length ? "pointer" : "not-allowed" }}>
+        Generar informe
+      </button>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+      <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>USUARIO ACTUAL</div><div style={{ fontWeight: 900, marginTop: 4 }}>{currentUser?.nombre || "-"}</div></div>
+      <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>USUARIOS CON ACTIVIDAD</div><div style={{ fontSize: 22, fontWeight: 900, color: "#0f766e" }}>{Object.keys(grupos).length}</div></div>
+      <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>INGRESOS</div><div style={{ fontSize: 22, fontWeight: 900, color: "#2563eb" }}>{ingresos}</div></div>
+      <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>MODIFICACIONES</div><div style={{ fontSize: 22, fontWeight: 900, color: "#d97706" }}>{modificaciones}</div></div>
+    </div>
+
+    {cargando && <div style={{ color: "#6b7280", fontSize: 13 }}>Cargando auditoria...</div>}
+    {error && <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: 13 }}>Error al leer auditoria: {error}</div>}
+    {!cargando && !error && logs.length === 0 && <div style={{ color: "#6b7280", fontSize: 13 }}>No hay movimientos registrados para esta fecha.</div>}
+
+    <div style={{ display: "grid", gap: 10, maxHeight: 520, overflow: "auto" }}>
+      {Object.entries(grupos).map(([usuario, items]) => <div key={usuario} style={{ border: "1px solid #d1d5db", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+        <div style={{ background: "#f3f4f6", padding: "10px 12px", fontWeight: 900, color: "#111827" }}>{usuario} <span style={{ color: "#6b7280", fontWeight: 700 }}>- {items.length} accion(es)</span></div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead><tr style={{ background: "#f9fafb" }}><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Hora</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Accion</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Entidad</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Detalle</th></tr></thead>
+          <tbody>{items.map(log => <tr key={log.id}>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>{formatFechaHora(log.creado)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", fontWeight: 800 }}>{accionTexto(log.accion)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(log.entidad)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(detalleAuditoria(log.detalle))}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>)}
+    </div>
+  </div>;
+}
+
+export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser }) {
   const comites = useMemo(() => mergeComites(comitesSupa), [comitesSupa]);
   const [comiteSelId, setComiteSelId] = useState("");
   const comiteSel = comites.find(c => c.codigo === comiteSelId || c.id === comiteSelId) || null;
@@ -400,6 +546,10 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
 
       <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes y el programa que debe informar cada uno" color="#2563eb">
         <PanelIndividual personas={personas} solicitudes={solicitudes} />
+      </Section>
+
+      <Section title="Informe diario de usuarios" subtitle="Ingresos al sistema y modificaciones realizadas por cada usuario en una fecha" color="#0f766e">
+        <PanelAuditoriaUsuarios currentUser={currentUser} />
       </Section>
 
       <Section title="Informe CSP Rural" subtitle="Construcción Sitio Propio Rural - selecciona comité, contenido y detalle de documentos" color="#d97706">

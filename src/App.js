@@ -6758,9 +6758,25 @@ export default function App() {
   const [programasCustom, setProgramasCustom] = useState([]);
   const [currentUser, setCurrentUser] = useState(() => DB.get("serviu_user"));
 
-  const login = (usuario) => {
+  const login = async (usuario) => {
     setCurrentUser(usuario);
     DB.set("serviu_user", usuario);
+    try {
+      const { error } = await supabase.rpc("registrar_auditoria", {
+        p_user_id: usuario.id,
+        p_accion: "ingreso_sistema",
+        p_entidad: "app_users",
+        p_entidad_id: usuario.id,
+        p_detalle: {
+          usuario: usuario.username,
+          nombre: usuario.nombre,
+          navegador: navigator.userAgent?.slice(0, 120) || "",
+        },
+      });
+      if (error) console.warn("[auditoria login]", error.message);
+    } catch (err) {
+      console.warn("[auditoria login]", err.message);
+    }
   };
 
   const logout = () => {
@@ -7131,7 +7147,7 @@ export default function App() {
         }} />}
         {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} onDetail={goDetail} />}
         {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
-        {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} />}
+        {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} />}
       </main>
     </div>
   );
