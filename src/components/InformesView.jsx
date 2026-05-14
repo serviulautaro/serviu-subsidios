@@ -534,10 +534,22 @@ function PanelAuditoriaUsuarios({ currentUser }) {
   </div>;
 }
 
-export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser }) {
+export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser, soloAuditoria = false }) {
   const comites = useMemo(() => mergeComites(comitesSupa), [comitesSupa]);
   const [comiteSelId, setComiteSelId] = useState("");
   const comiteSel = comites.find(c => c.codigo === comiteSelId || c.id === comiteSelId) || null;
+
+  if (soloAuditoria) {
+    return <div style={{ padding: 24, background: "#f3f4f6", minHeight: "100vh" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <h1 style={{ margin: "0 0 6px", color: "#111827" }}>Auditoría diaria</h1>
+        <div style={{ color: "#6b7280", marginBottom: 22 }}>Ingresos al sistema y modificaciones realizadas por cada usuario.</div>
+        <Section title="Informe diario de usuarios" subtitle="Selecciona una fecha y genera el informe solo cuando sea necesario" color="#0f766e">
+          <PanelAuditoriaUsuarios currentUser={currentUser} />
+        </Section>
+      </div>
+    </div>;
+  }
 
   return <div style={{ padding: 24, background: "#f3f4f6", minHeight: "100vh" }}>
     <div style={{ maxWidth: 1180, margin: "0 auto" }}>
@@ -546,10 +558,6 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
 
       <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes y el programa que debe informar cada uno" color="#2563eb">
         <PanelIndividual personas={personas} solicitudes={solicitudes} />
-      </Section>
-
-      <Section title="Informe diario de usuarios" subtitle="Ingresos al sistema y modificaciones realizadas por cada usuario en una fecha" color="#0f766e">
-        <PanelAuditoriaUsuarios currentUser={currentUser} />
       </Section>
 
       <Section title="Informe CSP Rural" subtitle="Construcción Sitio Propio Rural - selecciona comité, contenido y detalle de documentos" color="#d97706">

@@ -49,6 +49,26 @@ const formatPesosChilenos = (value) => {
   return digits ? "$" + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
 };
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const DOC_CORREO_SOLICITANTE = { nombre: "Correo del solicitante", obligatorio: true, requiereTexto: true, etiquetaTexto: "Correo electrónico" };
+const asegurarCorreoSolicitante = (documentos = []) => {
+  const docs = Array.isArray(documentos) ? documentos : [];
+  const tieneCorreo = docs.some(d => {
+    const n = docNombreNorm(d);
+    return n.includes("correo") && n.includes("solicitante");
+  });
+  return tieneCorreo ? docs : [...docs, { ...DOC_CORREO_SOLICITANTE, entregado: false, valor: "" }];
+};
+const rutColoresDesdeSolicitudes = (sols = []) => {
+  for (const sol of sols || []) {
+    for (const doc of sol.documentos || []) {
+      const n = docNombreNorm(doc);
+      if (!n.includes("cedula")) continue;
+      const valor = String(doc.valor || "").split("|")[2];
+      if (valor) return valor;
+    }
+  }
+  return "";
+};
 const docTieneValor = (doc) => !!((doc?.valor || "").toString().trim() || doc?.entregado || doc?.archivo || doc?.url);
 const docCompletoEquivalente = (doc, docs = []) => {
   if (docTieneValor(doc)) return true;
@@ -113,6 +133,7 @@ const PROGRAMAS = [
     color: "#2563EB", colorLight: "#EFF6FF", icon: "H",
     documentos: [
       { nombre: "Cedula de identidad (escaneada a color)", obligatorio: true },
+      { ...DOC_CORREO_SOLICITANTE },
       { nombre: "Titulo de dominio / Derecho real de uso / Usufructo / Goce de tierra", obligatorio: true },
       { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
       { nombre: "Informe DOM", obligatorio: false, valor: "" },
@@ -128,6 +149,7 @@ const PROGRAMAS = [
     color: "#059669", colorLight: "#ECFDF5", icon: "U",
     documentos: [
       { nombre: "Cedula de identidad", obligatorio: true },
+      { ...DOC_CORREO_SOLICITANTE },
       { nombre: "Titulo de dominio del terreno", obligatorio: true },
       { nombre: "Registro Social de Hogares en la comuna", obligatorio: true },
       { nombre: "Fecha de nacimiento", obligatorio: true },
@@ -147,6 +169,7 @@ const PROGRAMAS = [
     color: "#D97706", colorLight: "#FFFBEB", icon: "R",
     documentos: [
       { nombre: "Cedula de identidad", obligatorio: true },
+      { ...DOC_CORREO_SOLICITANTE },
       { nombre: "Dominio de la propiedad", obligatorio: true },
       { nombre: "Registro Social de Hogares en la comuna", obligatorio: true },
       { nombre: "Certificado de ruralidad", obligatorio: true },
@@ -467,6 +490,7 @@ function toDbFields(form) {
     movilidadReducida:      "movilidadreducida",
     credencialDiscapacidad: "credencialdiscapacidad",
     cuentaAhorro:           "cuentaahorro",
+    rutColores:             "rutcolores",
     subsidioAnterior:       "subsidio_anterior",
     estadoCivil:            "estadocivil",
     ahorroPostular:         "ahorropostular",
@@ -1245,6 +1269,7 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
             {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId))}
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
+            {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
             {campo("Fecha de Nacimiento", fmtFecha(persona.fechaNacimiento))}
             {campo("Dirección", persona.direccion)}
             {campo("Coordenadas", persona.coordenadas)}
@@ -1568,6 +1593,7 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
             {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId))}
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
+            {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
             {campo("Fecha de Nacimiento", fmtFecha(persona.fechaNacimiento))}
             {campo("Dirección", persona.direccion)}
             {campo("Coordenadas", persona.coordenadas)}
@@ -1821,6 +1847,7 @@ function FichaProgramaCustom({ persona, programa, solicitud }) {
   const datos = [
     dato("Nombre", persona.nombre),
     dato("Cédula de identidad", persona.rut),
+    dato("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(solicitud ? [solicitud] : [])),
     dato("Fecha de ingreso", persona.fechaIngreso || persona.fecha_ingreso),
     dato("Fecha de nacimiento", persona.fechaNacimiento || persona.fecha_nacimiento),
     dato("Teléfono", persona.telefono),
@@ -1952,6 +1979,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const persona = personas.find(p => p.id === personaId);
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
+  const misSols = solicitudes.filter(s => s.personaId === personaId);
 
   const cargarVisitas = async () => {
     try {
@@ -2128,6 +2156,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       movilidadReducida:     "movilidadreducida",
       credencialDiscapacidad:"credencialdiscapacidad",
       cuentaAhorro:          "cuentaahorro",
+      rutColores:            "rutcolores",
       subsidioAnterior:      "subsidio_anterior",
       estadoCivil:           "estadocivil",
       ahorroPostular:        "ahorropostular",
@@ -2170,9 +2199,28 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (Object.keys(updates).length > 0) syncPersona(updates);
   }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!personaId || misSols.length === 0) return;
+    let cambio = false;
+    const actualizadas = solicitudes.map(s => {
+      if (s.personaId !== personaId) return s;
+      const docs = asegurarCorreoSolicitante(s.documentos);
+      if (docs === s.documentos) return s;
+      cambio = true;
+      return { ...s, documentos: docs };
+    });
+    if (!cambio) return;
+    onSaveSolicitudes(actualizadas);
+    actualizadas
+      .filter(s => s.personaId === personaId)
+      .forEach(s => {
+        supabase.from("solicitudes").update({ documentos: s.documentos }).eq("id", s.id)
+          .then(({ error }) => { if (error) console.warn("[correo solicitante]", error.message); });
+      });
+  }, [personaId, solicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!persona) return null;
 
-  const misSols = solicitudes.filter(s => s.personaId === personaId);
   const comite = comites.find(c => c.id === persona.comiteId);
 
   // Registra un archivo en Supabase asociado al solicitante
@@ -2657,7 +2705,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const nueva = {
       id: uid(), personaId, personaNombre: persona.nombre,
       programaId: prog.id, fecha: today(),
-      documentos: prog.documentos.map(d => ({
+      documentos: asegurarCorreoSolicitante(prog.documentos).map(d => ({
         nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
         tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null
       }))
@@ -3129,6 +3177,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 {campo("Fecha Recepción", getVal("fecha_recepcion","fechaRecepcion"))}
                 {campo("Nombre", persona.nombre)}
                 {campo("Cédula de identidad", persona.rut)}
+                {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
                 {campo("Teléfono", persona.telefono)}
                 {campo("U/R", getVal("tipo_comite","tipoComite") || persona.tipo)}
                 {campo("Comunidad/Dirección", persona.direccion)}
@@ -3365,6 +3414,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           const edad = calcularEdad(p[1]);
                           db.adultomayor = lc.adultoMayor = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : "";
                         }
+                        if (p[2]) { db.rutcolores = p[2].trim(); lc.rutColores = p[2].trim(); }
+                      }
+                      if (n.includes("correo") && n.includes("solicitante") && v.trim()) {
+                        db.email = v.trim();
+                        lc.email = v.trim();
                       }
                       // Fecha de nacimiento sola
                       if (n.includes("fecha de nacimiento") && v.length === 10) {
@@ -3489,6 +3543,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   const esAhorro    = nomDoc.includes("ahorro");
                   const esRsh       = nomDoc.includes("rsh") || nomDoc.includes("registro social");
                   const esIngreso   = nomDoc.includes("ingreso familiar") || nomDoc.includes("ingreso");
+                  const esCorreo    = nomDoc.includes("correo") && nomDoc.includes("solicitante");
 
                   // Valor extra guardado en doc.valor como JSON cuando hay múltiples campos
                   const valObj = (() => { try { return doc.valor ? JSON.parse(doc.valor) : {}; } catch { return { raw: doc.valor }; } })();
@@ -3504,8 +3559,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   const ahorroOk    = esAhorro  ? (archivoOk && !!(valObj.numeroCuenta || "").trim()) : true;
                   const rshOk       = esRsh     ? !!(valObj.porcentaje || doc.valor || "").toString().trim() : true;
                   const ingresoOk   = esIngreso ? !!(valObj.monto || doc.valor || "").toString().trim() : true;
+                  const correoOk    = esCorreo  ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((doc.valor || persona.email || "").trim()) : true;
                   const archivoReqOk = reqArch || esCedula || esAhorro ? archivoOk : true;
-                  const requisitosOk = archivoReqOk && textoOk && cedulaOk && ahorroOk && rshOk && ingresoOk;
+                  const requisitosOk = archivoReqOk && textoOk && cedulaOk && ahorroOk && rshOk && ingresoOk && correoOk;
 
                   const bgColor    = doc.entregado ? "#ECFDF5" : requisitosOk ? "#FFFBEB" : "#FAFAFA";
                   const bordeColor = doc.entregado ? "#6EE7B7" : requisitosOk ? "#FCD34D" : "#e5e7eb";
@@ -3632,6 +3688,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             </div>
                           )}
 
+                          {/* CORREO: obligatorio y sincronizado a ficha */}
+                          {esCorreo && (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <input value={doc.valor || persona.email || ""} placeholder="correo@ejemplo.cl"
+                                onChange={async e => {
+                                  const v = e.target.value.trim();
+                                  await guardarValorYFicha(v, "email", v);
+                                  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) await marcarVB();
+                                }}
+                                style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
+                              {!correoOk && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa correo válido</div>}
+                            </div>
+                          )}
+
                           {/* Documento genérico con archivo */}
                           {reqArch && !esCedula && !esAhorro && (
                             <label style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#f0f0f0", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: archivoOk ? "#059669" : "#555" }}>
@@ -3649,7 +3719,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           )}
 
                           {/* Texto adicional genérico */}
-                          {reqTxt && !esRsh && !esIngreso && !esAhorro && (
+                          {reqTxt && !esRsh && !esIngreso && !esAhorro && !esCorreo && (
                             <div style={{ display: "flex", gap: 5 }}>
                               <input value={doc.valor || ""} placeholder={doc.etiquetaTexto || "Ingresar valor..."}
                                 onChange={e => guardarValorYFicha(e.target.value, null, null)}
@@ -3658,7 +3728,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           )}
 
                           {/* Solo checkbox */}
-                          {!reqArch && !reqTxt && !esCedula && !esAhorro && !esRsh && !esIngreso && (
+                          {!reqArch && !reqTxt && !esCedula && !esAhorro && !esRsh && !esIngreso && !esCorreo && (
                             <button onClick={marcarVB} style={{ marginTop: 2, padding: "4px 12px", borderRadius: 6, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 11, cursor: "pointer" }}>Marcar VB</button>
                           )}
 
@@ -3752,6 +3822,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esAvaluo = esCsp && nom.includes("avaluo");
                 const esInfoPrevias = esCsp && nom.includes("informaciones previas");
                 const esAntecedentesVivienda = esCsp && nom.includes("antecedentes de la vivienda");
+                const esCorreoSolicitante = nom.includes("correo") && nom.includes("solicitante");
 
                 // Tipo de dominio: "DV" | "DRU" | "Usufructo" | "Goce con resolución" | "Goce sin resolución" | "Otro|descripción"
                 const tituloPartes = esTituloDominio ? (doc.valor || "").split("|") : [];
@@ -3781,6 +3852,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const cedCompleto = !!(cedRutValido && cedFecha.trim());
                 // Compatibilidad backward (código que usa cedulaRut)
                 const cedulaRut = cedRut;
+
+                const correoSolicitante = esCorreoSolicitante ? (doc.valor || persona.email || "").trim() : "";
+                const correoCompleto = esCorreoSolicitante ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoSolicitante) : true;
 
                 // Certificado de ruralidad: "numero|YYYY-MM-DD"
                 const certRuralPartes = esCertRuralidad ? (doc.valor || "").split("|") : [];
@@ -3873,6 +3947,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   : esAvaluo && !avaluoCompleto ? "Ingresa rol y valor de avalúo primero"
                   : esInfoPrevias && !infoCompleto ? "Ingresa N° y año del documento primero"
                   : esAntecedentesVivienda && !antecCompleto ? "Ingresa N° y año del documento primero"
+                  : esCorreoSolicitante && !correoCompleto ? "Ingresa correo electrónico válido"
                   : esLuz && !nClienteLuz.trim() ? "Ingresa el N° de cliente de electricidad primero"
                   : "Sube el documento primero";
 
@@ -3884,6 +3959,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   (esAvaluo && !avaluoCompleto && !doc.entregado) ||
                   (esInfoPrevias && !infoCompleto && !doc.entregado) ||
                   (esAntecedentesVivienda && !antecCompleto && !doc.entregado) ||
+                  (esCorreoSolicitante && !correoCompleto && !doc.entregado) ||
                   (esTituloDominio && !tituloTipo && !doc.entregado) ||
                   (esDocArchivo && !esTituloDominio && !esDominioProp && !esCedula && !esAvaluo && !esInfoPrevias && !esAntecedentesVivienda && !esCertRuralidad && !tieneArchivo && !doc.entregado) ||
                   (esDocArchivo && (esTituloDominio || esDominioProp || esCedula || esAvaluo || esInfoPrevias || esAntecedentesVivienda || esCertRuralidad) && !tieneArchivo && (tituloTipo || dominioTipo || cedCompleto || avaluoCompleto || infoCompleto || antecCompleto || certRuralCompleto) && !doc.entregado) ||
@@ -4316,11 +4392,34 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       </div>
                     )}
 
+                    {/* Correo del solicitante */}
+                    {esCorreoSolicitante && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <input type="email" placeholder="correo@ejemplo.cl" value={correoSolicitante}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const val = e.target.value.trim();
+                            const completo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+                            const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
+                              ...s,
+                              documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: val, entregado: completo })
+                            });
+                            onSaveSolicitudes(nuevasSols);
+                            await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
+                            if (val) await syncPersona({ email: val });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (correoCompleto ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        {!correoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa correo electrónico válido para habilitar el VB</div>}
+                        {correoCompleto && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✓ Correo guardado en ficha</div>}
+                      </div>
+                    )}
+
                     {/* Cédula: cédula de identidad + Fecha de Nacimiento */}
                     {esCedula && (() => {
                       const cedPartes2 = (doc.valor || "").split("|");
                       const rut2 = cedPartes2[0] || persona.rut || "";
                       const fecha2 = cedPartes2[1] || "";
+                      const tipoRut2 = cedPartes2[2] || persona.rutColores || persona.rutcolores || "";
                       // fecha2 es YYYY-MM-DD
                       const [fY, fM, fD] = fecha2 ? fecha2.split("-") : ["","",""];
                       const guardarCedula = async (rut, dia, mes, anio) => {
@@ -4328,7 +4427,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           ? anio+"-"+mes+"-"+dia : (anio+"-"+mes+"-"+dia).replace(/^-+|-+$/g,"") || "";
                         const rutOk = rutFormatoChilenoValido(rut);
                         const rutFinal = rutOk ? formatRut(rut) : rut;
-                        const newValor = rutFinal + "|" + fechaCompleta;
+                        const newValor = rutFinal + "|" + fechaCompleta + "|" + tipoRut2;
                         onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : { ...d2, valor: newValor, entregado: !!(rutOk && fechaCompleta.length===10) }) }));
                         if (fechaCompleta.length===10) {
                           const edad = calcularEdad(fechaCompleta);
@@ -4364,6 +4463,29 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         {!rut2Valido && <div style={{ fontSize: 10, color: "#DC2626", marginTop: 2 }}>⚠ La cédula debe ser chilena válida, con puntos, guion y dígito verificador correcto.</div>}
                         {!(rut2Valido && fecha2.length===10) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>⚠ Ingresa cédula de identidad válida y fecha completa para habilitar el upload</div>}
                         {rut2Valido && fecha2.length===10 && <div style={{ fontSize: 10, color: "#059669" }}>✓ Cédula de identidad: {formatRut(rut2)} — Nacimiento: {fD}/{fM}/{fY}</div>}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginTop: 2 }}>
+                          {[
+                            ["RUT colores", "ok"],
+                            ["RUT ByN", "falta rut colores"],
+                          ].map(([label, valor]) => (
+                            <button key={valor} type="button"
+                              onClick={async e => {
+                                e.stopPropagation();
+                                const newValor = formatRut(rut2) + "|" + fecha2 + "|" + valor;
+                                const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
+                                  ...s,
+                                  documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                                });
+                                onSaveSolicitudes(nuevasSols);
+                                await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
+                                await syncPersona({ rutColores: valor });
+                              }}
+                              style={{ padding: "6px 8px", borderRadius: 6, border: "2px solid " + (tipoRut2 === valor ? "#059669" : "#d1d5db"), background: tipoRut2 === valor ? "#ECFDF5" : "#fff", color: tipoRut2 === valor ? "#047857" : "#374151", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {tipoRut2 && <div style={{ fontSize: 10, color: tipoRut2 === "ok" ? "#059669" : "#B45309", fontWeight: 700 }}>Estado en ficha: {tipoRut2 === "ok" ? "rut colores=ok" : "rut ByN=falta rut colores"}</div>}
                       </div>
                       );
                     })()}
@@ -6870,6 +6992,7 @@ export default function App() {
           credencialDiscapacidad:x.credencialdiscapacidad || "",
           cuentaAhorro:          x.cuentaahorro || "",
           banco:                 x.banco || "",
+          rutColores:            x.rutcolores || "",
           subsidioAnterior:      x.subsidio_anterior || "",
           estadoCivil:           x.estadocivil || "",
           ahorroPostular:        x.ahorropostular || "",
@@ -7040,6 +7163,7 @@ export default function App() {
     ["programas", "Programas"],
     ["solicitudes", "Solicitudes"],
     ["informes", "Informes"],
+    ["auditoria", "Auditoría"],
   ];
 
   const navActivo = (k) =>
@@ -7160,6 +7284,7 @@ export default function App() {
         {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} onDetail={goDetail} />}
         {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
         {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} />}
+        {!cargando && view === "auditoria" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
       </main>
     </div>
   );
