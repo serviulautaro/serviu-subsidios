@@ -94,7 +94,10 @@ const docCompletoEquivalente = (doc, docs = []) => {
   }
   return false;
 };
-const pct = (docs = []) => docs.length ? Math.round(docs.filter(d => docCompletoEquivalente(d, docs)).length / docs.length * 100) : 0;
+const pct = (docs = []) => {
+  const visibles = (docs || []).filter(d => !d.interno);
+  return visibles.length ? Math.round(visibles.filter(d => docCompletoEquivalente(d, visibles)).length / visibles.length * 100) : 0;
+};
 const statusColor = (p) => p === 100 ? "#059669" : p >= 50 ? "#D97706" : "#DC2626";
 const statusLabel = (p) => p === 100 ? "Completo" : p >= 50 ? "En proceso" : "Incompleto";
 const statusBg = (p) => p === 100 ? "#ECFDF5" : p >= 50 ? "#FFFBEB" : "#FEF2F2";
@@ -114,13 +117,16 @@ const ESTADO_DESMARQUE = {
   "EN DOM POR RETIRAR":        { color: "#C2185B", bg: "#FCE4EC", label: "En DOM por retirar" },
   "POSTULANDO":                { color: "#059669", bg: "#ECFDF5", label: "Postulando" },
   "APELAR SERVIU":             { color: "#B45309", bg: "#FFFBEB", label: "Apelar SERVIU" },
+  "RECHAZADO APELABLE":        { color: "#B45309", bg: "#FFFBEB", label: "Rechazado apelable" },
+  "RECHAZADO DOM":             { color: "#DC2626", bg: "#FEF2F2", label: "Rechazado DOM" },
+  "DESMARQUE RECHAZADO":       { color: "#DC2626", bg: "#FEF2F2", label: "Desmarque rechazado" },
   "NO VISITADO":               { color: "#555", bg: "#F5F5F5", label: "No Visitado" },
 };
 
 // Calcula estado desmarque automáticamente según documentos ingresados
 const calcularEstadoDesmarque = (sol, estadoActual) => {
   if (!sol || sol.programaId !== "habitabilidad") return estadoActual;
-  if (["NO CALIFICA","APELAR SERVIU","DESMARCADO"].includes(estadoActual)) return estadoActual;
+  if (["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO"].includes(estadoActual)) return estadoActual;
   const docs = sol.documentos || [];
   const tieneCarta = docs.some(d => d.nombre && d.nombre.includes("Carta SERVIU") && d.entregado && d.valor);
   const tieneMemo = docs.some(d => d.nombre && d.nombre.includes("Memo DOM") && d.entregado && d.valor);
@@ -129,6 +135,55 @@ const calcularEstadoDesmarque = (sol, estadoActual) => {
   if (tieneMemo) return "INFORME EN DOM";
   if (tieneVisita) return "VISITA HECHA FALTA INFORME";
   return estadoActual || "NO VISITADO";
+};
+
+const DOC_CALIFICACION_DESMARQUE = "Calificacion para visita";
+const docsDesmarqueObligatorios = (docs = []) => docs.filter(d => {
+  const n = docNombreNorm(d);
+  return n.includes("cedula") ||
+    n.includes("titulo") || n.includes("dominio") || n.includes("derecho real") || n.includes("usufructo") || n.includes("goce") ||
+    n.includes("avaluo") ||
+    (n.includes("correo") && n.includes("solicitante"));
+});
+const buscarDocDesmarque = (docs = [], patterns = []) => docs.find(d => {
+  const n = docNombreNorm(d);
+  return patterns.every(p => n.includes(p));
+});
+const docCalificacionDesmarque = (docs = []) => docs.find(d => docNombreNorm(d).includes("calificacion para visita"));
+const leerCalificacionDesmarque = (sol) => {
+  const raw = String(docCalificacionDesmarque(sol?.documentos || [])?.valor || "");
+  const [estado, ...detalle] = raw.split("|");
+  return { estado: estado || "", detalle: detalle.join("|") || "" };
+};
+const valorDocTexto = (doc) => String(doc?.valor || "").toUpperCase();
+const estadoLineaDesmarque = (sol = {}) => {
+  const docs = sol.documentos || [];
+  const docsObligatorios = docsDesmarqueObligatorios(docs);
+  const docsCompletos = docsObligatorios.length > 0 && docsObligatorios.every(d => docCompletoEquivalente(d, docs));
+  const calificacion = leerCalificacionDesmarque(sol);
+  const visitado = !!(sol.fecha_visita || "").trim();
+  const memoDom = buscarDocDesmarque(docs, ["memo", "dom"]);
+  const solicitudDom = docCompletoEquivalente(memoDom, docs);
+  const informeDom = buscarDocDesmarque(docs, ["informe", "dom"]);
+  const informeTexto = valorDocTexto(informeDom);
+  const informeAprobado = informeTexto.includes("APROBADO");
+  const informeRechazadoApelable = informeTexto.includes("APELAR") || informeTexto.includes("APELABLE");
+  const informeRechazado = informeTexto.includes("RECHAZADO") && !informeRechazadoApelable;
+  const cartaServiu = buscarDocDesmarque(docs, ["carta", "serviu"]);
+  const ingresadoServiu = docCompletoEquivalente(cartaServiu, docs);
+  const respuestaServiu = buscarDocDesmarque(docs, ["respuesta", "serviu"]);
+  const respuestaTexto = valorDocTexto(respuestaServiu);
+  const desmarcado = respuestaTexto.includes("DESMARCADO") || respuestaTexto.includes("APROBADO");
+  const serviuRechazadoApelable = respuestaTexto.includes("APELAR") || respuestaTexto.includes("APELABLE");
+  const serviuRechazado = respuestaTexto.includes("RECHAZADO") && !serviuRechazadoApelable;
+  let corte = "";
+  if (calificacion.estado === "NO_CALIFICA") corte = "NO_CALIFICA";
+  if (informeRechazado) corte = "RECHAZADO_DOM";
+  if (serviuRechazado || serviuRechazadoApelable || desmarcado) corte = "FINAL";
+  return {
+    docsCompletos, calificacion, visitado, solicitudDom, informeAprobado, informeRechazadoApelable,
+    informeRechazado, ingresadoServiu, desmarcado, serviuRechazadoApelable, serviuRechazado, corte,
+  };
 };
 
 const PROGRAMAS = [
@@ -571,6 +626,54 @@ function Modal({ title, onClose, children }) {
       </div>
     </div>
   );
+}
+
+function LineaAvanceDesmarque({ sol }) {
+  const st = estadoLineaDesmarque(sol);
+  const paso = (label, estado, detalle = "") => ({ label, estado, detalle });
+  const pasos = [
+    paso("Ingresa solicitante", "done", "Cédula de identidad inicial"),
+    paso("Documentos obligatorios", st.docsCompletos ? "done" : "pending", "Cédula color, dominio, avalúo y correo"),
+  ];
+
+  if (st.calificacion.estado === "NO_CALIFICA") {
+    pasos.push(paso("NO CALIFICA", "stop-red", st.calificacion.detalle));
+  } else {
+    pasos.push(paso("Califica para visita", st.calificacion.estado === "CALIFICA" ? "done" : "pending", "Revisión manual"));
+    pasos.push(paso("Listo para visita", st.docsCompletos && st.calificacion.estado === "CALIFICA" ? "done" : "pending"));
+    pasos.push(paso("Solicitante visitado", st.visitado ? "done" : "pending"));
+    pasos.push(paso("Solicitud en DOM", st.solicitudDom ? "done" : "pending", "Memo DOM y recibido"));
+    if (st.informeRechazado) pasos.push(paso("RECHAZADO DOM", "stop-red"));
+    else if (st.informeRechazadoApelable) pasos.push(paso("Informe DOM rechazado apelable", "warn"));
+    else pasos.push(paso("Informe DOM aprobado", st.informeAprobado ? "done" : "pending"));
+    pasos.push(paso("Ingresado a SERVIU", st.ingresadoServiu ? "done" : "pending", "Carta y comprobante"));
+    if (st.desmarcado) pasos.push(paso("DESMARCADO", "final-green"));
+    else if (st.serviuRechazadoApelable) pasos.push(paso("RECHAZADO APELABLE", "warn"));
+    else if (st.serviuRechazado) pasos.push(paso("DESMARQUE RECHAZADO", "stop-red"));
+    else pasos.push(paso("Respuesta SERVIU", "pending"));
+  }
+
+  const styles = {
+    done: { bg: "#ECFDF5", border: "#10B981", color: "#047857" },
+    pending: { bg: "#F9FAFB", border: "#D1D5DB", color: "#6B7280" },
+    warn: { bg: "#FFFBEB", border: "#F59E0B", color: "#B45309" },
+    "stop-red": { bg: "#FEF2F2", border: "#DC2626", color: "#B91C1C" },
+    "final-green": { bg: "#E0F7FA", border: "#0891B2", color: "#0E7490" },
+  };
+
+  return <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: "1px solid #dbeafe", background: "#f8fbff" }}>
+    <div style={{ fontSize: 12, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Línea de avance Desmarque de Vivienda</div>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {pasos.map((p, idx) => {
+        const s = styles[p.estado] || styles.pending;
+        return <div key={idx} title={p.detalle || p.label} style={{ minWidth: 135, flex: "1 1 135px", border: "1.5px solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: "8px 10px" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: s.color, opacity: .8 }}>PASO {idx + 1}</div>
+          <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{p.label}</div>
+          {p.detalle && <div style={{ fontSize: 10, marginTop: 4, color: s.color, opacity: .85 }}>{p.detalle}</div>}
+        </div>;
+      })}
+    </div>
+  </div>;
 }
 
 function PromptModal({ mensaje, onConfirm, onCancel }) {
@@ -2442,13 +2545,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     await new Promise(r => setTimeout(r, 50));
     let nuevoEstado = persona.estado_desmarque;
     if (res === "APROBADO") nuevoEstado = "INFORME EN SERVIU";
-    else if (res === "RECHAZADO_APELABLE") nuevoEstado = "APELAR SERVIU";
-    else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "NO CALIFICA";
+    else if (res === "RECHAZADO_APELABLE") nuevoEstado = "RECHAZADO APELABLE";
+    else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "RECHAZADO DOM";
     try {
       const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
       const solDb = solsDb && solsDb[0];
       if (solDb) {
-        const etiqueta = res === "APROBADO" ? "✓ APROBADO" : res === "RECHAZADO_APELABLE" ? "✗ RECHAZADO - APELAR" : "✗ RECHAZADO SIN APELACIÓN";
+        const etiqueta = res === "APROBADO" ? "INFORME DOM APROBADO" : res === "RECHAZADO_APELABLE" ? "INFORME DOM RECHAZADO APELABLE" : "INFORME DOM RECHAZADO";
         const docsActualizados = (solDb.documentos || []).map(d =>
           d.nombre && d.nombre.includes("Informe DOM")
             ? { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true }
@@ -2472,15 +2575,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     await new Promise(r => setTimeout(r, 50));
     let nuevoEstado = persona.estado_desmarque;
     if (res === "APROBADO") nuevoEstado = "DESMARCADO";
-    else if (res === "RECHAZADO_APELABLE") nuevoEstado = "APELAR SERVIU";
-    else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "NO CALIFICA";
+    else if (res === "RECHAZADO_APELABLE") nuevoEstado = "RECHAZADO APELABLE";
+    else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "DESMARQUE RECHAZADO";
     try {
       const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
       const solDb = solsDb && solsDb[0];
       if (solDb) {
-        const etiqueta = res === "APROBADO" ? "✓ APROBADO - DESMARCADO"
-          : res === "RECHAZADO_APELABLE" ? "✗ RECHAZADO - PARA APELAR"
-          : "✗ RECHAZADO SIN APELACIÓN";
+        const etiqueta = res === "APROBADO" ? "DESMARCADO"
+          : res === "RECHAZADO_APELABLE" ? "RECHAZADO APELABLE"
+          : "DESMARQUE RECHAZADO";
         const docsActualizados = (solDb.documentos || []).map(d =>
           d.nombre && d.nombre.includes("Respuesta SERVIU")
             ? { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true }
@@ -2528,7 +2631,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? solActualizada : s));
       await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", sol.id);
       // Auto-cambiar estado según datos ingresados
-      if (!["NO CALIFICA","APELAR SERVIU","DESMARCADO"].includes(persona.estado_desmarque)) {
+      if (!["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO"].includes(persona.estado_desmarque)) {
         const nuevoEstado = calcularEstadoDesmarque(solActualizada, persona.estado_desmarque);
         if (nuevoEstado !== persona.estado_desmarque) {
           await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
@@ -2557,6 +2660,29 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, entregado: true } : d);
     await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
     onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs } : s));
+  };
+
+  const guardarCalificacionDesmarque = async (sol, estado) => {
+    if (!sol) return;
+    let detalle = "";
+    if (estado === "NO_CALIFICA") {
+      detalle = window.prompt("Detalle por el que no califica:") || "";
+      if (!detalle.trim()) {
+        alert("Debe ingresar el detalle por el que no califica.");
+        return;
+      }
+    }
+    const valor = estado === "CALIFICA" ? "CALIFICA" : `NO_CALIFICA|${detalle.trim()}`;
+    const existe = (sol.documentos || []).some(d => docNombreNorm(d).includes("calificacion para visita"));
+    const documentos = existe
+      ? sol.documentos.map(d => docNombreNorm(d).includes("calificacion para visita") ? { ...d, valor, entregado: true } : d)
+      : [...(sol.documentos || []), { nombre: DOC_CALIFICACION_DESMARQUE, obligatorio: false, valor, entregado: true, interno: true }];
+    const nuevoEstado = estado === "NO_CALIFICA" ? "NO CALIFICA" : (persona.estado_desmarque || "NO VISITADO");
+    await supabase.from("solicitudes").update({ documentos }).eq("id", sol.id);
+    await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
+    onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? { ...s, documentos } : s));
+    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
+    await registrarAuditoria?.("calificar_desmarque", "solicitudes", sol.id, { solicitante: persona.nombre, resultado: estado, detalle });
   };
 
   const generarMemo = async () => {
@@ -2754,7 +2880,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     });
     onSaveSolicitudes(nuevasSols);
     // Actualizar estado automático si es desmarque
-    if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","DESMARCADO"].includes(persona.estado_desmarque)) {
+    if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO"].includes(persona.estado_desmarque)) {
       const sol = nuevasSols.find(s => s.id === solId);
       const nuevoEstado = calcularEstadoDesmarque(sol, persona.estado_desmarque);
       if (nuevoEstado !== persona.estado_desmarque) {
@@ -3381,7 +3507,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       {misSols.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
         const p = pct(sol.documentos);
-        const ok = sol.documentos.filter(d => d.entregado).length;
+        const docsVisiblesSol = (sol.documentos || []).filter(d => !d.interno);
+        const ok = docsVisiblesSol.filter(d => d.entregado).length;
         const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano";
         const esCustom = !!(prog && prog.esCustom);
         return (
@@ -3396,7 +3523,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ background: statusBg(p), color: statusColor(p), borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>{statusLabel(p)}</div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{sol.documentos.length}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{docsVisiblesSol.length}</div>
                 <button onClick={() => setSolsEditando(prev => ({ ...prev, [sol.id]: !prev[sol.id] }))}
                   style={{ padding: "5px 14px", borderRadius: 8, border: "1.5px solid " + (solsEditando[sol.id] ? "#059669" : "#1e3a5f"), background: solsEditando[sol.id] ? "#059669" : "#1e3a5f", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   {solsEditando[sol.id] ? "✓ Editando" : "✏ Editar"}
@@ -3517,6 +3644,22 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             <div style={{ height: 8, background: "#f0ede8", borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
               <div style={{ height: "100%", width: p + "%", background: statusColor(p), borderRadius: 4 }} />
             </div>
+            {sol.programaId === "habitabilidad" && (
+              <>
+                <LineaAvanceDesmarque sol={sol} />
+                {(() => {
+                  const st = estadoLineaDesmarque(sol);
+                  return <div style={{ marginBottom: 14, padding: "10px 14px", background: st.calificacion.estado === "NO_CALIFICA" ? "#FEF2F2" : st.calificacion.estado === "CALIFICA" ? "#ECFDF5" : "#F9FAFB", borderRadius: 8, border: "1px solid " + (st.calificacion.estado === "NO_CALIFICA" ? "#FCA5A5" : st.calificacion.estado === "CALIFICA" ? "#86EFAC" : "#E5E7EB"), display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 11, fontWeight: 900, color: "#374151", textTransform: "uppercase" }}>Calificación manual para visita</div>
+                    <button onClick={() => guardarCalificacionDesmarque(sol, "CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#059669", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Califica</button>
+                    <button onClick={() => guardarCalificacionDesmarque(sol, "NO_CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#DC2626", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>No califica</button>
+                    {st.calificacion.estado === "CALIFICA" && <span style={{ fontSize: 12, color: "#047857", fontWeight: 800 }}>✓ Solicitante califica para visita</span>}
+                    {st.calificacion.estado === "NO_CALIFICA" && <span style={{ fontSize: 12, color: "#B91C1C", fontWeight: 800 }}>NO CALIFICA: {st.calificacion.detalle}</span>}
+                    {!st.calificacion.estado && <span style={{ fontSize: 12, color: "#6B7280" }}>Pendiente de revisión manual</span>}
+                  </div>;
+                })()}
+              </>
+            )}
             {/* Campo Fecha de Visita inline para Desmarque */}
             {sol.programaId === "habitabilidad" && (
               <div style={{ marginBottom: 14, padding: "10px 14px", background: sol.fecha_visita ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (sol.fecha_visita ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
@@ -3527,7 +3670,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     const val = e.target.value;
                     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, fecha_visita: val });
                     onSaveSolicitudes(nuevasSols);
-                    if (val && !["NO CALIFICA","APELAR SERVIU","DESMARCADO","INFORME EN DOM","INFORME EN SERVIU"].includes(persona.estado_desmarque)) {
+                    if (val && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","INFORME EN DOM","INFORME EN SERVIU"].includes(persona.estado_desmarque)) {
                       const nuevoEstado = "VISITA HECHA FALTA INFORME";
                       if (nuevoEstado !== persona.estado_desmarque) {
                         await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
@@ -3543,6 +3686,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             )}
             {solsEditando[sol.id] && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {sol.documentos.map((doc, i) => {
+                if (doc.interno) return null;
                 // ── PROGRAMA PERSONALIZADO: renderizado genérico ──────────────
                 if (esCustom) {
                   const reqArch = !!doc.requiereArchivo;
