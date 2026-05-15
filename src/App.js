@@ -110,7 +110,13 @@ const apiPath = (prefix, routePath = "", fileName = "") =>
   API + prefix + encodeRoutePath(routePath) + (fileName ? "/" + encodePathPart(fileName) : "");
 const STORAGE_BUCKET = "documentos-solicitantes";
 const storageObjectPath = (carpeta = "", nombre = "") =>
-  [carpeta, nombre].filter(Boolean).join("/").replace(/^\/+/, "");
+  [carpeta, nombre]
+    .filter(Boolean)
+    .join("/")
+    .replace(/^\/+/, "")
+    .split("/")
+    .map(encodePathPart)
+    .join("/");
 const storagePublicUrl = (objectPath = "", bucket = STORAGE_BUCKET) =>
   objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl : "";
 const fileToDataUrl = (file) => new Promise((resolve, reject) => {

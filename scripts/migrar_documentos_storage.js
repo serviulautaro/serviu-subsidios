@@ -44,7 +44,10 @@ function contentType(file) {
 }
 
 function storagePath(localFile) {
-  return path.relative(DOCS_DIR, localFile).split(path.sep).join("/");
+  return path.relative(DOCS_DIR, localFile)
+    .split(path.sep)
+    .map((part) => encodeURIComponent(part).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase()))
+    .join("/");
 }
 
 function cleanRut(value) {
