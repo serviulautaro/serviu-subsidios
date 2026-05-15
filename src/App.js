@@ -156,6 +156,12 @@ const leerCalificacionDesmarque = (sol) => {
   return { estado: estado || "", detalle: detalle.join("|") || "" };
 };
 const valorDocTexto = (doc) => String(doc?.valor || "").toUpperCase();
+const detalleResultadoDoc = (doc) => {
+  const raw = String(doc?.valor || "");
+  if (!raw.trim()) return "";
+  const partes = raw.split(" - ");
+  return partes.length > 1 ? partes.slice(1).join(" - ").trim() : "";
+};
 const estadoLineaDesmarque = (sol = {}) => {
   const docs = sol.documentos || [];
   const docsObligatorios = docsDesmarqueObligatorios(docs);
@@ -166,6 +172,7 @@ const estadoLineaDesmarque = (sol = {}) => {
   const solicitudDom = docCompletoEquivalente(memoDom, docs);
   const informeDom = buscarDocDesmarque(docs, ["informe", "dom"]);
   const informeTexto = valorDocTexto(informeDom);
+  const informeDetalle = detalleResultadoDoc(informeDom);
   const informeAprobado = informeTexto.includes("APROBADO");
   const informeRechazadoApelable = informeTexto.includes("APELAR") || informeTexto.includes("APELABLE");
   const informeRechazado = informeTexto.includes("RECHAZADO") && !informeRechazadoApelable;
@@ -173,6 +180,7 @@ const estadoLineaDesmarque = (sol = {}) => {
   const ingresadoServiu = docCompletoEquivalente(cartaServiu, docs);
   const respuestaServiu = buscarDocDesmarque(docs, ["respuesta", "serviu"]);
   const respuestaTexto = valorDocTexto(respuestaServiu);
+  const respuestaDetalle = detalleResultadoDoc(respuestaServiu);
   const desmarcado = respuestaTexto.includes("DESMARCADO") || respuestaTexto.includes("APROBADO");
   const serviuRechazadoApelable = respuestaTexto.includes("APELAR") || respuestaTexto.includes("APELABLE");
   const serviuRechazado = respuestaTexto.includes("RECHAZADO") && !serviuRechazadoApelable;
@@ -182,7 +190,7 @@ const estadoLineaDesmarque = (sol = {}) => {
   if (serviuRechazado || serviuRechazadoApelable || desmarcado) corte = "FINAL";
   return {
     docsCompletos, calificacion, visitado, solicitudDom, informeAprobado, informeRechazadoApelable,
-    informeRechazado, ingresadoServiu, desmarcado, serviuRechazadoApelable, serviuRechazado, corte,
+    informeRechazado, informeDetalle, ingresadoServiu, desmarcado, serviuRechazadoApelable, serviuRechazado, respuestaDetalle, corte,
   };
 };
 
@@ -629,6 +637,7 @@ function Modal({ title, onClose, children }) {
 }
 
 function LineaAvanceDesmarque({ sol }) {
+  const [abiertos, setAbiertos] = useState({});
   const st = estadoLineaDesmarque(sol);
   const paso = (label, estado, detalle = "") => ({ label, estado, detalle });
   const pasos = [
@@ -643,13 +652,13 @@ function LineaAvanceDesmarque({ sol }) {
     pasos.push(paso("Listo para visita", st.docsCompletos && st.calificacion.estado === "CALIFICA" ? "done" : "pending"));
     pasos.push(paso("Solicitante visitado", st.visitado ? "done" : "pending"));
     pasos.push(paso("Solicitud en DOM", st.solicitudDom ? "done" : "pending", "Memo DOM y recibido"));
-    if (st.informeRechazado) pasos.push(paso("RECHAZADO DOM", "stop-red"));
-    else if (st.informeRechazadoApelable) pasos.push(paso("Informe DOM rechazado apelable", "warn"));
-    else pasos.push(paso("Informe DOM aprobado", st.informeAprobado ? "done" : "pending"));
+    if (st.informeRechazado) pasos.push(paso("RECHAZADO DOM", "stop-red", st.informeDetalle));
+    else if (st.informeRechazadoApelable) pasos.push(paso("Informe DOM rechazado apelable", "warn", st.informeDetalle));
+    else pasos.push(paso("Informe DOM aprobado", st.informeAprobado ? "done" : "pending", st.informeDetalle));
     pasos.push(paso("Ingresado a SERVIU", st.ingresadoServiu ? "done" : "pending", "Carta y comprobante"));
-    if (st.desmarcado) pasos.push(paso("DESMARCADO", "final-green"));
-    else if (st.serviuRechazadoApelable) pasos.push(paso("RECHAZADO APELABLE", "warn"));
-    else if (st.serviuRechazado) pasos.push(paso("DESMARQUE RECHAZADO", "stop-red"));
+    if (st.desmarcado) pasos.push(paso("DESMARCADO", "final-green", st.respuestaDetalle));
+    else if (st.serviuRechazadoApelable) pasos.push(paso("RECHAZADO APELABLE", "warn", st.respuestaDetalle));
+    else if (st.serviuRechazado) pasos.push(paso("DESMARQUE RECHAZADO", "stop-red", st.respuestaDetalle));
     else pasos.push(paso("Respuesta SERVIU", "pending"));
   }
 
@@ -666,10 +675,15 @@ function LineaAvanceDesmarque({ sol }) {
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {pasos.map((p, idx) => {
         const s = styles[p.estado] || styles.pending;
-        return <div key={idx} title={p.detalle || p.label} style={{ minWidth: 135, flex: "1 1 135px", border: "1.5px solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: "8px 10px" }}>
+        const tieneDetalle = !!(p.detalle || "").trim();
+        const abierto = !!abiertos[idx];
+        return <div key={idx} title={tieneDetalle ? "Pincha para ver/ocultar detalle" : p.label}
+          onClick={() => tieneDetalle && setAbiertos(prev => ({ ...prev, [idx]: !prev[idx] }))}
+          style={{ minWidth: 135, flex: "1 1 135px", border: "1.5px solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: "8px 10px", cursor: tieneDetalle ? "pointer" : "default" }}>
           <div style={{ fontSize: 10, fontWeight: 800, color: s.color, opacity: .8 }}>PASO {idx + 1}</div>
           <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{p.label}</div>
-          {p.detalle && <div style={{ fontSize: 10, marginTop: 4, color: s.color, opacity: .85 }}>{p.detalle}</div>}
+          {tieneDetalle && <div style={{ fontSize: 10, marginTop: 4, color: s.color, opacity: .85 }}>{abierto ? "Ocultar detalle" : "Ver detalle"}</div>}
+          {tieneDetalle && abierto && <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: "rgba(255,255,255,0.72)", border: "1px solid " + s.border, fontSize: 11, lineHeight: 1.35, color: "#111827", whiteSpace: "pre-wrap" }}>{p.detalle}</div>}
         </div>;
       })}
     </div>
