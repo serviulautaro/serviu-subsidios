@@ -48,6 +48,12 @@ const formatPesosChilenos = (value) => {
   const digits = String(value || "").replace(/\D/g, "");
   return digits ? "$" + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
 };
+const mostrarSiNo = (value) => {
+  const txt = String(value || "").trim().toUpperCase();
+  if (txt === "S" || txt === "SI" || txt === "SÍ") return "Sí";
+  if (txt === "N" || txt === "NO") return "No";
+  return value || "";
+};
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const DOC_CORREO_SOLICITANTE = { nombre: "Correo del solicitante", obligatorio: true, requiereTexto: true, etiquetaTexto: "Correo electrónico" };
 const asegurarCorreoSolicitante = (documentos = []) => {
@@ -1312,7 +1318,7 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
             {campo("Credencial/Cert. Discapacidad", persona.credencialDiscapacidad)}
             {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
-            {campo("Subsidio Anterior", persona.subsidioAnterior)}
+            {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
             {campo("Ahorro para Postular (UF)", persona.ahorroPostular)}
             {campo("Observaciones", persona.observaciones)}
           </div>
@@ -1635,7 +1641,7 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
             {campo("Credencial/Cert. Discapacidad", persona.credencialDiscapacidad)}
             {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
-            {campo("Subsidio Anterior", persona.subsidioAnterior)}
+            {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
             {campo("Ahorro para Postular (UF)", persona.ahorroPostular)}
             {campo("Observaciones", persona.observaciones)}
           </div>
@@ -1861,7 +1867,7 @@ function FichaProgramaCustom({ persona, programa, solicitud }) {
     dato("N° cuenta ahorro", persona.numero_cuenta_ahorro || persona.cuentaAhorro || persona.cuentaahorro),
     dato("Banco", persona.banco),
     dato("Ingreso familiar UF", persona.ingreso_familiar_uf),
-    dato("Subsidio anterior", persona.subsidioAnterior || persona.subsidio_anterior),
+    dato("Subsidio anterior", mostrarSiNo(persona.subsidioAnterior || persona.subsidio_anterior)),
     dato("Rol propiedad", persona.rol_propiedad || persona.rol),
     dato("Avalúo fiscal", persona.avaluoFiscal || persona.avaluofiscal),
     dato("Coordenadas", persona.coordenadas),
@@ -3445,7 +3451,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         if (p[1]) { db.nservicioagua = p[1].trim(); lc.nServicioAgua = p[1].trim(); }
                       }
                       // Agua sin arranque (Pozo u otro)
-                      if (t === "agua" && v && !v.includes("|")) { db.sistemaagua = v; lc.sistemaAgua = v; }
+                      if (t === "agua" && v && !v.includes("|")) {
+                        db.sistemaagua = v; lc.sistemaAgua = v;
+                        if (v.trim().toLowerCase() === "pozo") {
+                          db.nservicioagua = "N/A"; lc.nServicioAgua = "N/A";
+                        }
+                      }
                       // Discapacidad → usa opcionSeleccionada (no d.opcion)
                       if (t === "discapacidad") {
                         const opSel = d.opcionSeleccionada || "";
@@ -4013,7 +4024,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         {opcionesReal.map((op, oi) => (
                           <button key={oi} onClick={async () => {
                             setDocOpcion(sol.id, i, op, tipoReal);
-                            if (esCsp && tipoReal === "agua" && op === "Pozo") await syncPersona({ sistemaAgua: "Pozo" });
+                            if (esCsp && tipoReal === "agua" && op === "Pozo") await syncPersona({ sistemaAgua: "Pozo", nServicioAgua: "N/A" });
                             if (tipoReal === "discapacidad" && op === "Sin discapacidad") await syncPersona({ discapacidad: "N/A", movilidadReducida: "N/A", credencialDiscapacidad: "N/A" });
                             if (tipoReal === "discapacidad" && op === "Con discapacidad") await syncPersona({ discapacidad: "S", movilidadReducida: "", credencialDiscapacidad: "" });
                           }}
