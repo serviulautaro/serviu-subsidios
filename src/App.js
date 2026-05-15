@@ -7294,7 +7294,7 @@ export default function App() {
         }} />}
         {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} onDetail={goDetail} />}
         {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
-        {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} />}
+        {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} />}
         {!cargando && view === "auditoria" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
       </main>
     </div>

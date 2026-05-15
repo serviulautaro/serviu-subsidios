@@ -36,6 +36,35 @@ function rutKey(rut) {
   return (rut || "").toString().toLowerCase().replace(/[^0-9k]/g, "");
 }
 
+function formatRut(rut) {
+  const clean = (rut || "").replace(/[^0-9kK]/g, "");
+  if (clean.length < 2) return clean;
+  const dv = clean.slice(-1).toUpperCase();
+  const num = clean.slice(0, -1);
+  return `${num.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
+}
+
+function validarRutChileno(rut) {
+  const clean = (rut || "").replace(/[^0-9kK]/g, "").toUpperCase();
+  if (clean.length < 8 || clean.length > 9) return false;
+  const cuerpo = clean.slice(0, -1);
+  const dv = clean.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0;
+  let mult = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += Number(cuerpo[i]) * mult;
+    mult = mult === 7 ? 2 : mult + 1;
+  }
+  const resto = 11 - (suma % 11);
+  const esperado = resto === 11 ? "0" : resto === 10 ? "K" : String(resto);
+  return dv === esperado;
+}
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 function programaId(sol) {
   return sol?.programaId || sol?.programa_id || "";
 }
@@ -606,10 +635,12 @@ function PanelOpcionesCsp({ tipo, comites, personas, solicitudes, color }) {
   </div>;
 }
 
-function PanelIndividual({ personas, solicitudes, comites }) {
+function PanelIndividual({ personas, solicitudes, comites, onSavePersonas }) {
   const [busqueda, setBusqueda] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
   const [comiteInformeId, setComiteInformeId] = useState("");
+  const [mostrarNuevo, setMostrarNuevo] = useState(false);
+  const [nuevo, setNuevo] = useState({ nombre: "", rut: "", telefono: "", direccion: "", email: "", comiteId: "" });
   const term = norm(busqueda);
   const resultados = personas.filter(p => !term || norm(`${p.nombre || ""} ${p.rut || ""} ${p.comite || ""}`).includes(term)).slice(0, 25);
   const seleccionIds = new Set(seleccionados.map(item => (item.persona || item).id));
@@ -634,10 +665,66 @@ function PanelIndividual({ personas, solicitudes, comites }) {
     setSeleccionados([...seleccionados, ...nuevos]);
   };
 
+  const guardarNuevoSolicitante = async () => {
+    const nombre = nuevo.nombre.trim().toUpperCase();
+    const rut = nuevo.rut.trim();
+    if (!nombre || !rut) {
+      alert("Ingresa nombre y cédula de identidad.");
+      return;
+    }
+    if (!validarRutChileno(rut)) {
+      alert("La cédula de identidad no es válida para Chile. Revisa el dígito verificador.");
+      return;
+    }
+    if (personas.some(p => rutKey(p.rut) === rutKey(rut))) {
+      alert("Ya existe un solicitante con esa cédula de identidad.");
+      return;
+    }
+    const comite = comites.find(c => (c.id || c.codigo) === nuevo.comiteId || c.codigo === nuevo.comiteId);
+    const persona = {
+      id: uid(),
+      nombre,
+      rut: formatRut(rut),
+      telefono: nuevo.telefono.trim(),
+      direccion: nuevo.direccion.trim(),
+      email: nuevo.email.trim(),
+      comiteId: comite ? (comite.id || comite.codigo) : "",
+      comite: comite?.nombre || "",
+      tipo_comite: comite?.tipo || "",
+      fechaIngreso: new Date().toLocaleDateString("es-CL"),
+    };
+    await onSavePersonas?.([...personas, persona]);
+    setSeleccionados([...seleccionados, { persona, programaId: "todos" }]);
+    setNuevo({ nombre: "", rut: "", telefono: "", direccion: "", email: "", comiteId: "" });
+    setMostrarNuevo(false);
+  };
+
   return <div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 14 }}>
       <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre, cédula o comité" style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
       <button onClick={() => imprimirIndividualMultiple(seleccionados, solicitudes, personas, comites)} disabled={!seleccionados.length} style={{ padding: "10px 16px", border: "none", borderRadius: 8, background: seleccionados.length ? "#2563eb" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: seleccionados.length ? "pointer" : "not-allowed" }}>Generar informe</button>
+    </div>
+
+    <div style={{ marginBottom: 14 }}>
+      <button onClick={() => setMostrarNuevo(!mostrarNuevo)} style={{ padding: "9px 14px", border: "1px solid #bfdbfe", borderRadius: 8, background: "#eff6ff", color: "#1d4ed8", fontWeight: 800, cursor: "pointer" }}>
+        + Ingresar nuevo solicitante
+      </button>
+      {mostrarNuevo && <div style={{ marginTop: 10, border: "1px solid #dbeafe", background: "#f8fbff", borderRadius: 10, padding: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 160px 150px", gap: 8, marginBottom: 8 }}>
+          <input value={nuevo.nombre} onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Nombre del solicitante" style={{ padding: 9, border: "1px solid #cbd5e1", borderRadius: 8 }} />
+          <input value={nuevo.rut} onChange={e => setNuevo({ ...nuevo, rut: e.target.value })} placeholder="Cédula identidad" style={{ padding: 9, border: "1px solid #cbd5e1", borderRadius: 8 }} />
+          <input value={nuevo.telefono} onChange={e => setNuevo({ ...nuevo, telefono: e.target.value })} placeholder="Teléfono" style={{ padding: 9, border: "1px solid #cbd5e1", borderRadius: 8 }} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 220px 260px auto", gap: 8 }}>
+          <input value={nuevo.direccion} onChange={e => setNuevo({ ...nuevo, direccion: e.target.value })} placeholder="Dirección" style={{ padding: 9, border: "1px solid #cbd5e1", borderRadius: 8 }} />
+          <input value={nuevo.email} onChange={e => setNuevo({ ...nuevo, email: e.target.value })} placeholder="Correo" style={{ padding: 9, border: "1px solid #cbd5e1", borderRadius: 8 }} />
+          <select value={nuevo.comiteId} onChange={e => setNuevo({ ...nuevo, comiteId: e.target.value })} style={{ padding: 9, border: "1px solid #cbd5e1", borderRadius: 8 }}>
+            <option value="">Sin comité</option>
+            {comites.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre}</option>)}
+          </select>
+          <button onClick={guardarNuevoSolicitante} disabled={!onSavePersonas} style={{ padding: "9px 14px", border: "none", borderRadius: 8, background: onSavePersonas ? "#059669" : "#d1d5db", color: "#fff", fontWeight: 900, cursor: onSavePersonas ? "pointer" : "not-allowed" }}>Guardar</button>
+        </div>
+      </div>}
     </div>
 
     <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 14 }}>
@@ -757,7 +844,7 @@ function PanelAuditoriaUsuarios({ currentUser }) {
   </div>;
 }
 
-export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser, soloAuditoria = false }) {
+export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser, soloAuditoria = false, onSavePersonas }) {
   const comites = useMemo(() => mergeComites(comitesSupa), [comitesSupa]);
   const [comiteSelId, setComiteSelId] = useState("");
   const comiteSel = comites.find(c => c.codigo === comiteSelId || c.id === comiteSelId) || null;
@@ -780,7 +867,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
       <div style={{ color: "#6b7280", marginBottom: 22 }}>Generación de informes individuales, comités rurales, comités urbanos y resumen completo.</div>
 
       <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes y el programa que debe informar cada uno" color="#2563eb">
-        <PanelIndividual personas={personas} solicitudes={solicitudes} comites={comites} />
+        <PanelIndividual personas={personas} solicitudes={solicitudes} comites={comites} onSavePersonas={onSavePersonas} />
       </Section>
 
       <Section title="Informe CSP Rural" subtitle="Construcción Sitio Propio Rural - selecciona comité, contenido y detalle de documentos" color="#d97706">
