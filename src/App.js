@@ -108,6 +108,11 @@ const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
 const apiPath = (prefix, routePath = "", fileName = "") =>
   API + prefix + encodeRoutePath(routePath) + (fileName ? "/" + encodePathPart(fileName) : "");
+const STORAGE_BUCKET = "documentos-solicitantes";
+const storageObjectPath = (carpeta = "", nombre = "") =>
+  [carpeta, nombre].filter(Boolean).join("/").replace(/^\/+/, "");
+const storagePublicUrl = (objectPath = "", bucket = STORAGE_BUCKET) =>
+  objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl : "";
 const fileToDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(reader.result);
@@ -2359,13 +2364,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const comite = comites.find(c => c.id === persona.comiteId);
 
   // Registra un archivo en Supabase asociado al solicitante
-  const _registrarArchivoSupa = async (nombre, carp) => {
-    const { error } = await supabase.from("archivos_solicitante").upsert({
+  const _registrarArchivoSupa = async (nombre, carp, extra = {}) => {
+    const base = {
       id: `${persona.id}_${nombre}`,
       persona_id: persona.id,
       nombre,
       carpeta: carp || carpeta
-    });
+    };
+    const { error } = await supabase.from("archivos_solicitante").upsert({ ...base, ...extra });
+    if (error && (extra.storage_path || extra.storage_bucket || extra.mime_type || extra.tamano_bytes)) {
+      const retry = await supabase.from("archivos_solicitante").upsert(base);
+      if (retry.error) console.error("[archivos_solicitante] Error al registrar:", retry.error.message, "| archivo:", nombre);
+      return !retry.error;
+    }
     if (error) console.error("[archivos_solicitante] Error al registrar:", error.message, "| archivo:", nombre);
     return !error;
   };
@@ -2398,6 +2409,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!file) throw new Error("No se selecciono archivo.");
     if (!carp) throw new Error("No se pudo determinar la carpeta del solicitante.");
     const dataUrl = await fileToDataUrl(file);
+    const nombreSubido = file.name;
+    const objectPath = storageObjectPath(carp, nombreSubido);
+    const { error: storageErr } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(objectPath, file, { upsert: true, contentType: file.type || "application/octet-stream" });
+    if (storageErr) {
+      console.warn("[storage] No se pudo subir a Supabase Storage:", storageErr.message);
+    }
     const fd = new FormData();
     fd.append("archivo", file);
     let data = {};
@@ -2410,16 +2429,21 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch {
       data = { nombre: file.name };
     }
-    const nombreSubido = data.nombre || file.name;
-    await _registrarArchivoSupa(nombreSubido, carp);
-    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl, mimeType: file.type, carpeta: carp } }));
+    const storagePathFinal = storageErr ? "" : objectPath;
+    await _registrarArchivoSupa(nombreSubido, carp, {
+      storage_bucket: STORAGE_BUCKET,
+      storage_path: storagePathFinal,
+      mime_type: file.type || "application/octet-stream",
+      tamano_bytes: file.size || 0
+    });
+    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl: storagePathFinal ? storagePublicUrl(storagePathFinal) : dataUrl, mimeType: file.type, carpeta: carp } }));
     await guardarArchivoPersistente(nombreSubido, dataUrl, file.type, carp);
     await registrarAuditoria?.("subir_documento", "archivos_solicitante", persona.id, {
       solicitante: persona.nombre,
       archivo: nombreSubido,
       carpeta: carp,
     });
-    return { nombre: nombreSubido, dataUrl, mimeType: file.type };
+    return { nombre: nombreSubido, dataUrl, mimeType: file.type, storagePath: storagePathFinal };
   };
 
   const cargarArchivos = async () => {
@@ -2439,34 +2463,44 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     ]);
 
     const rutasMap = {};
+    const datosMap = {};
     nuevos.forEach(f => { rutasMap[f] = carpeta; });
     viejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
 
     // 2. Supabase — completamente independiente, no afecta al resultado del filesystem
     let supaNames = [];
-    const { data: supaFiles, error: supaError } = await supabase
+    let { data: supaFiles, error: supaError } = await supabase
       .from("archivos_solicitante")
-      .select("nombre, carpeta")
+      .select("nombre, carpeta, storage_bucket, storage_path, mime_type")
       .eq("persona_id", persona.id)
       .order("creado", { ascending: false });
+    if (supaError) {
+      const retry = await supabase
+        .from("archivos_solicitante")
+        .select("nombre, carpeta")
+        .eq("persona_id", persona.id)
+        .order("creado", { ascending: false });
+      supaFiles = retry.data;
+      supaError = retry.error;
+    }
 
     if (supaError) {
       console.warn("[archivos_solicitante] No se pudo consultar Supabase:", supaError.message);
     } else {
       (supaFiles || []).forEach(sf => {
         if (!rutasMap[sf.nombre]) rutasMap[sf.nombre] = sf.carpeta || carpeta;
+        if (sf.storage_path) datosMap[sf.nombre] = { dataUrl: storagePublicUrl(sf.storage_path, sf.storage_bucket), mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta };
       });
       supaNames = (supaFiles || []).map(sf => sf.nombre);
     }
 
     // 3. Copias guardadas en solicitudes (respaldo para la web publicada sin /files)
-    const datosMap = {};
     const docsConArchivo = (solicitudes || [])
       .filter(s => s.personaId === personaId)
       .flatMap(s => s.documentos || [])
-      .filter(d => d.archivo && d.archivoData);
+      .filter(d => d.archivo && (d.archivoData || d.storagePath));
     docsConArchivo.forEach(d => {
-      datosMap[d.archivo] = { dataUrl: d.archivoData, mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta };
+      datosMap[d.archivo] = { dataUrl: d.storagePath ? storagePublicUrl(d.storagePath) : d.archivoData, mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta };
       if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
     });
 
@@ -2554,21 +2588,29 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         (solicitudes || [])
           .filter(s => s.personaId === p.id)
           .flatMap(s => s.documentos || [])
-          .filter(d => d.archivo && d.archivoData)
+          .filter(d => d.archivo && (d.archivoData || d.storagePath))
           .forEach(d => {
             archivosSet.add(d.archivo);
             rutasPorArchivo[d.archivo] = d.carpeta || carpetaSol;
-            datosPorArchivo[d.archivo] = d.archivoData;
+            datosPorArchivo[d.archivo] = d.storagePath ? storagePublicUrl(d.storagePath) : d.archivoData;
           });
 
         // Desde Supabase
-        const { data: supaArch } = await supabase
+        let { data: supaArch, error: supaArchError } = await supabase
           .from("archivos_solicitante")
-          .select("nombre, carpeta")
+          .select("nombre, carpeta, storage_bucket, storage_path")
           .eq("persona_id", p.id);
+        if (supaArchError) {
+          const retry = await supabase
+            .from("archivos_solicitante")
+            .select("nombre, carpeta")
+            .eq("persona_id", p.id);
+          supaArch = retry.data;
+        }
         (supaArch || []).forEach(a => {
           archivosSet.add(a.nombre);
           rutasPorArchivo[a.nombre] = a.carpeta || carpetaSol;
+          if (a.storage_path) datosPorArchivo[a.nombre] = storagePublicUrl(a.storage_path, a.storage_bucket);
         });
 
         // Desde servidor local (nueva carpeta y vieja)
@@ -3830,7 +3872,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   const guardarArchivoDoc = async (fileOrName) => {
                     const nombreArchivo = typeof fileOrName === "string" ? fileOrName : (fileOrName.nombre || fileOrName.name);
                     const archivoExtra = typeof fileOrName === "object" && fileOrName.dataUrl
-                      ? { archivoData: fileOrName.dataUrl, archivoTipo: fileOrName.mimeType || "", carpeta }
+                      ? { archivoData: fileOrName.dataUrl, archivoTipo: fileOrName.mimeType || "", storagePath: fileOrName.storagePath || "", carpeta }
                       : {};
                     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                       ...s,
