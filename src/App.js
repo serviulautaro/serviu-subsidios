@@ -6888,6 +6888,156 @@ function LoginView({ onLogin }) {
   );
 }
 
+const ADMIN_KEY = "196560";
+const esAdminAppUser = (user) => (user?.rol || "").toLowerCase() === "admin";
+
+function AdminUsuariosView({ currentUser, registrarAuditoria }) {
+  const [usuarios, setUsuarios] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+  const [error, setError] = useState("");
+  const [claveGenerada, setClaveGenerada] = useState("");
+  const [nuevo, setNuevo] = useState({ nombre: "", username: "", rol: "usuario" });
+
+  const pedirClaveAdmin = () => window.prompt("Ingrese clave del administrador para confirmar") === ADMIN_KEY;
+  const generarClave = () => `Serviu${Math.random().toString(36).slice(2, 8).toUpperCase()}${Math.floor(10 + Math.random() * 89)}`;
+
+  const cargarUsuarios = async () => {
+    setCargando(true);
+    setError("");
+    const { data, error: err } = await supabase.rpc("admin_listar_app_users", { p_admin_key: ADMIN_KEY });
+    if (err) {
+      setError("No se pudieron cargar usuarios autorizados. Revise que la migracion SQL de administracion este ejecutada.");
+      setUsuarios([]);
+    } else {
+      setUsuarios(Array.isArray(data) ? data : []);
+    }
+    setCargando(false);
+  };
+
+  useEffect(() => { cargarUsuarios(); }, []);
+
+  if (!esAdminAppUser(currentUser)) {
+    return <div style={{ background: "#fff", border: "1px solid #fecaca", borderRadius: 12, padding: 18, color: "#991b1b", fontWeight: 800 }}>
+      Solo el administrador puede administrar usuarios autorizados.
+    </div>;
+  }
+
+  const crearUsuario = async () => {
+    setMensaje("");
+    setError("");
+    if (!nuevo.nombre.trim() || !nuevo.username.trim()) {
+      setError("Complete nombre y usuario.");
+      return;
+    }
+    if (!pedirClaveAdmin()) {
+      setError("Clave de administrador incorrecta.");
+      return;
+    }
+    const clave = generarClave();
+    const { data, error: err } = await supabase.rpc("admin_crear_app_user", {
+      p_admin_key: ADMIN_KEY,
+      p_nombre: nuevo.nombre.trim(),
+      p_username: nuevo.username.trim().toLowerCase(),
+      p_password: clave,
+      p_rol: nuevo.rol,
+    });
+    if (err) {
+      setError(err.message || "No se pudo crear el usuario.");
+      return;
+    }
+    setClaveGenerada(clave);
+    setMensaje(`Usuario creado: ${nuevo.username.trim().toLowerCase()}. Clave inicial: ${clave}`);
+    await registrarAuditoria?.("crear_usuario_autorizado", "app_users", data?.[0]?.id || "", { usuario: nuevo.username.trim().toLowerCase(), nombre: nuevo.nombre.trim(), rol: nuevo.rol });
+    setNuevo({ nombre: "", username: "", rol: "usuario" });
+    cargarUsuarios();
+  };
+
+  const cambiarEstado = async (usuario, activo) => {
+    setMensaje("");
+    setError("");
+    if (!pedirClaveAdmin()) {
+      setError("Clave de administrador incorrecta.");
+      return;
+    }
+    const { error: err } = await supabase.rpc("admin_estado_app_user", {
+      p_admin_key: ADMIN_KEY,
+      p_user_id: usuario.id,
+      p_activo: activo,
+    });
+    if (err) {
+      setError(err.message || "No se pudo cambiar el estado.");
+      return;
+    }
+    await registrarAuditoria?.(activo ? "desbloquear_usuario_autorizado" : "bloquear_usuario_autorizado", "app_users", usuario.id, { usuario: usuario.username, nombre: usuario.nombre });
+    setMensaje(activo ? "Usuario desbloqueado." : "Usuario bloqueado.");
+    cargarUsuarios();
+  };
+
+  const eliminarUsuario = async (usuario) => {
+    setMensaje("");
+    setError("");
+    if (usuario.id === currentUser?.id) {
+      setError("No puede eliminar el usuario administrador que esta usando la sesion actual.");
+      return;
+    }
+    if (!window.confirm(`Eliminar usuario autorizado ${usuario.nombre}?`)) return;
+    if (!pedirClaveAdmin()) {
+      setError("Clave de administrador incorrecta.");
+      return;
+    }
+    const { error: err } = await supabase.rpc("admin_eliminar_app_user", {
+      p_admin_key: ADMIN_KEY,
+      p_user_id: usuario.id,
+    });
+    if (err) {
+      setError(err.message || "No se pudo eliminar el usuario.");
+      return;
+    }
+    await registrarAuditoria?.("eliminar_usuario_autorizado", "app_users", usuario.id, { usuario: usuario.username, nombre: usuario.nombre });
+    setMensaje("Usuario eliminado de autorizados.");
+    cargarUsuarios();
+  };
+
+  return <div>
+    <h1 style={{ margin: "0 0 6px", color: "#111827" }}>Administracion</h1>
+    <div style={{ color: "#6b7280", marginBottom: 22 }}>Usuarios autorizados para utilizar el software. Crear, bloquear, desbloquear o eliminar exige clave administrador 196560.</div>
+
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 18, marginBottom: 18 }}>
+      <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 12 }}>Agregar usuario autorizado</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 160px auto", gap: 10, alignItems: "end" }}>
+        <div><div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 5 }}>NOMBRE</div><input value={nuevo.nombre} onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }} /></div>
+        <div><div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 5 }}>USUARIO</div><input value={nuevo.username} onChange={e => setNuevo({ ...nuevo, username: e.target.value })} placeholder="nombre.apellido" style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }} /></div>
+        <div><div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 5 }}>ROL</div><select value={nuevo.rol} onChange={e => setNuevo({ ...nuevo, rol: e.target.value })} style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }}><option value="usuario">Usuario</option><option value="admin">Admin</option></select></div>
+        <button onClick={crearUsuario} style={{ padding: "11px 16px", border: 0, borderRadius: 8, background: "#059669", color: "#fff", fontWeight: 900, cursor: "pointer" }}>Crear</button>
+      </div>
+      {claveGenerada && <div style={{ marginTop: 10, background: "#ecfdf5", border: "1px solid #86efac", borderRadius: 8, padding: 10, color: "#047857", fontWeight: 800 }}>Clave inicial generada: {claveGenerada}</div>}
+    </div>
+
+    {mensaje && <div style={{ background: "#ecfdf5", border: "1px solid #86efac", borderRadius: 8, padding: 10, color: "#047857", fontWeight: 800, marginBottom: 12 }}>{mensaje}</div>}
+    {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 10, color: "#b91c1c", fontWeight: 800, marginBottom: 12 }}>{error}</div>}
+
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ padding: 14, fontWeight: 900, color: "#1e3a5f", borderBottom: "1px solid #e5e7eb" }}>Usuarios autorizados</div>
+      {cargando ? <div style={{ padding: 14, color: "#6b7280" }}>Cargando usuarios...</div> : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead><tr style={{ background: "#f9fafb" }}><th style={{ textAlign: "left", padding: 10 }}>Nombre</th><th style={{ textAlign: "left", padding: 10 }}>Usuario</th><th style={{ textAlign: "left", padding: 10 }}>Rol</th><th style={{ textAlign: "left", padding: 10 }}>Estado</th><th style={{ textAlign: "right", padding: 10 }}>Acciones</th></tr></thead>
+        <tbody>{usuarios.map(u => <tr key={u.id}>
+          <td style={{ padding: 10, borderTop: "1px solid #e5e7eb", fontWeight: 800 }}>{u.nombre}</td>
+          <td style={{ padding: 10, borderTop: "1px solid #e5e7eb" }}>{u.username}</td>
+          <td style={{ padding: 10, borderTop: "1px solid #e5e7eb" }}>{u.rol}</td>
+          <td style={{ padding: 10, borderTop: "1px solid #e5e7eb" }}>{u.activo ? "Activo" : "Bloqueado"}</td>
+          <td style={{ padding: 10, borderTop: "1px solid #e5e7eb", textAlign: "right" }}>
+            {u.activo
+              ? <button onClick={() => cambiarEstado(u, false)} style={{ marginRight: 8, padding: "7px 10px", border: "1px solid #f59e0b", borderRadius: 7, background: "#fffbeb", color: "#92400e", fontWeight: 800, cursor: "pointer" }}>Bloquear</button>
+              : <button onClick={() => cambiarEstado(u, true)} style={{ marginRight: 8, padding: "7px 10px", border: "1px solid #10b981", borderRadius: 7, background: "#ecfdf5", color: "#047857", fontWeight: 800, cursor: "pointer" }}>Desbloquear</button>}
+            <button onClick={() => eliminarUsuario(u)} style={{ padding: "7px 10px", border: "1px solid #fecaca", borderRadius: 7, background: "#fef2f2", color: "#b91c1c", fontWeight: 800, cursor: "pointer" }}>Eliminar</button>
+          </td>
+        </tr>)}</tbody>
+      </table>}
+    </div>
+  </div>;
+}
+
 // ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 export default function App() {
   const [pantalla, setPantalla] = useState("bienvenida");
@@ -7165,6 +7315,7 @@ export default function App() {
   const verDetalleComite = (id) => { setComiteDetailId(id); setView("detalleComite"); };
 
   const sinComiteCount = personas.filter(p => !p.comiteId || p.comiteId === "").length;
+  const esAdmin = esAdminAppUser(currentUser);
 
   const NAV_ITEMS = [
     ["dashboard", "Inicio"],
@@ -7175,7 +7326,9 @@ export default function App() {
     ["solicitudes", "Solicitudes"],
     ["informes", "Informes"],
     ["auditoria", "Auditoría"],
+    ["admin", "Administración"],
   ];
+  const NAV_VISIBLE = NAV_ITEMS.filter(([k]) => !["auditoria", "admin"].includes(k) || esAdmin);
 
   const navActivo = (k) =>
     view === k ||
@@ -7199,7 +7352,7 @@ export default function App() {
         </div>
         <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "0 24px" }} />
         <nav style={{ padding: "16px 12px", flex: 1 }}>
-          {NAV_ITEMS.map(([k, l]) => (
+          {NAV_VISIBLE.map(([k, l]) => (
             <div key={k} onClick={() => nav(k)} style={{
               display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, marginBottom: 4, cursor: "pointer",
               background: navActivo(k) ? "rgba(255,255,255,0.13)" : "transparent",
@@ -7295,7 +7448,8 @@ export default function App() {
         {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} onDetail={goDetail} />}
         {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
         {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} />}
-        {!cargando && view === "auditoria" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
+        {!cargando && view === "auditoria" && esAdmin && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
+        {!cargando && view === "admin" && esAdmin && <AdminUsuariosView currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
       </main>
     </div>
   );

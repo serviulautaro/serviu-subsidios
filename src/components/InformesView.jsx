@@ -192,7 +192,8 @@ function estadisticasDocs(sols) {
 function imprimirVentana(titulo, html) {
   const w = window.open("", "_blank");
   if (!w) return;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo}</title>${estilosImpresion()}</head><body><div class="print-actions"><button onclick="window.print()">Imprimir</button></div>${html}</body></html>`);
+  const firma = `<div class="firma-footer">PROPIETARO DEL SOFTWEARE JORGE ANTONIO CAMPOS CAMPOS</div>`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo}</title>${estilosImpresion()}</head><body><div class="print-actions"><button onclick="window.print()">Imprimir</button></div>${html}${firma}</body></html>`);
   w.document.close();
   w.focus();
 }
@@ -213,6 +214,7 @@ function accionTexto(accion) {
     crear_solicitante: "Creacion de solicitante",
     actualizar_solicitantes: "Actualizacion de solicitantes",
     crear_solicitud_automatica: "Solicitud automatica creada",
+    subir_documento: "Documento subido",
     guardar_solicitudes: "Solicitud/documentos guardados",
     guardar_comites: "Comites guardados",
     crear_programa: "Programa creado",
@@ -220,13 +222,27 @@ function accionTexto(accion) {
     eliminar_programa: "Programa eliminado",
     registrar_visita: "Visita registrada",
     mover_solicitante: "Solicitante movido",
+    crear_usuario_autorizado: "Usuario autorizado creado",
+    bloquear_usuario_autorizado: "Usuario autorizado bloqueado",
+    desbloquear_usuario_autorizado: "Usuario autorizado desbloqueado",
+    eliminar_usuario_autorizado: "Usuario autorizado eliminado",
   };
   return map[accion] || accion || "-";
 }
 
-function detalleAuditoria(detalle) {
+function detalleAuditoria(detalle, accion = "") {
   if (!detalle) return "";
   if (typeof detalle === "string") return detalle;
+  if (accion === "subir_documento") {
+    const doc = detalle.archivo || detalle.documento || detalle.nombreArchivo || detalle.nombre_archivo || "";
+    const solicitante = detalle.solicitante || detalle.persona || "";
+    const carpeta = detalle.carpeta || detalle.tipo || "";
+    return [
+      doc ? `Documento subido: ${doc}` : "",
+      solicitante ? `Solicitante: ${solicitante}` : "",
+      carpeta ? `Carpeta: ${carpeta}` : "",
+    ].filter(Boolean).join(" | ");
+  }
   const partes = [];
   Object.entries(detalle || {}).forEach(([k, val]) => {
     if (val === undefined || val === null || val === "") return;
@@ -235,30 +251,35 @@ function detalleAuditoria(detalle) {
   return partes.join(" | ");
 }
 
-function imprimirAuditoria(fecha, logs) {
+function solicitanteAuditoria(log) {
+  const d = log.detalle || {};
+  if (typeof d === "string") return "";
+  return d.solicitante || d.persona || d.nombre || d.personaNombre || "";
+}
+
+function imprimirAuditoria(fechaInicio, fechaTermino, logs, usuarioFiltro = "Todos los usuarios") {
   const grupos = logs.reduce((acc, log) => {
     const usuario = log.usuario || "Usuario no identificado";
     if (!acc[usuario]) acc[usuario] = [];
     acc[usuario].push(log);
     return acc;
   }, {});
-  const totalIngresos = logs.filter(l => l.accion === "ingreso_sistema").length;
   const html = `<div class="page">
-    <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe diario de usuarios</h1><div class="muted">Fecha: ${fecha}</div></div></div>
+    <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe de auditoria</h1><div class="muted">Desde: ${fechaInicio} - Hasta: ${fechaTermino}</div><div class="muted">Usuario: ${v(usuarioFiltro)}</div></div></div>
     <div class="stats">
       <div class="stat"><span class="k">Usuarios con actividad</span><b>${Object.keys(grupos).length}</b></div>
-      <div class="stat"><span class="k">Ingresos al sistema</span><b>${totalIngresos}</b></div>
-      <div class="stat"><span class="k">Acciones registradas</span><b>${logs.length}</b></div>
+      <div class="stat"><span class="k">Modificaciones</span><b>${logs.length}</b></div>
+      <div class="stat"><span class="k">Documentos subidos</span><b>${logs.filter(l => l.accion === "subir_documento").length}</b></div>
       <div class="stat"><span class="k">Generado</span><b style="font-size:16px">${new Date().toLocaleTimeString("es-CL")}</b></div>
     </div>
     ${Object.entries(grupos).map(([usuario, items]) => `<div class="program-box">
       <div class="program-title">${usuario} - ${items.length} accion(es)</div>
-      <table><thead><tr><th>Hora</th><th>Accion</th><th>Entidad</th><th>Detalle</th></tr></thead><tbody>
-        ${items.map(log => `<tr><td>${formatFechaHora(log.creado)}</td><td>${accionTexto(log.accion)}</td><td>${v(log.entidad)}</td><td>${v(detalleAuditoria(log.detalle))}</td></tr>`).join("")}
+      <table><thead><tr><th>Fecha y hora</th><th>Accion</th><th>Solicitante</th><th>Detalle</th></tr></thead><tbody>
+        ${items.map(log => `<tr><td>${formatFechaHora(log.creado)}</td><td>${accionTexto(log.accion)}</td><td>${v(solicitanteAuditoria(log))}</td><td>${v(detalleAuditoria(log.detalle, log.accion))}</td></tr>`).join("")}
       </tbody></table>
     </div>`).join("")}
   </div>`;
-  imprimirVentana("Informe diario de usuarios", html);
+  imprimirVentana("Informe de auditoria", html);
 }
 
 function estilosImpresion() {
@@ -272,8 +293,9 @@ function estilosImpresion() {
     .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}.stat{border:1px solid #d1d5db;border-radius:6px;text-align:center;padding:12px;background:#f3f4f6}.stat b{display:block;font-size:28px;margin-top:8px;color:#4b5563}
     .program-box{border:1px solid #d1d5db;border-radius:7px;margin-top:12px;overflow:hidden}.program-title{background:#f3f4f6;border-bottom:1px solid #d1d5db;padding:9px 10px;font-weight:800;text-transform:uppercase}.pending td{background:#fef2f2;color:#991b1b;font-weight:700}.pending .estado{color:#dc2626}.complete .estado{color:#047857;font-weight:700}
     .print-actions{position:sticky;top:0;background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 0;margin-bottom:12px;text-align:right}.print-actions button{background:#2563eb;color:#fff;border:0;border-radius:6px;padding:8px 16px;font-weight:800;cursor:pointer}
+    .firma-footer{max-width:940px;margin:18px auto 0;border-top:1px solid #d1d5db;padding-top:10px;text-align:center;font-size:11px;font-weight:800;color:#374151}
     table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #d1d5db;padding:7px;text-align:left;vertical-align:top}th{background:#f3f4f6;text-transform:uppercase;font-size:10px}
-    @media print{body{padding:0}.page{max-width:none;margin:0;padding:22px}.print-actions{display:none}}
+    @media print{body{padding:0}.page{max-width:none;margin:0;padding:22px}.print-actions{display:none}.firma-footer{max-width:none;margin:0 22px 0}}
   </style>`;
 }
 
@@ -765,23 +787,38 @@ function PanelIndividual({ personas, solicitudes, comites, onSavePersonas }) {
 
 function PanelAuditoriaUsuarios({ currentUser }) {
   const hoyIso = new Date().toISOString().slice(0, 10);
-  const [fecha, setFecha] = useState(hoyIso);
+  const [fechaInicio, setFechaInicio] = useState(hoyIso);
+  const [fechaTermino, setFechaTermino] = useState(hoyIso);
+  const [usuarioFiltro, setUsuarioFiltro] = useState("todos");
+  const [usuarios, setUsuarios] = useState([]);
   const [logs, setLogs] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+  const esAdmin = (currentUser?.rol || "").toLowerCase() === "admin";
 
   useEffect(() => {
+    if (!esAdmin) return;
+    const cargarUsuarios = async () => {
+      const { data } = await supabase.rpc("admin_listar_app_users", { p_admin_key: "196560" });
+      setUsuarios(Array.isArray(data) ? data : []);
+    };
+    cargarUsuarios();
+  }, [esAdmin]);
+
+  useEffect(() => {
+    if (!esAdmin) return;
     const cargar = async () => {
       setCargando(true);
       setError("");
-      const inicio = new Date(fecha + "T00:00:00");
-      const fin = new Date(inicio);
+      const inicio = new Date((fechaInicio || hoyIso) + "T00:00:00");
+      const fin = new Date((fechaTermino || fechaInicio || hoyIso) + "T00:00:00");
       fin.setDate(fin.getDate() + 1);
       const { data, error: err } = await supabase
         .from("audit_log")
         .select("*")
         .gte("creado", inicio.toISOString())
         .lt("creado", fin.toISOString())
+        .neq("accion", "ingreso_sistema")
         .order("creado", { ascending: false });
       if (err) {
         setError(err.message);
@@ -792,26 +829,49 @@ function PanelAuditoriaUsuarios({ currentUser }) {
       setCargando(false);
     };
     cargar();
-  }, [fecha]);
+  }, [esAdmin, fechaInicio, fechaTermino, hoyIso]);
 
-  const grupos = logs.reduce((acc, log) => {
+  const usuarioSeleccionado = usuarios.find(u => u.id === usuarioFiltro);
+  const logsFiltrados = usuarioFiltro === "todos"
+    ? logs
+    : logs.filter(log => log.user_id === usuarioFiltro || log.usuario === usuarioSeleccionado?.nombre || log.usuario === usuarioSeleccionado?.username);
+  const grupos = logsFiltrados.reduce((acc, log) => {
     const usuario = log.usuario || "Usuario no identificado";
     if (!acc[usuario]) acc[usuario] = [];
     acc[usuario].push(log);
     return acc;
   }, {});
-  const ingresos = logs.filter(l => l.accion === "ingreso_sistema").length;
-  const modificaciones = logs.filter(l => l.accion !== "ingreso_sistema").length;
+  const modificaciones = logsFiltrados.length;
+  const documentosSubidos = logsFiltrados.filter(l => l.accion === "subir_documento").length;
+
+  if (!esAdmin) {
+    return <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: 14, color: "#991b1b", fontWeight: 800 }}>
+      Solo el administrador puede visualizar o imprimir informes de auditoria.
+    </div>;
+  }
 
   return <div>
-    <div style={{ display: "grid", gridTemplateColumns: "220px auto", gap: 10, alignItems: "end", marginBottom: 14 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "180px 180px 1fr auto", gap: 10, alignItems: "end", marginBottom: 14 }}>
       <div>
-        <div style={{ fontSize: 12, fontWeight: 800, color: "#374151", textTransform: "uppercase", marginBottom: 5 }}>Fecha del informe</div>
-        <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#374151", textTransform: "uppercase", marginBottom: 5 }}>Fecha inicio</div>
+        <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)}
           style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
       </div>
-      <button onClick={() => imprimirAuditoria(fecha, logs)} disabled={!logs.length}
-        style={{ width: 210, padding: "10px 18px", border: "none", borderRadius: 8, background: logs.length ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: logs.length ? "pointer" : "not-allowed" }}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#374151", textTransform: "uppercase", marginBottom: 5 }}>Fecha termino</div>
+        <input type="date" value={fechaTermino} onChange={e => setFechaTermino(e.target.value)}
+          style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
+      </div>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#374151", textTransform: "uppercase", marginBottom: 5 }}>Usuario autorizado</div>
+        <select value={usuarioFiltro} onChange={e => setUsuarioFiltro(e.target.value)}
+          style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }}>
+          <option value="todos">Todos los usuarios</option>
+          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre} ({u.rol})</option>)}
+        </select>
+      </div>
+      <button onClick={() => imprimirAuditoria(fechaInicio, fechaTermino, logsFiltrados, usuarioSeleccionado?.nombre || "Todos los usuarios")} disabled={!logsFiltrados.length}
+        style={{ width: 210, padding: "10px 18px", border: "none", borderRadius: 8, background: logsFiltrados.length ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: logsFiltrados.length ? "pointer" : "not-allowed" }}>
         Generar informe
       </button>
     </div>
@@ -819,24 +879,24 @@ function PanelAuditoriaUsuarios({ currentUser }) {
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
       <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>USUARIO ACTUAL</div><div style={{ fontWeight: 900, marginTop: 4 }}>{currentUser?.nombre || "-"}</div></div>
       <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>USUARIOS CON ACTIVIDAD</div><div style={{ fontSize: 22, fontWeight: 900, color: "#0f766e" }}>{Object.keys(grupos).length}</div></div>
-      <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>INGRESOS</div><div style={{ fontSize: 22, fontWeight: 900, color: "#2563eb" }}>{ingresos}</div></div>
+      <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>DOCUMENTOS SUBIDOS</div><div style={{ fontSize: 22, fontWeight: 900, color: "#2563eb" }}>{documentosSubidos}</div></div>
       <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>MODIFICACIONES</div><div style={{ fontSize: 22, fontWeight: 900, color: "#d97706" }}>{modificaciones}</div></div>
     </div>
 
     {cargando && <div style={{ color: "#6b7280", fontSize: 13 }}>Cargando auditoria...</div>}
     {error && <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: 13 }}>Error al leer auditoria: {error}</div>}
-    {!cargando && !error && logs.length === 0 && <div style={{ color: "#6b7280", fontSize: 13 }}>No hay movimientos registrados para esta fecha.</div>}
+    {!cargando && !error && logsFiltrados.length === 0 && <div style={{ color: "#6b7280", fontSize: 13 }}>No hay modificaciones registradas para las fechas seleccionadas.</div>}
 
     <div style={{ display: "grid", gap: 10, maxHeight: 520, overflow: "auto" }}>
       {Object.entries(grupos).map(([usuario, items]) => <div key={usuario} style={{ border: "1px solid #d1d5db", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
         <div style={{ background: "#f3f4f6", padding: "10px 12px", fontWeight: 900, color: "#111827" }}>{usuario} <span style={{ color: "#6b7280", fontWeight: 700 }}>- {items.length} accion(es)</span></div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead><tr style={{ background: "#f9fafb" }}><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Hora</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Accion</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Entidad</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Detalle</th></tr></thead>
+          <thead><tr style={{ background: "#f9fafb" }}><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Fecha y hora</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Accion</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Solicitante</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Detalle</th></tr></thead>
           <tbody>{items.map(log => <tr key={log.id}>
             <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>{formatFechaHora(log.creado)}</td>
             <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", fontWeight: 800 }}>{accionTexto(log.accion)}</td>
-            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(log.entidad)}</td>
-            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(detalleAuditoria(log.detalle))}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(solicitanteAuditoria(log))}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(detalleAuditoria(log.detalle, log.accion))}</td>
           </tr>)}</tbody>
         </table>
       </div>)}
