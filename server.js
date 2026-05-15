@@ -534,7 +534,7 @@ if (fs.existsSync(buildPath)) {
   });
 }
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const os = require('os');
 const interfaces = os.networkInterfaces();
 let ip = 'localhost';
