@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const Database = require("better-sqlite3");
 
@@ -39,15 +40,29 @@ function contentType(file) {
   if (ext === ".pdf") return "application/pdf";
   if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
   if (ext === ".png") return "image/png";
-  if (ext === ".html" || ext === ".htm") return "text/html; charset=utf-8";
+  if (ext === ".html" || ext === ".htm") return "text/html";
   return "application/octet-stream";
 }
 
+function safeSegment(value) {
+  const base = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return (base || "archivo").slice(0, 90);
+}
+
 function storagePath(localFile) {
-  return path.relative(DOCS_DIR, localFile)
-    .split(path.sep)
-    .map((part) => encodeURIComponent(part).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase()))
-    .join("/");
+  const rel = path.relative(DOCS_DIR, localFile);
+  const hash = crypto.createHash("sha1").update(rel).digest("hex").slice(0, 10);
+  const parts = rel.split(path.sep);
+  const file = parts.pop() || "archivo";
+  const ext = path.extname(file);
+  const base = path.basename(file, ext);
+  const safeFile = `${safeSegment(base)}_${hash}${safeSegment(ext)}`;
+  return [...parts.map(safeSegment), safeFile].join("/");
 }
 
 function cleanRut(value) {

@@ -109,13 +109,22 @@ const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean
 const apiPath = (prefix, routePath = "", fileName = "") =>
   API + prefix + encodeRoutePath(routePath) + (fileName ? "/" + encodePathPart(fileName) : "");
 const STORAGE_BUCKET = "documentos-solicitantes";
+const safeStorageSegment = (value = "") => {
+  const base = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return (base || "archivo").slice(0, 90);
+};
 const storageObjectPath = (carpeta = "", nombre = "") =>
   [carpeta, nombre]
     .filter(Boolean)
     .join("/")
     .replace(/^\/+/, "")
     .split("/")
-    .map(encodePathPart)
+    .map(safeStorageSegment)
     .join("/");
 const storagePublicUrl = (objectPath = "", bucket = STORAGE_BUCKET) =>
   objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl : "";
