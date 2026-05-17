@@ -347,6 +347,32 @@ const PROGRAMAS = [
   }
 ];
 
+function combinarProgramas(programasCustom = []) {
+  const base = PROGRAMAS.map(p => ({ ...p, esCustom: false, esBase: true }));
+  const porId = new Map(base.map(p => [p.id, p]));
+  (programasCustom || []).forEach(p => {
+    const normalizado = {
+      ...p,
+      colorLight: p.colorLight || p.colorlight || "#F9FAFB",
+      documentos: Array.isArray(p.documentos) ? p.documentos : [],
+    };
+    if (porId.has(p.id)) {
+      const anterior = porId.get(p.id);
+      porId.set(p.id, {
+        ...anterior,
+        ...normalizado,
+        documentos: normalizado.documentos.length ? normalizado.documentos : anterior.documentos,
+        esCustom: false,
+        esBase: true,
+        editadoAdmin: true,
+      });
+    } else {
+      porId.set(p.id, { ...normalizado, esCustom: true, esBase: false });
+    }
+  });
+  return Array.from(porId.values());
+}
+
 const COMITES_FIJOS = [
   { codigo:"gr1R", nombre:"Comité de Vivienda Rural Mi Nuevo Hogar",         tipo:"RURAL"  },
   { codigo:"gr2R", nombre:"Comité de Vivienda Rural La Fuerza",               tipo:"RURAL"  },
@@ -938,8 +964,9 @@ function ProgramaFigura({ programa, tipo = "", size = 56 }) {
   );
 }
 
-function Dashboard({ personas, solicitudes, comites, onNav }) {
+function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav }) {
   const completas = solicitudes.filter(s => pct(s.documentos) === 100).length;
+  const todosProgramas = combinarProgramas(programasCustom);
   return (
     <div>
       <div style={{ marginBottom: 28 }}>
@@ -961,7 +988,7 @@ function Dashboard({ personas, solicitudes, comites, onNav }) {
         ))}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-        {PROGRAMAS.map(p => {
+        {todosProgramas.map(p => {
           const comitesPrograma = comites.filter(c => c.programaId === p.id);
           const personasPrograma = personas.filter(per => comitesPrograma.some(c => c.id === per.comiteId));
           const sols = solicitudes.filter(s => s.programaId === p.id);
@@ -1006,6 +1033,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
   const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
   // Si el tipo es comite_PROGID, filtrar comités de ese programa
   const progIdSeleccionado = tipoSolicitud && tipoSolicitud.startsWith("comite_") ? tipoSolicitud.replace("comite_","") : null;
+  const todosProgramas = combinarProgramas(programasCustom);
 
   const comitesMergedBase = [
     ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, programaId: c.tipo === "Urbano" ? "csp_urbano" : "csp_rural" })),
@@ -1054,12 +1082,12 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
             <div onClick={() => seleccionarTipo("desmarque")}
               style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "desmarque" ? "#0891B2" : "#ddd"),
                 background: tipoSolicitud === "desmarque" ? "#E0F7FA" : "#fafafa", cursor: "pointer", textAlign: "center" }}>
-              <ProgramaFigura programa={PROGRAMAS.find(p => p.id === "habitabilidad")} tipo="desmarque" size={58} />
+              <ProgramaFigura programa={todosProgramas.find(p => p.id === "habitabilidad")} tipo="desmarque" size={58} />
               <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "desmarque" ? "#0891B2" : "#555", marginTop: 4 }}>Habitabilidad de Vivienda</div>
               <div style={{ fontSize: 10, color: "#888" }}>Desmarque</div>
             </div>
             {/* Programas CSP y personalizados (con comité) */}
-            {[...PROGRAMAS.filter(p => p.id !== "habitabilidad"), ...(programasCustom || [])].map(p => (
+            {todosProgramas.filter(p => p.id !== "habitabilidad").map(p => (
               <div key={p.id} onClick={() => seleccionarTipo("comite_" + p.id)}
                 style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "comite_" + p.id ? (p.color || "#7C3AED") : "#ddd"),
                   background: tipoSolicitud === "comite_" + p.id ? (p.colorLight || p.colorlight || "#F5F3FF") : "#fafafa", cursor: "pointer", textAlign: "center" }}>
@@ -2218,7 +2246,7 @@ function FichaProgramaCustom({ persona, programa, solicitud }) {
 }
 
 function DetallePersona({ personaId, personas, solicitudes, comites, programasCustom, onBack, onSaveSolicitudes, onSavePersonas, currentUser, registrarAuditoria }) {
-  const todosProgramas = [...PROGRAMAS, ...(programasCustom || [])];
+  const todosProgramas = combinarProgramas(programasCustom);
   const [showModal, setShowModal] = useState(false);
   const [progSel, setProgSel] = useState("");
   const [archivos, setArchivos] = useState([]);
@@ -5844,7 +5872,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             <span style={{ fontWeight: 400, color: "#555" }}>Seleccione el programa al que emigrará este solicitante:</span>
           </div>
           <div style={{ display: "grid", gap: 12, marginBottom: 20 }}>
-            {PROGRAMAS.filter(p => p.id !== "habitabilidad").map(p => (
+            {todosProgramas.filter(p => p.id !== "habitabilidad").map(p => (
               <div key={p.id} onClick={() => setProgramaEmigrar(p.id)}
                 style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", borderRadius: 11, border: "2px solid " + (programaEmigrar === p.id ? p.color : "#e5e7eb"), background: programaEmigrar === p.id ? p.colorLight : "#fff", cursor: "pointer" }}>
                 <div style={{ width: 40, height: 40, borderRadius: 20, background: programaEmigrar === p.id ? p.color : p.colorLight, color: programaEmigrar === p.id ? "#fff" : p.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.icon}</div>
@@ -5880,7 +5908,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               }
               // Agregar nuevo programa si corresponde
               if (programaEmigrar && programaEmigrar !== "sin_programa") {
-                const prog = PROGRAMAS.find(p => p.id === programaEmigrar);
+                const prog = todosProgramas.find(p => p.id === programaEmigrar);
                 if (prog && !misSols.find(s => s.programaId === programaEmigrar)) {
                   const nueva = {
                     id: uid(), personaId, personaNombre: persona.nombre,
@@ -6037,9 +6065,10 @@ const COLORES_PROG = [
 ];
 
 function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePrograma, onUpdatePrograma }) {
-  const todosProg = [...PROGRAMAS, ...(programasCustom || [])];
+  const todosProg = combinarProgramas(programasCustom);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [progSeleccionado, setProgSeleccionado] = useState(null);
   const [claveAdmin, setClaveAdmin] = useState("");
   const [pedirClave, setPedirClave] = useState(false);
   const [claveError, setClaveError] = useState(false);
@@ -6055,8 +6084,9 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
     if (accionPendiente?.tipo === "agregar") { setMostrarForm(true); }
     if (accionPendiente?.tipo === "editar") {
       const p = accionPendiente.prog;
-      setFormEdit({ id: p.id, nombre: p.nombre, descripcion: p.descripcion || "", color: p.color || "#2563EB", colorLight: p.colorLight || p.colorlight || "#EFF6FF", icon: p.icon || "P", documentos: (p.documentos || []).map(d => ({ ...d })) });
+      setFormEdit({ id: p.id, nombre: p.nombre, descripcion: p.descripcion || "", color: p.color || "#2563EB", colorLight: p.colorLight || p.colorlight || "#EFF6FF", icon: p.icon || "P", documentos: (p.documentos || []).map(d => ({ ...d })), esCustom: !!p.esCustom, esBase: !!p.esBase });
       setEditandoProg(p.id);
+      setProgSeleccionado(p.id);
     }
     setAccionPendiente(null);
   };
@@ -6106,7 +6136,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
             <div>
               <div style={{ fontWeight: 800, fontSize: 17, color: "#1e3a5f" }}>{prog.nombre}</div>
               <div style={{ fontSize: 13, color: "#666" }}>{prog.descripcion}</div>
-              {prog.esCustom && <div style={{ fontSize: 10, color: "#7C3AED", fontWeight: 700 }}>Programa personalizado</div>}
+              <div style={{ fontSize: 10, color: prog.esCustom ? "#7C3AED" : "#059669", fontWeight: 700 }}>{prog.esCustom ? "Programa personalizado" : prog.editadoAdmin ? "Programa base editado" : "Programa base"}</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -6114,14 +6144,14 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
               <div><div style={{ fontSize: 22, fontWeight: 800, color: prog.color || "#6B7280" }}>{sols.length}</div><div style={{ fontSize: 11, color: "#888" }}>SOLICITUDES</div></div>
               <div><div style={{ fontSize: 22, fontWeight: 800, color: "#059669" }}>{comp}</div><div style={{ fontSize: 11, color: "#888" }}>COMPLETAS</div></div>
             </div>
-            {prog.esCustom && (
-              <div style={{ display:"flex", gap:6 }}>
-                <button onClick={() => pedirClaveAdmin("editar", prog.id, prog)}
-                  style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", color:"#1e3a5f", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Editar programa">✏ Editar</button>
+            <div style={{ display:"flex", gap:6 }}>
+              <button onClick={() => pedirClaveAdmin("editar", prog.id, prog)}
+                style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", color:"#1e3a5f", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Editar programa">✏ Editar</button>
+              {prog.esCustom && (
                 <button onClick={() => pedirClaveAdmin("eliminar", prog.id, null)}
                   style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 18, lineHeight: 1 }} title="Eliminar programa">✕</button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
         <div style={{ padding: "18px 24px" }}>
@@ -6303,9 +6333,29 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 16 }}>
-        {todosProg.map(prog => <div key={prog.id}>{tarjeta(prog)}</div>)}
+      <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", padding: "22px 26px", marginBottom: 18 }}>
+        <div style={{ fontSize: 24, fontWeight: 900, color: "#1e3a5f", marginBottom: 8 }}>Solicitante registrador</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#333", marginBottom: 14 }}>¿Programa de solicitud? *</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+          {todosProg.map(prog => {
+            const activo = progSeleccionado === prog.id;
+            return (
+              <button key={prog.id} onClick={() => { setProgSeleccionado(prog.id); setMostrarForm(false); }}
+                style={{ minHeight: 190, padding: "18px 16px", borderRadius: 12, border: "3px solid " + (activo ? (prog.color || "#1e3a5f") : "#ddd"), background: activo ? (prog.colorLight || "#F8FAFC") : "#fafafa", cursor: "pointer", textAlign: "center", boxShadow: activo ? "0 10px 24px rgba(30,58,95,0.12)" : "none" }}>
+                <ProgramaFigura programa={prog} size={66} />
+                <div style={{ fontSize: 17, fontWeight: 900, color: "#333", marginTop: 10, lineHeight: 1.25 }}>{prog.nombre}</div>
+                <div style={{ fontSize: 13, color: "#888", marginTop: 5, lineHeight: 1.35 }}>{prog.descripcion || "Con comité"}</div>
+                <div style={{ fontSize: 11, color: prog.esCustom ? "#7C3AED" : "#059669", fontWeight: 800, marginTop: 8 }}>{prog.esCustom ? "Personalizado" : "Base"}</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {progSeleccionado && (() => {
+        const prog = todosProg.find(p => p.id === progSeleccionado);
+        return prog ? tarjeta(prog) : null;
+      })()}
 
       {pedirClave && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:3000 }}
@@ -6313,7 +6363,11 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
           <div style={{ background:"#fff", borderRadius:14, padding:"28px 32px", width:360, boxShadow:"0 24px 64px rgba(0,0,0,0.3)" }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:16, fontWeight:800, color:"#1e3a5f", marginBottom:8 }}>🔒 Clave de administrador</div>
             <div style={{ fontSize:13, color:"#555", marginBottom:16 }}>
-              {accionPendiente?.tipo === "eliminar" ? "Ingresa la clave para eliminar este programa." : "Ingresa la clave para agregar un nuevo programa."}
+              {accionPendiente?.tipo === "eliminar"
+                ? "Ingresa la clave para eliminar este programa."
+                : accionPendiente?.tipo === "editar"
+                  ? "Ingresa la clave para editar documentos y datos del programa."
+                  : "Ingresa la clave para agregar un nuevo programa."}
             </div>
             <input type="password" autoFocus value={claveAdmin}
               onChange={e => { setClaveAdmin(e.target.value); setClaveError(false); }}
@@ -6333,7 +6387,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
 }
 
 // ─── VISTA SIN COMITÉ ─────────────────────────────────────────────────────────
-function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveSolicitudes, onDetail }) {
+function SinComiteView({ personas, comites, solicitudes, programasCustom = [], onSavePersonas, onSaveSolicitudes, onDetail }) {
   const [search, setSearch] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
   const [comiteDestino, setComiteDestino] = useState("");
@@ -6341,6 +6395,7 @@ function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveS
   const [migrando, setMigrando] = useState(false);
   const [claveMigrar, setClaveMigrar] = useState("");
   const [clavePaso, setClavePaso] = useState(false); // true = clave ya validada
+  const todosProgramas = combinarProgramas(programasCustom);
 
   const sinComite = personas.filter(p =>
     !p.comiteId || p.comiteId === "" || p.comiteId === null
@@ -6381,7 +6436,7 @@ function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveS
     }
     // Si el comité es de un programa, crear solicitudes automáticamente
     if (comite && comite.programaId) {
-      const prog = PROGRAMAS.find(p2 => p2.id === comite.programaId);
+      const prog = todosProgramas.find(p2 => p2.id === comite.programaId);
       if (prog) {
         const nuevasSols = [...solicitudes];
         for (const id of seleccionados) {
@@ -6481,7 +6536,7 @@ function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveS
                 {misSols.length > 0 && (
                   <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 2 }}>
                     📋 {misSols.length} programa(s) asignado(s): {misSols.map(s => {
-                      const prog = PROGRAMAS.find(pr => pr.id === s.programaId);
+                      const prog = todosProgramas.find(pr => pr.id === s.programaId);
                       return prog ? prog.nombre.split(" ")[0] : s.programaId;
                     }).join(", ")}
                   </div>
@@ -6536,7 +6591,7 @@ function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveS
                 style={{ width: "100%", padding: "10px 14px", borderRadius: 9, border: "1.5px solid #ddd", fontSize: 14, background: "#fff", marginBottom: 14, boxSizing: "border-box" }}>
                 <option value="">-- Seleccionar comité --</option>
                 {comites.map(c => {
-                  const prog = PROGRAMAS.find(p2 => p2.id === c.programaId);
+                  const prog = todosProgramas.find(p2 => p2.id === c.programaId);
                   return (
                     <option key={c.id} value={c.id}>
                       {c.nombre}{prog ? " (" + prog.nombre.split(" ")[0] + ")" : ""}
@@ -6549,7 +6604,7 @@ function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveS
                   📋 Comité seleccionado: <strong>{comites.find(c => c.id === comiteDestino)?.nombre}</strong>
                   {(() => {
                     const c = comites.find(c2 => c2.id === comiteDestino);
-                    const prog = c ? PROGRAMAS.find(p2 => p2.id === c.programaId) : null;
+                    const prog = c ? todosProgramas.find(p2 => p2.id === c.programaId) : null;
                     return prog ? <span> · Programa: <strong>{prog.nombre}</strong></span> : null;
                   })()}
                 </div>
@@ -6571,11 +6626,12 @@ function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveS
 }
 
 // ─── VISTA SOLICITUDES ────────────────────────────────────────────────────────
-function SolicitudesView({ solicitudes, personas = [], onDetail }) {
+function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onDetail }) {
   const [filtProg, setFiltProg] = useState("todos");
   const [filtEst, setFiltEst] = useState("todos");
   const [search, setSearch] = useState("");
   const [personaSelId, setPersonaSelId] = useState(null);
+  const todosProgramas = combinarProgramas(programasCustom);
 
   const normBuscar = (txt) => (txt || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9k]+/g, " ").trim();
   const rutBuscar = (rut) => (rut || "").toString().toLowerCase().replace(/[^0-9k]/g, "");
@@ -6733,7 +6789,7 @@ function SolicitudesView({ solicitudes, personas = [], onDetail }) {
       <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
         <select value={filtProg} onChange={e => setFiltProg(e.target.value)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, background: "#fff" }}>
           <option value="todos">Todos los programas</option>
-          {PROGRAMAS.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          {todosProgramas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </select>
         {["todos", "completas", "incompletas"].map(k => (
           <button key={k} onClick={() => setFiltEst(k)} style={{ padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + (filtEst === k ? "#1e3a5f" : "#ddd"), background: filtEst === k ? "#1e3a5f" : "#fff", color: filtEst === k ? "#fff" : "#555", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -6744,7 +6800,7 @@ function SolicitudesView({ solicitudes, personas = [], onDetail }) {
       {filtered.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>No hay solicitudes.</div>}
       <div style={{ display: "grid", gap: 10 }}>
         {filtered.map(s => {
-          const prog = PROGRAMAS.find(p => p.id === s.programaId);
+          const prog = todosProgramas.find(p => p.id === s.programaId);
           const docs = s.documentos || [];
           const p = pct(docs);
           const ok = docs.filter(d => docCompletoEquivalente(d, docs)).length;
@@ -6817,7 +6873,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const comite = comites.find(c => c.id === comiteId);
   if (!comite) return null;
 
-  const todosProgramas = [...PROGRAMAS, ...(programasCustom || [])];
+  const todosProgramas = combinarProgramas(programasCustom);
   const comitesDestino = [
     { id: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
     ...COMITES_FIJOS.map(c => ({
@@ -7137,7 +7193,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
   const [form, setForm] = useState({ nombre: "", descripcion: "", tipo: "", programaId: "" });
 
   const [filtroProg, setFiltroProg] = useState(filtroPrograma || "todos");
-  const todosLosProgramas = [...PROGRAMAS, ...(programasCustom || [])];
+  const todosLosProgramas = combinarProgramas(programasCustom);
   const prog = filtroProg !== "todos" ? todosLosProgramas.find(p => p.id === filtroProg) : null;
   const comitesFiltrados = filtroProg !== "todos" ? comites.filter(c => c.programaId === filtroProg) : comites;
 
@@ -7745,12 +7801,14 @@ export default function App() {
           supabase.from("solicitudes").select("*"),
           supabase.from("programas_custom").select("*"),
         ]);
-        setProgramasCustom((pc || []).map(x => ({
+        const programasCustomCargados = (pc || []).map(x => ({
           ...x,
           colorLight: x.colorlight || "#F9FAFB",
           documentos: Array.isArray(x.documentos) ? x.documentos : [],
           esCustom: true,
-        })));
+        }));
+        const programasCarga = combinarProgramas(programasCustomCargados);
+        setProgramasCustom(programasCustomCargados);
         setComites((c || []).map(x => ({
           ...x,
           programaId: x.programa_id,
@@ -7820,7 +7878,7 @@ export default function App() {
           };
           // Migrar solicitudes CSP antiguas: agregar documentos que faltan según PROGRAMAS
           if (mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") {
-            const prog = PROGRAMAS.find(p => p.id === mapped.programaId);
+            const prog = programasCarga.find(p => p.id === mapped.programaId);
             if (prog && mapped.documentos) {
               const nombresExistentes = new Set(mapped.documentos.map(d => d.nombre));
               const faltantes = prog.documentos.filter(d => !nombresExistentes.has(d.nombre));
@@ -7868,7 +7926,7 @@ export default function App() {
       await registrarAuditoria("crear_solicitante", "personas", ultima.id, { nombre: ultima.nombre, rut: ultima.rut });
       // Si es comité desmarque → crear solicitud Habitabilidad automáticamente
       if (ultima.comiteId === "comite_desmarque") {
-        const progHab = PROGRAMAS.find(p => p.id === "habitabilidad");
+        const progHab = combinarProgramas(programasCustom).find(p => p.id === "habitabilidad");
         const solExistente = solicitudes.find(s => s.personaId === ultima.id && s.programaId === "habitabilidad");
         if (progHab && !solExistente) {
           const nuevaSol = {
@@ -8050,8 +8108,8 @@ export default function App() {
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
-        {!cargando && view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
-        {!cargando && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} onNav={nav} />}
+        {!cargando && view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} programasCustom={programasCustom} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
+        {!cargando && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onNav={nav} />}
         {!cargando && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
         {!cargando && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
         {!cargando && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
@@ -8075,15 +8133,29 @@ export default function App() {
           setProgramasCustom(prev => prev.filter(p => p.id !== id));
           await registrarAuditoria("eliminar_programa", "programas_custom", id, {});
         }} onUpdatePrograma={async (prog) => {
-          const { error } = await supabase.from("programas_custom").update({
-            nombre: prog.nombre, descripcion: prog.descripcion,
-            color: prog.color, colorlight: prog.colorLight, icon: prog.icon, documentos: prog.documentos
-          }).eq("id", prog.id);
+          const esBase = PROGRAMAS.some(p => p.id === prog.id);
+          const payload = {
+            id: prog.id,
+            nombre: prog.nombre,
+            descripcion: prog.descripcion,
+            color: prog.color,
+            colorlight: prog.colorLight,
+            icon: prog.icon,
+            documentos: prog.documentos
+          };
+          const { error } = esBase
+            ? await supabase.from("programas_custom").upsert([payload], { onConflict: "id" })
+            : await supabase.from("programas_custom").update(payload).eq("id", prog.id);
           if (error) { alert("Error al actualizar programa: " + error.message); return; }
-          setProgramasCustom(prev => prev.map(p => p.id !== prog.id ? p : { ...p, ...prog, colorLight: prog.colorLight, esCustom: true }));
+          setProgramasCustom(prev => {
+            const nuevo = { ...prog, colorlight: prog.colorLight, colorLight: prog.colorLight, esCustom: !esBase };
+            return prev.some(p => p.id === prog.id)
+              ? prev.map(p => p.id !== prog.id ? p : { ...p, ...nuevo })
+              : [...prev, nuevo];
+          });
           await registrarAuditoria("actualizar_programa", "programas_custom", prog.id, { nombre: prog.nombre });
         }} />}
-        {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} onDetail={goDetail} />}
+        {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} programasCustom={programasCustom} onDetail={goDetail} />}
         {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
         {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} />}
         {!cargando && view === "auditoria" && esAdmin && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
