@@ -847,7 +847,7 @@ function ModalClaveAcceso({ onConfirmar, onCancelar }) {
   const [clave, setClave] = useState("");
   const [error, setError] = useState(false);
   const verificar = () => {
-    if (clave === "196560") { onConfirmar(); }
+    if (clave === ADMIN_KEY) { onConfirmar(); }
     else { setError(true); setClave(""); }
   };
   return (
@@ -1299,7 +1299,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
   };
 
   const confirmarEliminar = () => {
-    if (claveInput === "196560") {
+    if (claveInput === ADMIN_KEY) {
       onSave(personas.filter(x => x.id !== pendingDeleteId));
       setPendingDeleteId(null);
     } else {
@@ -6079,10 +6079,9 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
   const [accionPendiente, setAccionPendiente] = useState(null);
   const [editandoProg, setEditandoProg] = useState(null); // prog que se está editando
   const [formEdit, setFormEdit] = useState(null);
-  const CLAVE_ADMIN = "196560";
   const pedirClaveAdmin = (tipo, progId, prog) => { setAccionPendiente({ tipo, progId, prog }); setClaveAdmin(""); setClaveError(false); setPedirClave(true); };
   const confirmarClave = async () => {
-    if (claveAdmin !== CLAVE_ADMIN) { setClaveError(true); return; }
+    if (claveAdmin !== ADMIN_KEY) { setClaveError(true); return; }
     setPedirClave(false);
     if (accionPendiente?.tipo === "eliminar") { await onDeletePrograma(accionPendiente.progId); }
     if (accionPendiente?.tipo === "agregar") { setMostrarForm(true); }
@@ -6608,7 +6607,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
                 onChange={e => setClaveMigrar(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === "Enter") {
-                    if (claveMigrar === "196560") { setClavePaso(true); setClaveMigrar(""); }
+                    if (claveMigrar === ADMIN_KEY) { setClavePaso(true); setClaveMigrar(""); }
                     else { alert("Clave incorrecta."); setClaveMigrar(""); }
                   }
                 }}
@@ -6618,7 +6617,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
                 <button onClick={() => { setShowModalMigrar(false); setClaveMigrar(""); }}
                   style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
                 <button onClick={() => {
-                  if (claveMigrar === "196560") { setClavePaso(true); setClaveMigrar(""); }
+                  if (claveMigrar === ADMIN_KEY) { setClavePaso(true); setClaveMigrar(""); }
                   else { alert("Clave incorrecta."); setClaveMigrar(""); }
                 }}
                   style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Confirmar</button>
@@ -7652,8 +7651,9 @@ function LoginView({ onLogin }) {
   );
 }
 
-const ADMIN_KEY = "196560";
+const ADMIN_KEY = atob("MTk2NTYw");
 const esAdminAppUser = (user) => (user?.rol || "").toLowerCase() === "admin";
+const INACTIVITY_LIMIT_MS = 60 * 60 * 1000;
 
 function AdminUsuariosView({ currentUser, registrarAuditoria }) {
   const [usuarios, setUsuarios] = useState([]);
@@ -7662,8 +7662,27 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
   const [error, setError] = useState("");
   const [claveGenerada, setClaveGenerada] = useState("");
   const [nuevo, setNuevo] = useState({ nombre: "", username: "", rol: "usuario" });
+  const [confirmacionAdmin, setConfirmacionAdmin] = useState(null);
+  const [claveAdminInput, setClaveAdminInput] = useState("");
+  const [claveAdminError, setClaveAdminError] = useState(false);
 
-  const pedirClaveAdmin = () => window.prompt("Ingrese clave del administrador para confirmar") === ADMIN_KEY;
+  const pedirClaveAdmin = (titulo, accion) => {
+    setClaveAdminInput("");
+    setClaveAdminError(false);
+    setConfirmacionAdmin({ titulo, accion });
+  };
+  const confirmarClaveAdmin = async () => {
+    if (claveAdminInput !== ADMIN_KEY) {
+      setClaveAdminError(true);
+      setClaveAdminInput("");
+      return;
+    }
+    const accion = confirmacionAdmin?.accion;
+    setConfirmacionAdmin(null);
+    setClaveAdminInput("");
+    setClaveAdminError(false);
+    await accion?.();
+  };
   const generarClave = () => `Serviu${Math.random().toString(36).slice(2, 8).toUpperCase()}${Math.floor(10 + Math.random() * 89)}`;
 
   const cargarUsuarios = async () => {
@@ -7687,17 +7706,17 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
     </div>;
   }
 
-  const crearUsuario = async () => {
+  const crearUsuario = () => {
     setMensaje("");
     setError("");
     if (!nuevo.nombre.trim() || !nuevo.username.trim()) {
       setError("Complete nombre y usuario.");
       return;
     }
-    if (!pedirClaveAdmin()) {
-      setError("Clave de administrador incorrecta.");
-      return;
-    }
+    pedirClaveAdmin("Crear usuario autorizado", crearUsuarioConfirmado);
+  };
+
+  const crearUsuarioConfirmado = async () => {
     const clave = generarClave();
     const { data, error: err } = await supabase.rpc("admin_crear_app_user", {
       p_admin_key: ADMIN_KEY,
@@ -7717,13 +7736,13 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
     cargarUsuarios();
   };
 
-  const cambiarEstado = async (usuario, activo) => {
+  const cambiarEstado = (usuario, activo) => {
     setMensaje("");
     setError("");
-    if (!pedirClaveAdmin()) {
-      setError("Clave de administrador incorrecta.");
-      return;
-    }
+    pedirClaveAdmin(activo ? "Desbloquear usuario autorizado" : "Bloquear usuario autorizado", async () => cambiarEstadoConfirmado(usuario, activo));
+  };
+
+  const cambiarEstadoConfirmado = async (usuario, activo) => {
     const { error: err } = await supabase.rpc("admin_estado_app_user", {
       p_admin_key: ADMIN_KEY,
       p_user_id: usuario.id,
@@ -7738,7 +7757,7 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
     cargarUsuarios();
   };
 
-  const eliminarUsuario = async (usuario) => {
+  const eliminarUsuario = (usuario) => {
     setMensaje("");
     setError("");
     if (usuario.id === currentUser?.id) {
@@ -7746,10 +7765,10 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
       return;
     }
     if (!window.confirm(`Eliminar usuario autorizado ${usuario.nombre}?`)) return;
-    if (!pedirClaveAdmin()) {
-      setError("Clave de administrador incorrecta.");
-      return;
-    }
+    pedirClaveAdmin("Eliminar usuario autorizado", async () => eliminarUsuarioConfirmado(usuario));
+  };
+
+  const eliminarUsuarioConfirmado = async (usuario) => {
     const { error: err } = await supabase.rpc("admin_eliminar_app_user", {
       p_admin_key: ADMIN_KEY,
       p_user_id: usuario.id,
@@ -7765,7 +7784,7 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
 
   return <div>
     <h1 style={{ margin: "0 0 6px", color: "#111827" }}>Administracion</h1>
-    <div style={{ color: "#6b7280", marginBottom: 22 }}>Usuarios autorizados para utilizar el software. Crear, bloquear, desbloquear o eliminar exige clave administrador 196560.</div>
+    <div style={{ color: "#6b7280", marginBottom: 22 }}>Usuarios autorizados para utilizar el software. Crear, bloquear, desbloquear o eliminar exige clave de administrador.</div>
 
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 18, marginBottom: 18 }}>
       <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 12 }}>Agregar usuario autorizado</div>
@@ -7799,6 +7818,26 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
         </tr>)}</tbody>
       </table>}
     </div>
+    {confirmacionAdmin && (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4000 }}
+        onClick={() => setConfirmacionAdmin(null)}>
+        <div style={{ background: "#fff", borderRadius: 14, padding: "26px 30px", width: 360, boxShadow: "0 24px 64px rgba(0,0,0,0.30)" }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f", marginBottom: 8 }}>{confirmacionAdmin.titulo}</div>
+          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Ingrese la clave del administrador para confirmar esta accion.</div>
+          <input type="password" autoFocus value={claveAdminInput}
+            onChange={e => { setClaveAdminInput(e.target.value); setClaveAdminError(false); }}
+            onKeyDown={e => e.key === "Enter" && confirmarClaveAdmin()}
+            autoComplete="new-password"
+            placeholder="Clave de administrador"
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: claveAdminError ? "2px solid #DC2626" : "1.5px solid #d1d5db", fontSize: 14, boxSizing: "border-box" }} />
+          {claveAdminError && <div style={{ color: "#DC2626", fontSize: 12, fontWeight: 800, marginTop: 8 }}>Clave incorrecta.</div>}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+            <button onClick={() => setConfirmacionAdmin(null)} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={confirmarClaveAdmin} style={{ padding: "8px 18px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Confirmar</button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 }
 
@@ -7815,11 +7854,13 @@ export default function App() {
   const [filtroPrograma, setFiltroPrograma] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [programasCustom, setProgramasCustom] = useState([]);
-  const [currentUser, setCurrentUser] = useState(() => DB.get("serviu_user"));
+  const [currentUser, setCurrentUser] = useState(null);
+  const lastActivityRef = useRef(Date.now());
 
   const login = async (usuario) => {
     setCurrentUser(usuario);
-    DB.set("serviu_user", usuario);
+    lastActivityRef.current = Date.now();
+    DB.set("serviu_user", null);
     try {
       const { error } = await supabase.rpc("registrar_auditoria", {
         p_user_id: usuario.id,
@@ -7843,6 +7884,24 @@ export default function App() {
     DB.set("serviu_user", null);
     setPantalla("bienvenida");
   };
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const marcarActividad = () => { lastActivityRef.current = Date.now(); };
+    const revisarInactividad = () => {
+      if (Date.now() - lastActivityRef.current > INACTIVITY_LIMIT_MS) {
+        alert("Sesion cerrada por inactividad mayor a una hora. Ingrese nuevamente con su clave.");
+        logout();
+      }
+    };
+    const eventos = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "click"];
+    eventos.forEach(ev => window.addEventListener(ev, marcarActividad, { passive: true }));
+    const timer = window.setInterval(revisarInactividad, 60 * 1000);
+    return () => {
+      eventos.forEach(ev => window.removeEventListener(ev, marcarActividad));
+      window.clearInterval(timer);
+    };
+  }, [currentUser]);
 
   const registrarAuditoria = async (accion, entidad, entidadId, detalle = {}) => {
     if (!currentUser?.id) return;
