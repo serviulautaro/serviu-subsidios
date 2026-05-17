@@ -248,6 +248,20 @@ const estadoActualLineaDesmarque = (sol = {}, fallback = "") => {
   return actual;
 };
 
+const DOCUMENTOS_MAVE = [
+  { nombre: "Cedula de identidad vigente del postulante", obligatorio: true },
+  { nombre: "Cuenta de ahorro de vivienda", obligatorio: true },
+  { nombre: "Fotocopia Escritura completa (DV, DRU, GOCE, USUFRUCTO, OTRO INDICAR)", obligatorio: true },
+  { nombre: "Certificado de antecedentes de la vivienda", obligatorio: true },
+  { nombre: "Certificado Avaluo Fiscal Detallado", obligatorio: true },
+  { nombre: "Certificado de Informaciones previas", obligatorio: true },
+  { nombre: "Boleta del suministro electrico", obligatorio: true, tipo: "luz", opciones: ["FRONTEL", "CODINER", "CGE"] },
+  { nombre: "Boleta del agua potable", obligatorio: true, tipo: "agua", opciones: ["Aguas Araucania", "Aguas San Isidro", "APR", "Pozo"] },
+  { nombre: "Registro Social de Hogares", obligatorio: true },
+  { nombre: "Correo electronico del solicitante", obligatorio: true },
+  { nombre: "Telefono de contacto", obligatorio: true }
+];
+
 const PROGRAMAS = [
   {
     id: "habitabilidad",
@@ -302,6 +316,13 @@ const PROGRAMAS = [
       { nombre: "Credencial de discapacidad (si corresponde)", obligatorio: false, tipo: "discapacidad", opciones: ["Con discapacidad", "Sin discapacidad"] },
       { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true }
     ]
+  },
+  {
+    id: "mave_rural",
+    nombre: "Programa de Mejoramiento de Vivienda Rural y Ampliacion de Vivienda Existente (MAVE)",
+    descripcion: "Mejoramiento y ampliacion de vivienda rural existente",
+    color: "#7C3AED", colorLight: "#F5F3FF", icon: "M",
+    documentos: DOCUMENTOS_MAVE
   }
 ];
 
@@ -3015,7 +3036,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       programaId: prog.id, fecha: today(),
       documentos: asegurarCorreoSolicitante(prog.documentos).map(d => ({
         nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
-        tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null
+        tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null,
+        requiereArchivo: !!d.requiereArchivo, requiereTexto: !!d.requiereTexto, etiquetaTexto: d.etiquetaTexto || ""
       }))
     };
     onSaveSolicitudes([...solicitudes, nueva]);
@@ -3067,8 +3089,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   // Setea la opción especial de un documento (luz/agua/discapacidad)
-  const setDocOpcion = (solId, idx, opcion, tipoReal) => {
-    onSaveSolicitudes(solicitudes.map(s => s.id !== solId ? s : {
+  const setDocOpcion = async (solId, idx, opcion, tipoReal) => {
+    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s, documentos: s.documentos.map((d, i) => {
         if (i !== idx) return d;
         const autoMarcar = (
@@ -3079,9 +3101,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         const etiqueta = autoMarcar
           ? (tipoReal === "agua" && opcion === "Pozo" ? "POZO" : "N/A")
           : null;
-        return { ...d, opcionSeleccionada: opcion, entregado: autoMarcar, etiqueta, tipo: tipoReal };
+        const partes = (d.valor || "").split("|");
+        let valor = d.valor || "";
+        if (tipoReal === "luz" && opcion !== "Sin empalme") valor = opcion + "|" + (partes[1] || "");
+        if (tipoReal === "agua" && opcion === "Pozo") valor = "Pozo";
+        if (tipoReal === "agua" && opcion !== "Pozo") valor = opcion + "|" + (partes[1] || "");
+        return { ...d, valor, opcionSeleccionada: opcion, entregado: autoMarcar, etiqueta, tipo: tipoReal };
       })
-    }));
+    });
+    onSaveSolicitudes(nuevasSols);
+    const solActualizada = nuevasSols.find(s => s.id === solId);
+    if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
   };
 
   const totalDocs = misSols.flatMap(s => s.documentos);
@@ -3687,8 +3717,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         const p = pct(sol.documentos);
         const docsVisiblesSol = (sol.documentos || []).filter(d => !d.interno);
         const ok = docsVisiblesSol.filter(d => d.entregado).length;
-        const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano";
-        const esCustom = !!(prog && prog.esCustom);
+        const progNombreNorm = (prog?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const esMave = progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
+        const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano" || esMave;
+        const esCustom = !!(prog && prog.esCustom && !esMave);
         return (
           <div key={sol.id} style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 16, border: "1px solid #e8e3de" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
@@ -3744,6 +3776,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         if (p[2]) { db.estadocivil = p[2]; lc.estadoCivil = p[2]; }
                         if (p[3]) { db.integrantes_familiares = p[3].trim(); lc.integrantesFamiliares = p[3].trim(); }
                         if (p[4]) { db.subsidio_anterior = p[4]; lc.subsidioAnterior = p[4]; }
+                        if (p[5]) { db.credencialdiscapacidad = p[5].trim(); lc.credencialDiscapacidad = p[5].trim(); }
+                        if (p[6]) { db.movilidadreducida = p[6].trim(); lc.movilidadReducida = p[6].trim(); }
+                        if (p[5] === "N/A") { db.discapacidad = "N/A"; lc.discapacidad = "N/A"; }
+                        if (p[5] && p[5] !== "N/A") { db.discapacidad = "S"; lc.discapacidad = "S"; }
                       }
                       // Luz / empalme → proveedor + n° cliente
                       if (t === "luz") {
@@ -3782,7 +3818,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         if (opSel) { db.movilidadreducida = opSel === "Sí" ? "SI" : opSel; lc.movilidadReducida = db.movilidadreducida; }
                       }
                       // Dominio de la propiedad / Título de dominio
-                      if (n.includes("dominio") || n.includes("titulo")) {
+                      if (n.includes("dominio") || n.includes("titulo") || n.includes("escritura")) {
                         const val = p[1] ? "Otro: " + p[1] : p[0];
                         if (val) { db.dominiopropiedad = val; lc.dominiopropiedad = val; }
                       }
@@ -3805,6 +3841,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       }
                       // Rol
                       if (n.includes("rol") && v) { db.rol = v; lc.rol = v; }
+                      if (n.includes("telefono") && v) { db.telefono = v.trim(); lc.telefono = v.trim(); }
                     }
                     if (Object.keys(db).length > 0) {
                       await supabase.from("personas").update(db).eq("id", persona.id);
@@ -4084,13 +4121,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 // Detectar tipo especial por nombre (independiente del campo tipo)
                 const nom = doc.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 const tipoReal = doc.tipo ||
-                  (nom.includes("boleta de luz") ? "luz" :
-                   nom.includes("boleta de agua") || nom.includes("agua (apr") ? "agua" :
+                  (nom.includes("boleta de luz") || nom.includes("suministro electrico") || nom.includes("suministro electrico") || nom.includes("electrico") ? "luz" :
+                   nom.includes("boleta de agua") || nom.includes("agua potable") || nom.includes("agua (apr") ? "agua" :
                    nom.includes("credencial de discapacidad") ? "discapacidad" : null);
 
                 const opcionesReal = doc.opciones ||
-                  (tipoReal === "luz" ? ["Con empalme", "Sin empalme"] :
-                   tipoReal === "agua" ? ["Con arranque", "Pozo"] :
+                  (tipoReal === "luz" ? ["FRONTEL", "CODINER", "CGE"] :
+                   tipoReal === "agua" ? ["Aguas Araucania", "Aguas San Isidro", "APR", "Pozo"] :
                    tipoReal === "discapacidad" ? ["Con discapacidad", "Sin discapacidad"] : null);
 
                 const esEspecial = !!tipoReal;
@@ -4098,8 +4135,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const sinOpcion = esEspecial && !opSel;
 
                 const necesitaArchivo = esEspecial && (
-                  (tipoReal === "luz" && opSel === "Con empalme") ||
-                  (tipoReal === "agua" && opSel === "Con arranque") ||
+                  (tipoReal === "luz" && opSel && opSel !== "Sin empalme") ||
+                  (tipoReal === "agua" && opSel && opSel !== "Pozo") ||
                   (tipoReal === "discapacidad" && opSel === "Con discapacidad")
                 );
 
@@ -4111,6 +4148,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   doc.nombre.toLowerCase().includes("avaluo") ||
                   doc.nombre.toLowerCase().includes("dominio") ||
                   doc.nombre.toLowerCase().includes("derecho real") ||
+                  doc.nombre.toLowerCase().includes("escritura") ||
                   (esCsp && doc.nombre.toLowerCase().includes("ruralidad")) ||
                   (esCsp && doc.nombre.toLowerCase().includes("informaciones previas")) ||
                   (esCsp && doc.nombre.toLowerCase().includes("vivienda") && !doc.nombre.toLowerCase().includes("ahorro"))
@@ -4121,7 +4159,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   const dn = doc.nombre.toLowerCase();
                   if (dn.includes("cedula")) return al.includes("cedula") || al.includes("rut") || al.includes("ci");
                   if (dn.includes("avaluo")) return al.includes("avaluo") || al.includes("avalúo");
-                  if (dn.includes("dominio") || dn.includes("derecho real"))
+                  if (dn.includes("dominio") || dn.includes("derecho real") || dn.includes("escritura"))
                     return al.includes("escritura") || al.includes("dru") || al.includes("titulo") || al.includes("dominio") || al.includes("goce") || al.includes("usufructo");
                   if (dn.includes("ruralidad")) return al.includes("ruralidad") || al.includes("rural");
                   if (dn.includes("informaciones previas")) return al.includes("informaciones") || al.includes("previas");
@@ -4144,12 +4182,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esFechaNac = esCsp && nom.includes("fecha de nacimiento");
                 const esSinDiscapacidad = tipoReal === "discapacidad" && opSel === "Sin discapacidad";
                 const esConDiscapacidad = tipoReal === "discapacidad" && opSel === "Con discapacidad";
-                const esConArranque = esCsp && tipoReal === "agua" && opSel === "Con arranque";
+                const esConArranque = esCsp && tipoReal === "agua" && opSel && opSel !== "Pozo";
                 const esCertRuralidad = esCsp && nom.includes("certificado de ruralidad");
                 const esCuentaAhorro = esCsp && nom.includes("cuenta de ahorro");
                 const esTituloDominio = esCsp && (nom.includes("titulo de dominio") || nom.includes("título de dominio"));
                 // "Dominio de la propiedad" (nuevo en CSP Rural, reemplaza Título de dominio)
-                const esDominioProp = esCsp && nom.includes("dominio de la propiedad");
+                const esDominioProp = esCsp && (nom.includes("dominio de la propiedad") || nom.includes("escritura completa"));
                 const esLuz = esCsp && tipoReal === "luz";
                 const luzPartes = esLuz ? (doc.valor || "").split("|") : [];
                 const proveedorLuz = luzPartes[0] || "";
@@ -4159,6 +4197,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esInfoPrevias = esCsp && nom.includes("informaciones previas");
                 const esAntecedentesVivienda = esCsp && nom.includes("antecedentes de la vivienda");
                 const esCorreoSolicitante = nom.includes("correo") && nom.includes("solicitante");
+                const esTelefonoContacto = esCsp && nom.includes("telefono");
 
                 // Tipo de dominio: "DV" | "DRU" | "Usufructo" | "Goce con resolución" | "Goce sin resolución" | "Otro|descripción"
                 const tituloPartes = esTituloDominio ? (doc.valor || "").split("|") : [];
@@ -4251,23 +4290,37 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const cuentaBanco = cuentaPartes[1] || "";
                 const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
 
-                // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio"
+                // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio|credencialDiscapacidad|movilidadReducida"
                 const rshPartes = esRsh ? (doc.valor || "").split("|") : [];
                 const rshPct = rshPartes[0] || "";
                 const rshComuna = rshPartes[1] || "";
                 const rshEstCivil = rshPartes[2] || "";
                 const rshIntegrantes = rshPartes[3] || "";
                 const rshSubsidio = rshPartes[4] || "";
+                const rshDiscapacidad = rshPartes[5] || "";
+                const rshMovilidad = rshPartes[6] || "";
                 const rshComunaEsLautaro = rshComuna.trim().toUpperCase() === "LAUTARO";
                 const rshComunaEsOtra = rshComuna.startsWith("OTRA: ");
                 const rshOtraComuna = rshComunaEsOtra ? rshComuna.replace(/^OTRA:\s*/, "") : "";
                 const rshComunaLista = rshComunaEsLautaro || (rshComunaEsOtra && rshOtraComuna.trim());
-                const rshCompleto = !!(rshPct.trim() && rshComunaLista && rshEstCivil.trim() && rshIntegrantes.trim() && rshSubsidio.trim());
+                const rshDiscapacidadCompleta = rshDiscapacidad === "N/A" || !!(rshDiscapacidad.trim() && rshMovilidad.trim());
+                const rshCompleto = !!(rshPct.trim() && rshComunaLista && rshEstCivil.trim() && rshIntegrantes.trim() && rshSubsidio.trim() && rshDiscapacidadCompleta);
                 const setRsh = (idx, val) => {
-                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio];
+                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad];
                   p[idx] = val;
                   const newValor = p.join("|");
-                  const completo = p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim();
+                  const discCompleta = p[5] === "N/A" || !!(p[5].trim() && p[6].trim());
+                  const completo = p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
+                  onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                    ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor, entregado: !!completo })
+                  }));
+                };
+                const setRshMultiple = (updates) => {
+                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad];
+                  Object.entries(updates).forEach(([idx, val]) => { p[Number(idx)] = val; });
+                  const newValor = p.join("|");
+                  const discCompleta = p[5] === "N/A" || !!(p[5].trim() && p[6].trim());
+                  const completo = p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
                   onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
                     ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor, entregado: !!completo })
                   }));
@@ -4284,6 +4337,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   : esInfoPrevias && !infoCompleto ? "Ingresa N° y año del documento primero"
                   : esAntecedentesVivienda && !antecCompleto ? "Ingresa N° y año del documento primero"
                   : esCorreoSolicitante && !correoCompleto ? "Ingresa correo electrónico válido"
+                  : esTelefonoContacto && !(doc.valor || "").trim() ? "Ingresa teléfono de contacto"
                   : esLuz && !nClienteLuz.trim() ? "Ingresa el N° de cliente de electricidad primero"
                   : "Sube el documento primero";
 
@@ -4296,6 +4350,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   (esInfoPrevias && !infoCompleto && !doc.entregado) ||
                   (esAntecedentesVivienda && !antecCompleto && !doc.entregado) ||
                   (esCorreoSolicitante && !correoCompleto && !doc.entregado) ||
+                  (esTelefonoContacto && !(doc.valor || "").trim() && !doc.entregado) ||
                   (esTituloDominio && !tituloTipo && !doc.entregado) ||
                   (esDocArchivo && !esTituloDominio && !esDominioProp && !esCedula && !esAvaluo && !esInfoPrevias && !esAntecedentesVivienda && !esCertRuralidad && !tieneArchivo && !doc.entregado) ||
                   (esDocArchivo && (esTituloDominio || esDominioProp || esCedula || esAvaluo || esInfoPrevias || esAntecedentesVivienda || esCertRuralidad) && !tieneArchivo && (tituloTipo || dominioTipo || cedCompleto || avaluoCompleto || infoCompleto || antecCompleto || certRuralCompleto) && !doc.entregado) ||
@@ -4313,12 +4368,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 return (
                   <div key={i} style={{ borderRadius: 9, border: "1.5px solid " + bordeColor, background: bgColor, padding: "10px 14px" }}>
                     {/* Fila superior: checkbox + nombre */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: (esEspecial || esRsh || esFechaNac) ? 8 : 0,
-                      cursor: bloqueadoPorArchivo ? "not-allowed" : (!esEspecial && !esRsh && !esFechaNac ? "pointer" : "default") }}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: (esEspecial || esRsh || esFechaNac || esTelefonoContacto) ? 8 : 0,
+                      cursor: bloqueadoPorArchivo ? "not-allowed" : (!esEspecial && !esRsh && !esFechaNac && !esTelefonoContacto ? "pointer" : "default") }}
                       onClick={() => {
                         if (bloqueadoPorArchivo) return;
                         const esDesmarque = sol.programaId === "habitabilidad";
-                        if (!esEspecial && !esDocArchivo && !esRsh && !esFechaNac) {
+                        if (!esEspecial && !esDocArchivo && !esRsh && !esFechaNac && !esTelefonoContacto) {
                           toggleDoc(sol.id, i);
                         }
                         if (esDocArchivo && tieneArchivo && !doc.entregado) {
@@ -4348,8 +4403,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       <div style={{ display: "flex", gap: 6, marginBottom: esLuz ? 6 : 4 }}>
                         {opcionesReal.map((op, oi) => (
                           <button key={oi} onClick={async () => {
-                            setDocOpcion(sol.id, i, op, tipoReal);
+                            await setDocOpcion(sol.id, i, op, tipoReal);
                             if (esCsp && tipoReal === "agua" && op === "Pozo") await syncPersona({ sistemaAgua: "Pozo", nServicioAgua: "N/A" });
+                            if (esCsp && tipoReal === "agua" && op !== "Pozo") await syncPersona({ sistemaAgua: op });
+                            if (esCsp && tipoReal === "luz" && op !== "Sin empalme") await syncPersona({ proveedorElectrico: op });
                             if (tipoReal === "discapacidad" && op === "Sin discapacidad") await syncPersona({ discapacidad: "N/A", movilidadReducida: "N/A", credencialDiscapacidad: "N/A" });
                             if (tipoReal === "discapacidad" && op === "Con discapacidad") await syncPersona({ discapacidad: "S", movilidadReducida: "", credencialDiscapacidad: "" });
                           }}
@@ -4455,6 +4512,34 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             </button>
                           ))}
                         </div>
+                        <div style={{ fontSize: 10, color: "#6b7280" }}>Discapacidad:</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={async e => { e.stopPropagation(); setRshMultiple({ 5: "N/A", 6: "N/A" }); await syncPersona({ discapacidad: "N/A", credencialDiscapacidad: "N/A", movilidadReducida: "N/A" }); }}
+                            style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshDiscapacidad === "N/A" ? "#1e3a5f" : "#ddd"), background: rshDiscapacidad === "N/A" ? "#1e3a5f" : "#fff", color: rshDiscapacidad === "N/A" ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            No — N/A
+                          </button>
+                          <button onClick={async e => { e.stopPropagation(); setRshMultiple({ 5: rshDiscapacidad === "N/A" ? "" : rshDiscapacidad, 6: rshDiscapacidad === "N/A" ? "" : rshMovilidad }); await syncPersona({ discapacidad: "S" }); }}
+                            style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshDiscapacidad && rshDiscapacidad !== "N/A" ? "#1e3a5f" : "#ddd"), background: rshDiscapacidad && rshDiscapacidad !== "N/A" ? "#1e3a5f" : "#fff", color: rshDiscapacidad && rshDiscapacidad !== "N/A" ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            Sí
+                          </button>
+                        </div>
+                        {rshDiscapacidad !== "N/A" && (
+                          <>
+                            <input type="text" placeholder="N° credencial discapacidad" value={rshDiscapacidad}
+                              onClick={e => e.stopPropagation()}
+                              onChange={async e => { setRsh(5, e.target.value); if (e.target.value.trim()) await syncPersona({ discapacidad: "S", credencialDiscapacidad: e.target.value.trim() }); }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshDiscapacidad.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            <div style={{ fontSize: 10, color: "#6b7280" }}>Movilidad reducida:</div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              {["SI","NO"].map(op => (
+                                <button key={op} onClick={async e => { e.stopPropagation(); setRsh(6, op); await syncPersona({ movilidadReducida: op }); }}
+                                  style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshMovilidad === op ? "#1e3a5f" : "#ddd"), background: rshMovilidad === op ? "#1e3a5f" : "#fff", color: rshMovilidad === op ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                  {op}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
                         {!rshCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa todos los campos para habilitar el VB</div>}
                       </div>
                     )}
@@ -4749,6 +4834,27 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (correoCompleto ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {!correoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa correo electrónico válido para habilitar el VB</div>}
                         {correoCompleto && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✓ Correo guardado en ficha</div>}
+                      </div>
+                    )}
+
+                    {/* Teléfono de contacto */}
+                    {esTelefonoContacto && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <input type="text" placeholder="Teléfono de contacto" value={doc.valor || persona.telefono || ""}
+                          onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const val = e.target.value.replace(/[^\d+ ]/g, "");
+                            const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
+                              ...s,
+                              documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: val, entregado: !!val.trim() })
+                            });
+                            onSaveSolicitudes(nuevasSols);
+                            await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
+                            if (val.trim()) await syncPersona({ telefono: val.trim() });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + ((doc.valor || persona.telefono || "").trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        {!(doc.valor || persona.telefono || "").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa teléfono para habilitar el VB</div>}
+                        {(doc.valor || persona.telefono || "").trim() && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✓ Teléfono guardado en ficha</div>}
                       </div>
                     )}
 
@@ -5595,7 +5701,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     programaId: prog.id, fecha: today(),
                     documentos: prog.documentos.map(d => ({
                       nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
-                      tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null
+                      tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null,
+                      requiereArchivo: !!d.requiereArchivo, requiereTexto: !!d.requiereTexto, etiquetaTexto: d.etiquetaTexto || "", valor: d.valor || ""
                     }))
                   };
                   const { data: inserted } = await supabase.from("solicitudes").insert([{
@@ -5776,9 +5883,15 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
     await onUpdatePrograma(formEdit);
     setEditandoProg(null); setFormEdit(null);
   };
+  const plantillaMave = () => DOCUMENTOS_MAVE.map(d => ({
+    ...d,
+    requiereArchivo: d.tipo ? false : !((d.nombre || "").toLowerCase().includes("registro social") || (d.nombre || "").toLowerCase().includes("correo") || (d.nombre || "").toLowerCase().includes("telefono")),
+    requiereTexto: false,
+    etiquetaTexto: ""
+  }));
   const [form, setForm] = useState({
     nombre: "", descripcion: "", color: "#2563EB", colorLight: "#EFF6FF", icon: "N",
-    documentos: [{ nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }]
+    documentos: plantillaMave()
   });
 
   const colIdx = COLORES_PROG.findIndex(c => c.color === form.color);
@@ -5791,7 +5904,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
     if (form.documentos.some(d => !d.nombre.trim())) { alert("Todos los documentos deben tener nombre."); return; }
     setGuardando(true);
     await onAddPrograma({ ...form, documentos: form.documentos });
-    setForm({ nombre: "", descripcion: "", color: "#2563EB", colorLight: "#EFF6FF", icon: "N", documentos: [{ nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] });
+    setForm({ nombre: "", descripcion: "", color: "#2563EB", colorLight: "#EFF6FF", icon: "N", documentos: plantillaMave() });
     setMostrarForm(false);
     setGuardando(false);
   };
@@ -5953,7 +6066,13 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>Documentos requeridos</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#555", textTransform: "uppercase" }}>Documentos requeridos</div>
+              <button type="button" onClick={() => setForm(f => ({ ...f, documentos: plantillaMave() }))}
+                style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid #D97706", background: "#FFFBEB", color: "#92400E", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
+                Usar estructura MAVE
+              </button>
+            </div>
             {form.documentos.map((doc, i) => (
               <div key={i} style={{ background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 8, border: "1px solid #E2E8F0" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginBottom: 8 }}>
@@ -6088,7 +6207,8 @@ function SinComiteView({ personas, comites, solicitudes, onSavePersonas, onSaveS
               programaId: prog.id, fecha: today(),
               documentos: prog.documentos.map(d => ({
                 nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
-                tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null, valor: d.valor || ""
+                tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null, valor: d.valor || "",
+                requiereArchivo: !!d.requiereArchivo, requiereTexto: !!d.requiereTexto, etiquetaTexto: d.etiquetaTexto || ""
               }))
             };
             await sb.from("solicitudes").insert([{
@@ -6621,6 +6741,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           opcionSeleccionada: null,
           etiqueta: null,
           valor: d.valor || "",
+          requiereArchivo: !!d.requiereArchivo,
+          requiereTexto: !!d.requiereTexto,
+          etiquetaTexto: d.etiquetaTexto || "",
         })),
       };
       nuevasSolicitudes = [...solicitudes, nuevaSol];
