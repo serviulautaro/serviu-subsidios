@@ -7857,10 +7857,20 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const lastActivityRef = useRef(Date.now());
 
+  const limpiarSesionNavegador = () => {
+    DB.set("serviu_user", null);
+    try {
+      localStorage.removeItem("serviu_user");
+      sessionStorage.removeItem("serviu_user");
+      sessionStorage.removeItem("serviu_session_active");
+    } catch {}
+  };
+
   const login = async (usuario) => {
     setCurrentUser(usuario);
     lastActivityRef.current = Date.now();
-    DB.set("serviu_user", null);
+    limpiarSesionNavegador();
+    try { sessionStorage.setItem("serviu_session_active", "1"); } catch {}
     try {
       const { error } = await supabase.rpc("registrar_auditoria", {
         p_user_id: usuario.id,
@@ -7881,9 +7891,29 @@ export default function App() {
 
   const logout = () => {
     setCurrentUser(null);
-    DB.set("serviu_user", null);
+    limpiarSesionNavegador();
     setPantalla("bienvenida");
   };
+
+  useEffect(() => {
+    limpiarSesionNavegador();
+    const cerrarAlSalir = () => {
+      limpiarSesionNavegador();
+      setCurrentUser(null);
+      setPantalla("bienvenida");
+    };
+    const cerrarSiVuelveDesdeCache = (event) => {
+      if (event.persisted) cerrarAlSalir();
+    };
+    window.addEventListener("beforeunload", cerrarAlSalir);
+    window.addEventListener("pagehide", cerrarAlSalir);
+    window.addEventListener("pageshow", cerrarSiVuelveDesdeCache);
+    return () => {
+      window.removeEventListener("beforeunload", cerrarAlSalir);
+      window.removeEventListener("pagehide", cerrarAlSalir);
+      window.removeEventListener("pageshow", cerrarSiVuelveDesdeCache);
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return undefined;
