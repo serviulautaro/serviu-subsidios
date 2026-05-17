@@ -845,6 +845,78 @@ function AlertModal({ mensaje, onClose }) {
   );
 }
 
+function ProgramaFigura({ programa, tipo = "", size = 56 }) {
+  const id = programa?.id || tipo || "";
+  const nombreNorm = (programa?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const color = programa?.color || "#1e3a5f";
+  const light = programa?.colorLight || programa?.colorlight || "#EFF6FF";
+  const common = { width: size, height: size, viewBox: "0 0 80 80", role: "img", style: { display: "block", margin: "0 auto" } };
+  if (id === "habitabilidad" || tipo === "desmarque") return (
+    <svg {...common} aria-label="Vivienda social no habitable">
+      <rect x="8" y="46" width="64" height="18" rx="4" fill="#e5e7eb" />
+      <path d="M18 45 L40 25 L62 45 V64 H18 Z" fill="#dbeafe" stroke="#1d4ed8" strokeWidth="3" />
+      <path d="M15 44 L40 20 L65 44" fill="none" stroke="#dc2626" strokeWidth="5" strokeLinecap="round" />
+      <rect x="27" y="48" width="11" height="16" fill="#94a3b8" />
+      <rect x="45" y="47" width="12" height="10" fill="#bfdbfe" stroke="#1d4ed8" />
+      <path d="M22 62 L31 53 M49 63 L58 54 M36 31 L43 38" stroke="#dc2626" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+  if (id === "csp_urbano") return (
+    <svg {...common} aria-label="Vivienda DS49 urbana en construcción">
+      <rect x="7" y="58" width="66" height="8" rx="3" fill="#d1d5db" />
+      <path d="M18 54 L18 36 L39 22 L62 36 V54" fill="#ecfdf5" stroke="#059669" strokeWidth="3" />
+      <rect x="25" y="43" width="10" height="13" fill="#a7f3d0" stroke="#047857" />
+      <rect x="45" y="39" width="10" height="9" fill="#d1fae5" stroke="#047857" />
+      <path d="M12 26 H30 M21 26 V62 M55 17 V60 M48 17 H65 M48 26 H65" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round" />
+      <path d="M57 17 L66 26" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  );
+  if (id === "csp_rural") return (
+    <svg {...common} aria-label="Vivienda rural construida en el campo">
+      <rect x="6" y="57" width="68" height="10" rx="5" fill="#bbf7d0" />
+      <path d="M17 53 L17 34 L39 18 L62 34 V53 Z" fill="#fff7ed" stroke="#d97706" strokeWidth="3" />
+      <path d="M13 34 L39 14 L66 34" fill="none" stroke="#92400e" strokeWidth="5" strokeLinecap="round" />
+      <rect x="27" y="41" width="10" height="13" fill="#fed7aa" stroke="#92400e" />
+      <rect x="47" y="39" width="10" height="9" fill="#ffedd5" stroke="#92400e" />
+      <path d="M8 57 C18 49 27 49 38 57 C49 49 59 49 72 57" fill="none" stroke="#16a34a" strokeWidth="3" />
+      <path d="M66 51 C66 42 72 42 72 51" fill="none" stroke="#15803d" strokeWidth="3" />
+    </svg>
+  );
+  if (id === "mave_rural") return (
+    <svg {...common} aria-label="Mejoramiento y ampliación de vivienda rural">
+      <rect x="8" y="58" width="64" height="8" rx="4" fill="#ddd6fe" />
+      <path d="M16 54 L16 35 L36 20 L56 35 V54 Z" fill="#f5f3ff" stroke="#7c3aed" strokeWidth="3" />
+      <path d="M50 54 V39 H67 V54 Z" fill="#ede9fe" stroke="#7c3aed" strokeWidth="3" />
+      <path d="M12 35 L36 16 L60 35" fill="none" stroke="#6d28d9" strokeWidth="5" strokeLinecap="round" />
+      <path d="M55 39 L67 30 L73 39" fill="none" stroke="#6d28d9" strokeWidth="4" strokeLinecap="round" />
+      <path d="M25 46 L35 36 M35 36 L41 42" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round" />
+      <rect x="24" y="43" width="10" height="11" fill="#c4b5fd" />
+    </svg>
+  );
+  if (id.includes("arriendo") || nombreNorm.includes("arriendo")) return (
+    <svg {...common} aria-label="Subsidio de arriendo">
+      <circle cx="40" cy="40" r="30" fill="#fff7ed" stroke="#f97316" strokeWidth="3" />
+      <path d="M22 43 L40 27 L58 43 V58 H22 Z" fill="#fed7aa" stroke="#ea580c" strokeWidth="3" />
+      <text x="40" y="50" textAnchor="middle" fontSize="22" fontWeight="800" fill="#9a3412">$</text>
+    </svg>
+  );
+  if (tipo === "sincomite") return (
+    <svg {...common} aria-label="Sin comité">
+      <rect x="21" y="13" width="38" height="54" rx="6" fill="#f8fafc" stroke="#64748b" strokeWidth="3" />
+      <rect x="30" y="9" width="20" height="10" rx="3" fill="#e2e8f0" stroke="#64748b" strokeWidth="3" />
+      <path d="M29 32 H52 M29 43 H52 M29 54 H44" stroke="#94a3b8" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  );
+  return (
+    <svg {...common} aria-label="Programa habitacional">
+      <circle cx="40" cy="40" r="31" fill={light} stroke={color} strokeWidth="3" />
+      <path d="M20 43 L40 25 L60 43 V59 H20 Z" fill="#fff" stroke={color} strokeWidth="3" />
+      <rect x="34" y="47" width="12" height="12" fill={light} stroke={color} />
+      <text x="40" y="22" textAnchor="middle" fontSize="18" fontWeight="900" fill={color}>{programa?.icon || "P"}</text>
+    </svg>
+  );
+}
+
 function Dashboard({ personas, solicitudes, comites, onNav }) {
   const completas = solicitudes.filter(s => pct(s.documentos) === 100).length;
   return (
@@ -875,7 +947,7 @@ function Dashboard({ personas, solicitudes, comites, onNav }) {
           const comp = sols.filter(s => pct(s.documentos) === 100).length;
           return (
             <div key={p.id} onClick={() => onNav("comites_prog_" + p.id)} style={{ background: "#fff", borderRadius: 14, padding: "20px 22px", border: "1px solid #e8e3de", cursor: "pointer" }}>
-              <div style={{ width: 40, height: 40, borderRadius: 20, background: p.colorLight, color: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18, marginBottom: 10 }}>{p.icon}</div>
+              <div style={{ marginBottom: 10 }}><ProgramaFigura programa={p} size={48} /></div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1e3a5f", marginBottom: 4 }}>{p.nombre}</div>
               <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{p.descripcion}</div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
@@ -961,7 +1033,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
             <div onClick={() => seleccionarTipo("desmarque")}
               style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "desmarque" ? "#0891B2" : "#ddd"),
                 background: tipoSolicitud === "desmarque" ? "#E0F7FA" : "#fafafa", cursor: "pointer", textAlign: "center" }}>
-              <div style={{ fontSize: 22 }}>🏠</div>
+              <ProgramaFigura programa={PROGRAMAS.find(p => p.id === "habitabilidad")} tipo="desmarque" size={58} />
               <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "desmarque" ? "#0891B2" : "#555", marginTop: 4 }}>Habitabilidad de Vivienda</div>
               <div style={{ fontSize: 10, color: "#888" }}>Desmarque</div>
             </div>
@@ -970,7 +1042,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
               <div key={p.id} onClick={() => seleccionarTipo("comite_" + p.id)}
                 style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "comite_" + p.id ? (p.color || "#7C3AED") : "#ddd"),
                   background: tipoSolicitud === "comite_" + p.id ? (p.colorLight || p.colorlight || "#F5F3FF") : "#fafafa", cursor: "pointer", textAlign: "center" }}>
-                <div style={{ fontSize: 22 }}>{p.icon || "👥"}</div>
+                <ProgramaFigura programa={p} size={58} />
                 <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "comite_" + p.id ? (p.color || "#7C3AED") : "#555", marginTop: 4 }}>{p.nombre}</div>
                 <div style={{ fontSize: 10, color: "#888" }}>{p.descripcion || "Con comité"}</div>
               </div>
@@ -979,7 +1051,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
             <div onClick={() => seleccionarTipo("sincomite")}
               style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "sincomite" ? "#D97706" : "#ddd"),
                 background: tipoSolicitud === "sincomite" ? "#FFFBEB" : "#fafafa", cursor: "pointer", textAlign: "center" }}>
-              <div style={{ fontSize: 22 }}>📋</div>
+              <ProgramaFigura tipo="sincomite" size={58} />
               <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "sincomite" ? "#D97706" : "#555", marginTop: 4 }}>Sin comité</div>
               <div style={{ fontSize: 10, color: "#888" }}>Pendiente de asignación</div>
             </div>
