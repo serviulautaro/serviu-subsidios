@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const { execFileSync } = require('child_process');
 // (documentos generados en HTML — sin dependencia docx)
 
 const app = express();
@@ -527,6 +528,18 @@ ${encabezadoHTML()}
 
 // SERVIR REACT
 const buildPath = path.join(__dirname, 'build');
+if (!fs.existsSync(buildPath)) {
+  try {
+    console.log('Build React no encontrado. Generando build antes de iniciar...');
+    execFileSync(process.execPath, [path.join(__dirname, 'scripts', 'demo_env.js'), 'build'], {
+      cwd: __dirname,
+      stdio: 'inherit',
+      env: { ...process.env, REACT_APP_DEMO_MODE: process.env.REACT_APP_DEMO_MODE || 'true' }
+    });
+  } catch (e) {
+    console.error('No se pudo generar build React:', e.message);
+  }
+}
 if (fs.existsSync(buildPath)) {
   app.use(express.static(buildPath));
   app.use(function(req, res) {
