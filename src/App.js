@@ -7832,6 +7832,90 @@ export default function App() {
     }
   };
 
+  const textoAuditoria = (valor) => {
+    if (valor === undefined || valor === null) return "";
+    if (typeof valor === "object") return JSON.stringify(valor);
+    return String(valor);
+  };
+
+  const valorCortoAuditoria = (valor) => {
+    const texto = textoAuditoria(valor).trim();
+    return texto.length > 120 ? texto.slice(0, 117) + "..." : texto;
+  };
+
+  const LABELS_AUDITORIA_PERSONA = {
+    nombre: "Nombre",
+    rut: "Cedula de identidad",
+    fechaNacimiento: "Fecha de nacimiento",
+    telefono: "Telefono",
+    email: "Correo electronico",
+    direccion: "Direccion",
+    comuna: "Comuna",
+    puntajeRSH: "RSH %",
+    integrantesFamiliares: "N integrantes",
+    comiteId: "Comite",
+    comite: "Comite",
+    estadoCivil: "Estado civil",
+    cuentaAhorro: "Numero cuenta ahorro",
+    banco: "Banco",
+    dominio_terreno: "Dominio de la propiedad",
+    dominiopropiedad: "Dominio de la propiedad",
+    rol_propiedad: "Rol propiedad",
+    rol: "Rol",
+    coordenadas: "Coordenadas",
+    avaluoFiscal: "Avaluo fiscal",
+    rutColores: "RUT colores",
+    cargo_comite: "Cargo en comite",
+    estado_desmarque: "Estado desmarque",
+    observaciones: "Observaciones",
+  };
+
+  const resumenCambiosPersona = (anterior = {}, actual = {}) => {
+    if (!anterior?.id) return [];
+    return Object.keys(LABELS_AUDITORIA_PERSONA).reduce((acc, key) => {
+      const antes = valorCortoAuditoria(anterior[key]);
+      const despues = valorCortoAuditoria(actual[key]);
+      if (antes !== despues) {
+        acc.push(`${LABELS_AUDITORIA_PERSONA[key]}: ${antes || "(vacio)"} -> ${despues || "(vacio)"}`);
+      }
+      return acc;
+    }, []);
+  };
+
+  const nombrePersonaAuditoria = (solicitud = {}) => {
+    const porId = personas.find(p => p.id === (solicitud.personaId || solicitud.persona_id));
+    return solicitud.personaNombre || solicitud.persona_nombre || porId?.nombre || "";
+  };
+
+  const resumenCambiosDocumentos = (anterior = [], actual = []) => {
+    const prevPorNombre = new Map((anterior || []).map((doc, idx) => [doc?.nombre || `doc_${idx}`, doc || {}]));
+    const cambios = [];
+    (actual || []).forEach((doc, idx) => {
+      const nombre = doc?.nombre || `Documento ${idx + 1}`;
+      const prev = prevPorNombre.get(nombre);
+      if (!prev) {
+        cambios.push(`Documento solicitado: ${nombre}`);
+        return;
+      }
+      const cambiosDoc = [];
+      if (!!prev.entregado !== !!doc.entregado) {
+        cambiosDoc.push(doc.entregado ? "VB marcado" : "VB retirado");
+      }
+      const valorAntes = valorCortoAuditoria(prev.valor);
+      const valorDespues = valorCortoAuditoria(doc.valor);
+      if (valorAntes !== valorDespues) {
+        cambiosDoc.push(`dato: ${valorAntes || "(vacio)"} -> ${valorDespues || "(vacio)"}`);
+      }
+      const archivoAntes = valorCortoAuditoria(prev.archivo);
+      const archivoDespues = valorCortoAuditoria(doc.archivo);
+      if (archivoAntes !== archivoDespues && archivoDespues) {
+        cambiosDoc.push(`archivo guardado: ${archivoDespues}`);
+      }
+      if (cambiosDoc.length) cambios.push(`${nombre}: ${cambiosDoc.join(", ")}`);
+    });
+    return cambios;
+  };
+
   const aligerarSolicitudesEnSegundoPlano = async (lista = []) => {
     const pesadas = (lista || []).filter(sol => tieneDocumentoPesadoConStorage(sol.documentos));
     if (!pesadas.length) return;
@@ -8010,6 +8094,7 @@ export default function App() {
     } else {
       // Actualizar sin borrar registros ausentes de la lista local.
       // En modo web multiusuario, una lista local incompleta no debe eliminar datos de Supabase.
+      const anterioresPorId = new Map(personas.map(p => [p.id, p]));
       for (const p of lista) {
         await supabase.from("personas").upsert({
           id: p.id, nombre: p.nombre, rut: p.rut,
@@ -8019,14 +8104,22 @@ export default function App() {
           comite_id: p.comiteId || null, comite: p.comite || null,
           fecha_ingreso: p.fechaIngreso || p.fecha_ingreso || today()
         });
+        const cambios = resumenCambiosPersona(anterioresPorId.get(p.id), p);
+        if (cambios.length) {
+          await registrarAuditoria("actualizar_solicitantes", "personas", p.id, {
+            solicitante: p.nombre || anterioresPorId.get(p.id)?.nombre || "",
+            cambios,
+            resumen: cambios.join("; "),
+          });
+        }
       }
-      await registrarAuditoria("actualizar_solicitantes", "personas", "", { cantidad: lista.length });
     }
   };
 
   // Guardar solicitudes en Supabase
   const saveSolicitudes = async (lista) => {
     setSolicitudes(lista);
+    const anterioresPorId = new Map(solicitudes.map(s => [s.id, s]));
     for (const s of lista) {
       await supabase.from("solicitudes").upsert({
         id: s.id, persona_id: s.personaId, persona_nombre: s.personaNombre,
@@ -8036,8 +8129,17 @@ export default function App() {
         documentos: s.documentos,
         fecha_visita: s.fecha_visita || null
       });
+      const anterior = anterioresPorId.get(s.id);
+      const cambios = resumenCambiosDocumentos(anterior?.documentos, s.documentos);
+      if (cambios.length) {
+        await registrarAuditoria("guardar_solicitudes", "solicitudes", s.id, {
+          solicitante: nombrePersonaAuditoria(s),
+          programa: s.programaId || "",
+          documentos: cambios,
+          resumen: cambios.join("; "),
+        });
+      }
     }
-    await registrarAuditoria("guardar_solicitudes", "solicitudes", "", { cantidad: lista.length });
     // No borrar solicitudes ausentes de la lista local: protege datos en producción multiusuario.
   };
 

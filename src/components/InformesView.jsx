@@ -243,6 +243,17 @@ function detalleAuditoria(detalle, accion = "") {
       carpeta ? `Carpeta: ${carpeta}` : "",
     ].filter(Boolean).join(" | ");
   }
+  if (accion === "actualizar_solicitantes") {
+    const cambios = Array.isArray(detalle.cambios) ? detalle.cambios.join("; ") : (detalle.resumen || "");
+    return cambios ? `Actualizacion realizada: ${cambios}` : "";
+  }
+  if (accion === "guardar_solicitudes") {
+    const docs = Array.isArray(detalle.documentos) ? detalle.documentos.join("; ") : (detalle.resumen || detalle.documento || "");
+    return [
+      detalle.programa ? `Programa: ${detalle.programa}` : "",
+      docs ? `Solicitud/documentos: ${docs}` : "",
+    ].filter(Boolean).join(" | ");
+  }
   const partes = [];
   Object.entries(detalle || {}).forEach(([k, val]) => {
     if (val === undefined || val === null || val === "") return;
@@ -254,7 +265,7 @@ function detalleAuditoria(detalle, accion = "") {
 function solicitanteAuditoria(log) {
   const d = log.detalle || {};
   if (typeof d === "string") return "";
-  return d.solicitante || d.persona || d.nombre || d.personaNombre || "";
+  return d.solicitante || d.persona || d.nombre || d.personaNombre || d.persona_nombre || "";
 }
 
 function imprimirAuditoria(fechaInicio, fechaTermino, logs, usuarioFiltro = "Todos los usuarios") {
