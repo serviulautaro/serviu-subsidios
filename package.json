@@ -21,7 +21,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:demo": "node scripts/demo_env.js start",
     "build": "react-scripts build",
+    "build:demo": "node scripts/demo_env.js build",
     "migrar:documentos": "node scripts/migrar_documentos_storage.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

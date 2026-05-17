@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef } from "react";
-import { supabase } from "./supabaseClient";
+import { supabase, IS_DEMO_MODE } from "./supabaseClient";
 import ComitesVivienda from "./components/ComitesVivienda";
 import InformesView from "./components/InformesView";
 import JSZip from "jszip";
@@ -7654,6 +7654,7 @@ function LoginView({ onLogin }) {
 const ADMIN_KEY = atob("MTk2NTYw");
 const esAdminAppUser = (user) => (user?.rol || "").toLowerCase() === "admin";
 const INACTIVITY_LIMIT_MS = 60 * 60 * 1000;
+const DEMO_MAX_SOLICITANTES = 5;
 
 function AdminUsuariosView({ currentUser, registrarAuditoria }) {
   const [usuarios, setUsuarios] = useState([]);
@@ -8162,6 +8163,14 @@ export default function App() {
 
   // Guardar personas en Supabase
   const savePersonas = async (lista) => {
+    if (IS_DEMO_MODE) {
+      const idsActuales = new Set(personas.map(p => p.id));
+      const nuevos = lista.filter(p => !idsActuales.has(p.id));
+      if (personas.length + nuevos.length > DEMO_MAX_SOLICITANTES) {
+        alert(`Demo limitado a ${DEMO_MAX_SOLICITANTES} solicitantes. Para seguir usando el sistema completo se debe contratar/activar la version institucional.`);
+        return;
+      }
+    }
     setPersonas(lista);
     const ultima = lista[lista.length - 1];
     if (ultima && !personas.find(p => p.id === ultima.id)) {
@@ -8379,6 +8388,11 @@ export default function App() {
       </aside>
 
       <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px" }}>
+        {IS_DEMO_MODE && (
+          <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", color: "#92400E", borderRadius: 10, padding: "10px 14px", marginBottom: 18, fontSize: 13, fontWeight: 800 }}>
+            MODO DEMO: datos locales de muestra, sin solicitantes reales. Limite: {DEMO_MAX_SOLICITANTES} solicitantes.
+          </div>
+        )}
         {cargando && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 16 }}>
             <div style={{ width: 48, height: 48, border: "4px solid #e8e3de", borderTop: "4px solid #1e3a5f", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
