@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Capacitacion Usuarios - SERVIU Subsidios</title>
+  <style>
+    :root {
+      --azul: #1e3a5f;
+      --azul2: #2563eb;
+      --verde: #059669;
+      --naranja: #d97706;
+      --rojo: #dc2626;
+      --morado: #7c3aed;
+      --fondo: #f0ede8;
+      --texto: #111827;
+      --gris: #6b7280;
+      --linea: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--texto);
+      background: #111827;
+    }
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+    .slide {
+      display: none;
+      width: 100%;
+      height: 100%;
+      padding: 46px 58px 64px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      overflow: auto;
+    }
+    .slide.active { display: block; }
+    .kicker {
+      color: var(--azul2);
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      margin-bottom: 10px;
+    }
+    h1 {
+      margin: 0;
+      color: var(--azul);
+      font-size: 42px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 0 0 20px;
+      color: var(--azul);
+      font-size: 30px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+    h3 {
+      color: var(--azul);
+      font-size: 18px;
+      margin: 0 0 10px;
+    }
+    p, li {
+      font-size: 17px;
+      line-height: 1.45;
+    }
+    ul, ol { margin-top: 8px; }
+    li { margin: 7px 0; }
+    .muted { color: var(--gris); }
+    .subtitle {
+      color: #4b5563;
+      font-size: 20px;
+      margin-top: 14px;
+      max-width: 880px;
+      line-height: 1.35;
+    }
+    .owner {
+      margin-top: 28px;
+      display: inline-block;
+      padding: 12px 18px;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      background: #eff6ff;
+      color: var(--azul);
+      font-size: 17px;
+      font-weight: 800;
+    }
+    .two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .three {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid var(--linea);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: start;
+      margin: 13px 0;
+    }
+    .num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--azul);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+    .screen {
+      background: var(--fondo);
+      border: 1px solid #d9d5ce;
+      border-radius: 16px;
+      overflow: hidden;
+      min-height: 330px;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+    }
+    .screenbar {
+      height: 34px;
+      background: #1f2937;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+      display: inline-block;
+    }
+    .dot:nth-child(2) { background: #f59e0b; }
+    .dot:nth-child(3) { background: #10b981; }
+    .app {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      min-height: 296px;
+    }
+    .side {
+      background: var(--azul);
+      color: #bfdbfe;
+      padding: 18px 12px;
+    }
+    .brand {
+      color: #fff;
+      font-weight: 900;
+      font-size: 15px;
+      margin-bottom: 18px;
+      line-height: 1.25;
+    }
+    .navitem {
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin-bottom: 5px;
+      font-size: 12px;
+    }
+    .navitem.on {
+      background: rgba(255,255,255,.16);
+      color: #fff;
+      border-left: 3px solid #4ecdc4;
+    }
+    .content {
+      padding: 20px;
+      background: #f7f5f1;
+    }
+    .topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .titlemini {
+      color: var(--azul);
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .button {
+      background: var(--azul);
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 900;
+      display: inline-block;
+    }
+    .statrow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .stat {
+      background: #fff;
+      border: 1px solid #e8e3de;
+      border-radius: 10px;
+      padding: 12px;
+      min-height: 76px;
+    }
+    .stat b {
+      display: block;
+      font-size: 26px;
+      color: var(--azul);
+      margin-bottom: 3px;
+    }
+    .stat span {
+      color: #8a8f98;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .listbox {
+      background: #fff;
+      border: 1px solid #e8e3de;
+      border-radius: 12px;
+      padding: 14px;
+      margin-top: 10px;
+    }
+    .person {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #eef0f2;
+    }
+    .person:last-child { border-bottom: 0; }
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--azul);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      margin-right: 10px;
+    }
+    .docgrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .doc {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 11px;
+      min-height: 70px;
+    }
+    .doc.ok { background: #ecfdf5; border-color: #6ee7b7; }
+    .doc.warn { background: #fffbeb; border-color: #fcd34d; }
+    .doc .check {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--verde);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      margin-right: 8px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+      background: #eff6ff;
+      color: var(--azul);
+    }
+    .pill.green { background: #ecfdf5; color: #047857; }
+    .pill.orange { background: #fffbeb; color: #92400e; }
+    .pill.red { background: #fef2f2; color: #b91c1c; }
+    .programcards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .programcard {
+      text-align: center;
+      background: #fafafa;
+      border: 2px solid #d8d8d8;
+      border-radius: 13px;
+      padding: 16px 10px;
+      min-height: 142px;
+    }
+    .house {
+      font-size: 38px;
+      color: var(--azul2);
+      margin-bottom: 8px;
+    }
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .table th, .table td {
+      padding: 10px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      font-size: 13px;
+    }
+    .table th {
+      background: #f9fafb;
+      color: var(--azul);
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+    .footer {
+      position: absolute;
+      left: 58px;
+      right: 58px;
+      bottom: 22px;
+      display: flex;
+      justify-content: space-between;
+      color: #94a3b8;
+      font-size: 12px;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 10px;
+    }
+    .controls {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: flex;
+      gap: 8px;
+      z-index: 10;
+    }
+    .controls button {
+      background: #111827;
+      color: #fff;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    .printbar {
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      z-index: 10;
+    }
+    .printbar button {
+      background: var(--azul2);
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-weight: 900;
+    }
+    @media print {
+      body { background: #fff; }
+      .deck { width: auto; height: auto; overflow: visible; }
+      .slide {
+        display: block !important;
+        height: 100vh;
+        page-break-after: always;
+        overflow: hidden;
+      }
+      .slide:last-child { page-break-after: auto; }
+      .controls, .printbar { display: none; }
+    }
+    @media (max-width: 900px) {
+      .slide { padding: 28px 22px 80px; }
+      .two, .three { grid-template-columns: 1fr; }
+      .app { grid-template-columns: 1fr; }
+      .side { display: none; }
+      .programcards, .statrow, .docgrid { grid-template-columns: 1fr; }
+      h1 { font-size: 32px; }
+      h2 { font-size: 25px; }
+      .footer { left: 22px; right: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide active">
+      <div class="kicker">Capacitacion de usuarios</div>
+      <h1>SERVIU Subsidios</h1>
+      <p class="subtitle">Sistema de gestion de subsidios habitacionales para control de solicitantes, comites, solicitudes activas, documentos, visitas e informes.</p>
+      <div class="owner">Propietario del software: JORGE ANTONIO CAMPOS CAMPOS</div>
+      <div class="two" style="margin-top:42px">
+        <div class="card">
+          <h3>Objetivo de la capacitacion</h3>
+          <p>Que cada usuario autorizado pueda ingresar al sistema, registrar solicitantes, revisar solicitudes, subir documentos, marcar VB, generar informes y mantener trazabilidad de su trabajo.</p>
+        </div>
+        <div class="card">
+          <h3>Regla principal de uso</h3>
+          <p>Todo dato ingresado debe ser revisado antes de guardar. El sistema conserva documentos, VB y datos de ficha para proteger la informacion institucional.</p>
+        </div>
+      </div>
+      <div class="footer"><span>SERVIU Subsidios</span><span>1 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Ingreso seguro</div>
+      <h2>1. Entrar al software</h2>
+      <div class="two">
+        <div>
+          <div class="step"><div class="num">1</div><div><strong>Abrir la direccion web.</strong><br><span class="muted">Cada usuario debe ingresar con su usuario y clave.</span></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Escribir usuario y clave.</strong><br><span class="muted">Si es clave inicial, el sistema pedira cambiarla.</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Entrar al sistema.</strong><br><span class="muted">El usuario queda identificado para visitas, documentos y auditoria.</span></div></div>
+          <div class="card" style="margin-top:20px">
+            <h3>Seguridad</h3>
+            <p>Si el sistema no se usa por mas de una hora, se cerrara la sesion y pedira ingresar nuevamente.</p>
+          </div>
+        </div>
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Ingreso al sistema</div>
+          <div class="app" style="grid-template-columns:1fr">
+            <div class="content" style="display:flex;align-items:center;justify-content:center">
+              <div class="card" style="width:330px">
+                <h3>Ingreso al sistema</h3>
+                <div class="muted" style="font-size:13px;margin-bottom:18px">Usuarios autorizados Unidad de Vivienda</div>
+                <div class="listbox">Usuario</div>
+                <div class="listbox">Clave</div>
+                <div class="button" style="width:100%;text-align:center;margin-top:14px">Entrar</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>Ingreso seguro</span><span>2 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Pantalla inicial</div>
+      <h2>2. Conocer el menu principal</h2>
+      <div class="two">
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Inicio</div>
+          <div class="app">
+            <div class="side">
+              <div class="brand">SERVIU<br>Control de Subsidios</div>
+              <div class="navitem on">Inicio</div>
+              <div class="navitem">Solicitantes</div>
+              <div class="navitem">Sin Comite</div>
+              <div class="navitem">Comites</div>
+              <div class="navitem">Programas</div>
+              <div class="navitem">Solicitudes</div>
+              <div class="navitem">Informes</div>
+            </div>
+            <div class="content">
+              <div class="topline"><div class="titlemini">Panel de control</div><span class="pill">Usuario activo</span></div>
+              <div class="statrow">
+                <div class="stat"><b>206</b><span>Solicitantes</span></div>
+                <div class="stat"><b>12</b><span>Comites</span></div>
+                <div class="stat"><b>3</b><span>Programas</span></div>
+                <div class="stat"><b>82%</b><span>Avance docs</span></div>
+              </div>
+              <div class="listbox">Resumen por programa y comite</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card"><h3>Menu lateral</h3><p>Permite ir a cada modulo: Inicio, Solicitantes, Sin Comite, Comites, Programas, Solicitudes, Informes, Auditoria y Administracion.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Usuario activo</h3><p>El sistema muestra quien esta trabajando. Las acciones importantes quedan asociadas a ese usuario.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Cerrar programa y cerrar sesion</h3><p>Use cerrar sesion cuando deje el computador. Asi nadie mas puede usar su usuario.</p></div>
+        </div>
+      </div>
+      <div class="footer"><span>Menu principal</span><span>3 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Solicitantes</div>
+      <h2>3. Registrar un nuevo solicitante</h2>
+      <div class="two">
+        <div>
+          <div class="step"><div class="num">1</div><div><strong>Entrar a Solicitantes.</strong><br><span class="muted">Presionar agregar solicitante.</span></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Seleccionar programa.</strong><br><span class="muted">Habitabilidad, CSP Rural, CSP Urbano u otro programa creado.</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Completar datos personales.</strong><br><span class="muted">Nombre, cedula de identidad, telefono, direccion, comuna, comite y cargo.</span></div></div>
+          <div class="step"><div class="num">4</div><div><strong>Guardar.</strong><br><span class="muted">El sistema crea la ficha y, cuando corresponde, la solicitud activa.</span></div></div>
+        </div>
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Solicitante registrador</div>
+          <div class="content">
+            <div class="titlemini">Solicitante registrador</div>
+            <p class="muted" style="font-size:13px">¿Programa de solicitud?</p>
+            <div class="programcards">
+              <div class="programcard"><div class="house">⌂</div><strong>Habitabilidad de Vivienda</strong><br><span class="muted">Desmarque</span></div>
+              <div class="programcard"><div class="house">▱</div><strong>Construccion Sitio Propio Urbano</strong><br><span class="muted">Zona urbana</span></div>
+              <div class="programcard"><div class="house">⌂</div><strong>Construccion Sitio Propio Rural</strong><br><span class="muted">Zona rural</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>Registro de solicitantes</span><span>4 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Ficha del solicitante</div>
+      <h2>4. Revisar y completar la ficha</h2>
+      <div class="two">
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Ficha del solicitante</div>
+          <div class="content">
+            <div class="topline"><div class="titlemini">Ficha Rural / Urbana</div><span class="button">Editar datos</span></div>
+            <div class="three">
+              <div class="card"><strong>Informacion General</strong><p class="muted">Nombre, cedula, fecha nacimiento, direccion, telefono, correo, rol y coordenadas.</p></div>
+              <div class="card"><strong>Area Tecnica</strong><p class="muted">Avaluo fiscal, dominio, agua, electricidad, antecedentes y recepciones.</p></div>
+              <div class="card"><strong>Area Social</strong><p class="muted">RSH, integrantes, estado civil, discapacidad, adulto mayor y subsidio anterior.</p></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card"><h3>Uso de la ficha</h3><p>La ficha concentra los datos del solicitante. Muchos campos se completan automaticamente desde Solicitudes activas al ingresar documentos y valores.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Editar datos</h3><p>Use editar solo para corregir o completar informacion. No elimine datos ya ingresados si no esta seguro.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Datos sincronizados</h3><p>Cedula, fecha de nacimiento, telefono, correo, RSH, cuenta de ahorro, rol, avaluo y coordenadas pueden quedar reflejados en la ficha.</p></div>
+        </div>
+      </div>
+      <div class="footer"><span>Ficha del solicitante</span><span>5 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Solicitudes activas</div>
+      <h2>5. Trabajar los documentos del programa</h2>
+      <div class="two">
+        <div>
+          <div class="step"><div class="num">1</div><div><strong>Abrir el solicitante.</strong><br><span class="muted">Ir al bloque Solicitudes activas.</span></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Completar campos del documento.</strong><br><span class="muted">Ejemplo: RUT, fecha de nacimiento, cuenta ahorro, RSH, rol o avaluo fiscal.</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Subir archivo correspondiente.</strong><br><span class="muted">El documento queda guardado y asociado al solicitante.</span></div></div>
+          <div class="step"><div class="num">4</div><div><strong>Marcar VB cuando corresponda.</strong><br><span class="muted">Algunos documentos se marcan automaticamente cuando tienen dato y archivo.</span></div></div>
+        </div>
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Solicitudes activas</div>
+          <div class="content">
+            <div class="topline"><div class="titlemini">Habitabilidad de Vivienda</div><span class="pill orange">En proceso</span></div>
+            <div class="docgrid">
+              <div class="doc ok"><span class="check">✓</span><strong>Cedula de identidad</strong><br><span class="muted">Archivo subido y datos completos</span></div>
+              <div class="doc warn"><strong>Ahorro de la vivienda</strong><br><span class="muted">Ingresar numero y subir archivo</span></div>
+              <div class="doc ok"><span class="check">✓</span><strong>Registro Social de Hogares</strong><br><span class="muted">RSH 40%, Lautaro</span></div>
+              <div class="doc"><strong>Certificado de avaluo</strong><br><span class="muted">Rol, valor y coordenadas</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>Solicitudes activas</span><span>6 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Desmarque de vivienda</div>
+      <h2>6. Seguir la linea de avance</h2>
+      <div class="two">
+        <div class="card">
+          <h3>Hitos principales</h3>
+          <ol>
+            <li>Ingreso del solicitante.</li>
+            <li>Documentos obligatorios.</li>
+            <li>Califica o no califica para visita.</li>
+            <li>Listo para visita.</li>
+            <li>Visitado.</li>
+            <li>Solicitud en DOM.</li>
+            <li>Informe DOM.</li>
+            <li>Ingresado a SERVIU.</li>
+            <li>Respuesta final SERVIU.</li>
+          </ol>
+        </div>
+        <div>
+          <div class="card"><h3>Estados finales</h3><p><span class="pill green">Desmarcado</span> <span class="pill orange">Rechazado apelable</span> <span class="pill red">Rechazado</span></p></div>
+          <div class="card" style="margin-top:14px"><h3>Observaciones</h3><p>Cuando un estado tiene motivo u observacion, se puede revisar el detalle escrito para entender el resultado del proceso.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Importante</h3><p>Si un solicitante no califica o queda rechazado, la linea se detiene en ese estado.</p></div>
+        </div>
+      </div>
+      <div class="footer"><span>Linea de avance</span><span>7 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Carpeta de documentos</div>
+      <h2>7. Subir, revisar y descargar archivos</h2>
+      <div class="two">
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Carpeta de documentos</div>
+          <div class="content">
+            <div class="topline"><div class="titlemini">Carpeta de documentos</div><span class="button">Descargar ZIP</span></div>
+            <div class="listbox"><strong>RUT colores.pdf</strong><br><span class="muted">Cedula de identidad</span></div>
+            <div class="listbox"><strong>Certificado avaluo.pdf</strong><br><span class="muted">Rol, avaluo fiscal y coordenadas</span></div>
+            <div class="listbox"><strong>Cuenta ahorro.pdf</strong><br><span class="muted">Documento de respaldo</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="step"><div class="num">1</div><div><strong>Subir documento.</strong><br><span class="muted">Seleccione el archivo desde el computador.</span></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Verificar nombre y carpeta.</strong><br><span class="muted">El archivo debe corresponder al solicitante y al documento indicado.</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Descargar ZIP.</strong><br><span class="muted">Permite obtener todos los archivos del solicitante o comite cuando se requiera.</span></div></div>
+        </div>
+      </div>
+      <div class="footer"><span>Documentos</span><span>8 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Comites</div>
+      <h2>8. Administrar comites por programa</h2>
+      <div class="two">
+        <div>
+          <p>En la pestaña Comites primero se elige el programa. Luego el sistema muestra solamente los comites de ese programa.</p>
+          <div class="step"><div class="num">1</div><div><strong>Entrar a Comites.</strong></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Seleccionar programa.</strong></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Abrir un comite.</strong><br><span class="muted">Se revisan integrantes, avance documental y detalle del comite.</span></div></div>
+          <div class="step"><div class="num">4</div><div><strong>Mover solicitantes.</strong><br><span class="muted">Si se cambia de comite, debe quedar una nota con la razon.</span></div></div>
+        </div>
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Comites por programa</div>
+          <div class="content">
+            <div class="titlemini">Programas</div>
+            <div class="programcards" style="margin-top:12px">
+              <div class="programcard"><div class="house">⌂</div><strong>Habitabilidad</strong><br><span class="pill">1 comite</span></div>
+              <div class="programcard"><div class="house">▱</div><strong>CSP Urbano</strong><br><span class="pill">2 comites</span></div>
+              <div class="programcard"><div class="house">⌂</div><strong>CSP Rural</strong><br><span class="pill">6 comites</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>Comites</span><span>9 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Programas</div>
+      <h2>9. Revisar requisitos de cada programa</h2>
+      <div class="two">
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Programas</div>
+          <div class="content">
+            <div class="titlemini">Programas</div>
+            <div class="listbox"><strong>Programa de Mejoramiento de Vivienda Rural y Ampliacion (MAVE)</strong><br><span class="muted">Documentos requeridos configurables</span></div>
+            <table class="table" style="margin-top:12px">
+              <tr><th>Documento</th><th>Accion</th></tr>
+              <tr><td>Cedula de identidad vigente</td><td>Ingresar datos y subir archivo</td></tr>
+              <tr><td>Cuenta de ahorro</td><td>Ingresar numero y subir archivo</td></tr>
+              <tr><td>Registro Social de Hogares</td><td>Ingresar porcentaje e integrantes</td></tr>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="card"><h3>Que se hace aqui</h3><p>Se revisan los documentos requeridos por cada programa y se puede imprimir la lista de requisitos para orientar al solicitante.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Edicion con clave</h3><p>Agregar, eliminar o modificar documentos del programa exige clave de administrador.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Nuevos programas</h3><p>Los programas creados pueden tener sus propios documentos, campos y comites.</p></div>
+        </div>
+      </div>
+      <div class="footer"><span>Programas</span><span>10 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Solicitudes</div>
+      <h2>10. Buscar solicitantes y revisar estado</h2>
+      <div class="two">
+        <div>
+          <div class="step"><div class="num">1</div><div><strong>Entrar a Solicitudes.</strong></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Buscar por cedula de identidad.</strong><br><span class="muted">El formato debe ser valido para Chile.</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Revisar documentos.</strong><br><span class="muted">El sistema muestra lo completo, pendiente y opcional.</span></div></div>
+          <div class="step"><div class="num">4</div><div><strong>Abrir detalle.</strong><br><span class="muted">Desde el resultado se puede ir a la ficha del solicitante.</span></div></div>
+        </div>
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Solicitudes</div>
+          <div class="content">
+            <div class="topline"><div class="titlemini">Buscar solicitante</div><span class="button">Buscar</span></div>
+            <div class="listbox">Cedula de identidad: 12.345.678-9</div>
+            <div class="person"><div><span class="avatar">J</span><strong>Jose Ejemplo</strong><br><span class="muted">Habitabilidad de Vivienda</span></div><span class="pill orange">5/8 docs</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>Solicitudes</span><span>11 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Informes</div>
+      <h2>11. Generar informes</h2>
+      <div class="two">
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Informes</div>
+          <div class="content">
+            <div class="titlemini">Informes disponibles</div>
+            <div class="listbox"><strong>Informe Individual del Solicitante</strong><br><span class="muted">Datos personales, ficha y documentos por programa.</span></div>
+            <div class="listbox"><strong>Informe General de Comite</strong><br><span class="muted">Integrantes, avance, documentos y coordenadas.</span></div>
+            <div class="listbox"><strong>Informe Detallado de Comite</strong><br><span class="muted">Ficha completa de cada solicitante.</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="step"><div class="num">1</div><div><strong>Elegir tipo de informe.</strong></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Seleccionar programa, comite o solicitante.</strong></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Revisar datos antes de imprimir.</strong></div></div>
+          <div class="step"><div class="num">4</div><div><strong>Usar el boton imprimir.</strong><br><span class="muted">El informe incluye pie de firma del propietario del software.</span></div></div>
+        </div>
+      </div>
+      <div class="footer"><span>Informes</span><span>12 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Auditoria y administracion</div>
+      <h2>12. Control de usuarios y trazabilidad</h2>
+      <div class="two">
+        <div>
+          <div class="card"><h3>Auditoria</h3><p>El administrador puede revisar modificaciones realizadas por usuario, fecha, solicitante y detalle de la accion.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Administracion</h3><p>Permite crear, bloquear, desbloquear o eliminar usuarios autorizados. Estas acciones exigen clave de administrador.</p></div>
+          <div class="card" style="margin-top:14px"><h3>Responsabilidad</h3><p>Cada usuario debe trabajar con su propia clave. No se deben compartir claves.</p></div>
+        </div>
+        <div class="screen">
+          <div class="screenbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Auditoria</div>
+          <div class="content">
+            <table class="table">
+              <tr><th>Fecha</th><th>Accion</th><th>Solicitante</th></tr>
+              <tr><td>13-05-2026 10:20</td><td>Documento subido</td><td>Maria Ejemplo</td></tr>
+              <tr><td>13-05-2026 10:45</td><td>Actualizacion de solicitante</td><td>Jose Ejemplo</td></tr>
+              <tr><td>13-05-2026 11:05</td><td>Visita registrada</td><td>Rosa Ejemplo</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span>Auditoria y administracion</span><span>13 / 14</span></div>
+    </section>
+
+    <section class="slide">
+      <div class="kicker">Cierre de capacitacion</div>
+      <h2>13. Buenas practicas de uso</h2>
+      <div class="three">
+        <div class="card"><h3>Antes de guardar</h3><p>Revise cedula, nombre, programa, comite y documentos. Un dato correcto desde el inicio evita correcciones posteriores.</p></div>
+        <div class="card"><h3>Documentos</h3><p>Suba el archivo correcto en la pestaña correspondiente. No marque VB si falta el archivo o el dato solicitado.</p></div>
+        <div class="card"><h3>Seguridad</h3><p>Cierre sesion al terminar. Use siempre su usuario personal para que la auditoria sea correcta.</p></div>
+      </div>
+      <div class="card" style="margin-top:24px">
+        <h3>Resumen del flujo completo</h3>
+        <p>Ingresar solicitante → asignar programa y comite → completar ficha → trabajar solicitudes activas → subir documentos → marcar VB → registrar visitas → generar informes → revisar auditoria cuando corresponda.</p>
+      </div>
+      <div class="footer"><span>Cierre</span><span>14 / 14</span></div>
+    </section>
+  </div>
+
+  <div class="printbar"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
+  <div class="controls">
+    <button onclick="prevSlide()">Anterior</button>
+    <button onclick="nextSlide()">Siguiente</button>
+  </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    let index = 0;
+    function showSlide(i) {
+      index = Math.max(0, Math.min(slides.length - 1, i));
+      slides.forEach((slide, pos) => slide.classList.toggle("active", pos === index));
+    }
+    function nextSlide() { showSlide(index + 1); }
+    function prevSlide() { showSlide(index - 1); }
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown") nextSlide();
+      if (event.key === "ArrowLeft" || event.key === "PageUp") prevSlide();
+      if (event.key === "Home") showSlide(0);
+      if (event.key === "End") showSlide(slides.length - 1);
+    });
+  </script>
+</body>
+</html>
