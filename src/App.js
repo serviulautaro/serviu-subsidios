@@ -76,6 +76,11 @@ const rutColoresDesdeSolicitudes = (sols = []) => {
   return "";
 };
 const docTieneValor = (doc) => !!((doc?.valor || "").toString().trim() || doc?.entregado || doc?.archivo || doc?.url);
+const aliviarDocumento = (doc = {}) => (
+  doc.storagePath && doc.archivoData ? { ...doc, archivoData: "" } : doc
+);
+const aliviarDocumentosSolicitud = (documentos = []) => (documentos || []).map(aliviarDocumento);
+const tieneDocumentoPesadoConStorage = (documentos = []) => (documentos || []).some(d => d?.storagePath && d?.archivoData);
 const docCompletoEquivalente = (doc, docs = []) => {
   if (docTieneValor(doc)) return true;
   const n = docNombreNorm(doc);
@@ -2508,7 +2513,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   useEffect(() => {
-    if (persona) { cargarArchivos(); cargarVisitas(); }
+    if (persona) { cargarVisitas(); }
   }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-cargar archivos cuando carpeta cambia (puede cambiar al cargar solicitudes)
@@ -2569,9 +2574,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     return !error;
   };
 
-  const guardarArchivoPersistente = async (nombre, dataUrl, mimeType = "", carp = carpeta) => {
-    if (!nombre || !dataUrl) return;
-    setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl, mimeType, carpeta: carp } }));
+  const guardarArchivoPersistente = async (nombre, dataUrl, mimeType = "", carp = carpeta, storagePath = "") => {
+    if (!nombre || (!dataUrl && !storagePath)) return;
+    const archivoUrl = storagePath ? storagePublicUrl(storagePath) : dataUrl;
+    setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp } }));
+    setArchivos(prev => prev.includes(nombre) ? prev : [nombre, ...prev]);
+    setArchivosRutas(prev => ({ ...prev, [nombre]: carp }));
     const solDestino = misSols[0];
     if (!solDestino) return;
     const documentos = [...(solDestino.documentos || [])];
@@ -2582,9 +2590,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       entregado: true,
       interno: true,
       archivo: nombre,
-      archivoData: dataUrl,
+      archivoData: storagePath ? "" : dataUrl,
       archivoTipo: mimeType,
-      carpeta: carp
+      carpeta: carp,
+      storagePath
     };
     if (idx >= 0) documentos[idx] = { ...documentos[idx], ...registro };
     else documentos.push(registro);
@@ -2596,7 +2605,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const subirArchivoServidor = async (file, carp = carpeta) => {
     if (!file) throw new Error("No se selecciono archivo.");
     if (!carp) throw new Error("No se pudo determinar la carpeta del solicitante.");
-    const dataUrl = await fileToDataUrl(file);
     const nombreSubido = file.name;
     const objectPath = storageObjectPath(carp, nombreSubido);
     const { error: storageErr } = await supabase.storage
@@ -2618,21 +2626,32 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       data = { nombre: file.name };
     }
     const storagePathFinal = storageErr ? "" : objectPath;
+    const dataUrl = storagePathFinal ? "" : await fileToDataUrl(file);
     await _registrarArchivoSupa(nombreSubido, carp, {
       storage_bucket: STORAGE_BUCKET,
       storage_path: storagePathFinal,
       mime_type: file.type || "application/octet-stream",
       tamano_bytes: file.size || 0
     });
-    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl: storagePathFinal ? storagePublicUrl(storagePathFinal) : dataUrl, mimeType: file.type, carpeta: carp } }));
-    await guardarArchivoPersistente(nombreSubido, dataUrl, file.type, carp);
+    const archivoUrl = storagePathFinal ? storagePublicUrl(storagePathFinal) : dataUrl;
+    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl: archivoUrl, mimeType: file.type, carpeta: carp } }));
+    setArchivos(prev => prev.includes(nombreSubido) ? prev : [nombreSubido, ...prev]);
+    setArchivosRutas(prev => ({ ...prev, [nombreSubido]: carp }));
+    await guardarArchivoPersistente(nombreSubido, dataUrl, file.type, carp, storagePathFinal);
     await registrarAuditoria?.("subir_documento", "archivos_solicitante", persona.id, {
       solicitante: persona.nombre,
       archivo: nombreSubido,
       carpeta: carp,
     });
-    return { nombre: nombreSubido, dataUrl, mimeType: file.type, storagePath: storagePathFinal };
+    return { nombre: nombreSubido, dataUrl: archivoUrl, mimeType: file.type, storagePath: storagePathFinal };
   };
+  const archivoLigero = (subida, carp = carpeta) => ({
+    archivo: subida.nombre,
+    archivoData: subida.storagePath ? "" : (subida.dataUrl || ""),
+    archivoTipo: subida.mimeType || "",
+    storagePath: subida.storagePath || "",
+    carpeta: carp
+  });
 
   const cargarArchivos = async () => {
     const fetchLista = async (p) => {
@@ -2724,7 +2743,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setSubiendo(true);
     try {
       await subirArchivoServidor(file, carpeta);
-      await cargarArchivos();
       // Si es comité desmarque, detectar tipo de archivo
       if (persona.comiteId === "comite_desmarque") {
         const nombreLower = file.name.toLowerCase();
@@ -3022,7 +3040,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const ok = await _registrarArchivoSupa(nombreArch, carpeta);
       if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
       await guardarArchivoPersistente(nombreArch, htmlToDataUrl(html), "text/html", carpeta);
-      await cargarArchivos();
       // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el escaneado)
       const fechaIso = new Date().toISOString().slice(0, 10);
       await _actualizarValorDoc("Memo DOM", numero + "|" + fechaIso);
@@ -3046,7 +3063,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const ok = await _registrarArchivoSupa(nombreArch, carpeta);
       if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
       await guardarArchivoPersistente(nombreArch, htmlToDataUrl(html), "text/html", carpeta);
-      await cargarArchivos();
       // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el comprobante)
       const fechaIso = new Date().toISOString().slice(0, 10);
       await _actualizarValorDoc("Carta SERVIU", numero + "|" + fechaIso);
@@ -3072,7 +3088,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const ok = await _registrarArchivoSupa(nombreArch, carpeta);
       if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
       await guardarArchivoPersistente(nombreArch, htmlToDataUrl(html), "text/html", carpeta);
-      await cargarArchivos();
       setShowModalSolicitud(false);
       setFormSolicitud({ subsidio: "", anioSubsidio: "" });
     } catch(e) { alert("Error generando solicitud: " + e.message); }
@@ -3121,7 +3136,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const ok = await _registrarArchivoSupa(nombreArchivo, carpeta);
       if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
       await guardarArchivoPersistente(nombreArchivo, htmlToDataUrl(html), "text/html", carpeta);
-      await cargarArchivos();
       setShowModalInformeJACC(false);
       setFilasInforme([{ id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }]);
       setInformeSubsidioTexto("");
@@ -3692,7 +3706,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       setSubiendo(true);
                       try {
                         await subirArchivoServidor(file, carpeta);
-                        await cargarArchivos();
                         setShowModalInformeDom(true);
                       } catch (err) { alert("Error al subir Informe DOM: " + (err.message || "")); }
                       finally { setSubiendo(false); e.target.value = ""; }
@@ -3707,7 +3720,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       setSubiendo(true);
                       try {
                         await subirArchivoServidor(file, carpeta);
-                        await cargarArchivos();
                         setShowModalRespuestaServiu(true);
                       } catch (err) { alert("Error al subir Respuesta SERVIU: " + (err.message || "")); }
                       finally { setSubiendo(false); e.target.value = ""; }
@@ -3722,7 +3734,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       setSubiendo(true);
                       try {
                         await subirArchivoServidor(file, carpeta);
-                        await cargarArchivos();
                         await _activarVb("Memo DOM");
                       } catch (err) { alert("Error al subir Memo recibido: " + (err.message || "")); }
                       finally { setSubiendo(false); e.target.value = ""; }
@@ -3737,7 +3748,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       setSubiendo(true);
                       try {
                         await subirArchivoServidor(file, carpeta);
-                        await cargarArchivos();
                         await _activarVb("Carta SERVIU");
                       } catch (err) { alert("Error al subir comprobante Carta: " + (err.message || "")); }
                       finally { setSubiendo(false); e.target.value = ""; }
@@ -4090,8 +4100,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
                   const guardarArchivoDoc = async (fileOrName) => {
                     const nombreArchivo = typeof fileOrName === "string" ? fileOrName : (fileOrName.nombre || fileOrName.name);
-                    const archivoExtra = typeof fileOrName === "object" && fileOrName.dataUrl
-                      ? { archivoData: fileOrName.dataUrl, archivoTipo: fileOrName.mimeType || "", storagePath: fileOrName.storagePath || "", carpeta }
+                    const archivoExtra = typeof fileOrName === "object" && (fileOrName.dataUrl || fileOrName.storagePath)
+                      ? archivoLigero(fileOrName, carpeta)
                       : {};
                     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                       ...s,
@@ -4130,7 +4140,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 try {
                                   const nombreSubido = await subirArchivoServidor(file, carpeta);
                                   await guardarArchivoDoc(nombreSubido);
-                                  await cargarArchivos();
                                   await marcarVB();
                                 } catch (err) { alert("Error al subir cédula de identidad: " + (err.message || "")); }
                                 finally { e.target.value = ""; }
@@ -4148,7 +4157,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                   try {
                                     const nombreSubido = await subirArchivoServidor(file, carpeta);
                                     await guardarArchivoDoc(nombreSubido);
-                                    await cargarArchivos();
                                     if ((valObj.numeroCuenta || "").trim()) await marcarVB();
                                   } catch (err) { alert("Error al subir comprobante de ahorro: " + (err.message || "")); }
                                   finally { e.target.value = ""; }
@@ -4219,7 +4227,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 try {
                                   const nombreSubido = await subirArchivoServidor(file, carpeta);
                                   await guardarArchivoDoc(nombreSubido);
-                                  await cargarArchivos();
                                 } catch (err) { alert("Error al subir archivo: " + (err.message || "")); }
                                 finally { e.target.value = ""; }
                               }} />}
@@ -4857,10 +4864,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 const file = e.target.files[0]; if (!file) return;
                                 try {
                                   const subida = await subirArchivoServidor(file, carpeta);
-                                  await cargarArchivos();
                                   // Marcar flag de archivo subido en doc.valor
                                   const newValor = cuentaNum + "|" + cuentaBanco + "|ok";
-                                  const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, archivo: subida.nombre, archivoData: subida.dataUrl, archivoTipo: subida.mimeType || "", carpeta, valor: newValor }) });
+                                  const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, ...archivoLigero(subida), valor: newValor }) });
                                   onSaveSolicitudes(nuevasSols);
                                   await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
                                 } catch (err) { alert("Error al subir cartola/certificado: " + (err.message || "")); }
@@ -5365,10 +5371,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                   if (!file) return;
                                   try {
                                     const subida = await subirArchivoServidor(file, carpeta);
-                                    await cargarArchivos();
                                     // Marcar como entregado
                                     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                                      ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, archivo: subida.nombre, archivoData: subida.dataUrl, archivoTipo: subida.mimeType || "", carpeta, entregado: true } : d2)
+                                      ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, ...archivoLigero(subida), entregado: true } : d2)
                                     });
                                     onSaveSolicitudes(nuevasSols);
                                     await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
@@ -5404,9 +5409,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                   if (!file) return;
                                   try {
                                     const subida = await subirArchivoServidor(file, carpeta);
-                                    await cargarArchivos();
                                     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                                      ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, archivo: subida.nombre, archivoData: subida.dataUrl, archivoTipo: subida.mimeType || "", carpeta, entregado: true } : d2)
+                                      ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, ...archivoLigero(subida), entregado: true } : d2)
                                     });
                                     onSaveSolicitudes(nuevasSols);
                                     await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
@@ -7828,6 +7832,20 @@ export default function App() {
     }
   };
 
+  const aligerarSolicitudesEnSegundoPlano = async (lista = []) => {
+    const pesadas = (lista || []).filter(sol => tieneDocumentoPesadoConStorage(sol.documentos));
+    if (!pesadas.length) return;
+    for (const sol of pesadas) {
+      const documentos = aliviarDocumentosSolicitud(sol.documentos);
+      try {
+        const { error } = await supabase.from("solicitudes").update({ documentos }).eq("id", sol.id);
+        if (error) console.warn("[rendimiento] No se pudo aligerar solicitud:", sol.id, error.message);
+      } catch (err) {
+        console.warn("[rendimiento] Excepción al aligerar solicitud:", sol.id, err.message);
+      }
+    }
+  };
+
   // Cargar datos desde Supabase al iniciar
   useEffect(() => {
     const cargarDatos = async () => {
@@ -7904,7 +7922,7 @@ export default function App() {
           totalMetros:           x.totalmetros || "",
           modalidadPostulacion:  x.modalidadpostulacion || "",
         })));
-        setSolicitudes((s || []).map(sol => {
+        const solicitudesMapeadas = (s || []).map(sol => {
           const mapped = {
             ...sol,
             personaId: sol.persona_id,
@@ -7913,6 +7931,7 @@ export default function App() {
             codigoComite: sol.codigo_comite,
             tipoComite: sol.tipo_comite,
             profesionalComite: sol.profesional_comite,
+            documentos: aliviarDocumentosSolicitud(sol.documentos),
           };
           // Migrar solicitudes CSP antiguas: agregar documentos que faltan según PROGRAMAS
           if (mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") {
@@ -7929,7 +7948,9 @@ export default function App() {
             }
           }
           return mapped;
-        }));
+        });
+        setSolicitudes(solicitudesMapeadas);
+        setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesMapeadas); }, 1500);
       } catch (err) {
         console.error("Error cargando datos:", err);
       }
