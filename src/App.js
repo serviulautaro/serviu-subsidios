@@ -6114,6 +6114,42 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
   const addDoc = () => setForm(f => ({ ...f, documentos: [...f.documentos, { nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] }));
   const removeDoc = (i) => setForm(f => ({ ...f, documentos: f.documentos.filter((_, j) => j !== i) }));
   const setDoc = (i, key, val) => setForm(f => ({ ...f, documentos: f.documentos.map((d, j) => j === i ? { ...d, [key]: val } : d) }));
+  const htmlSeguro = (txt) => String(txt || "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  const imprimirRequisitos = (prog) => {
+    const win = window.open("", "_blank", "width=900,height=760");
+    if (!win) { alert("Permite ventanas emergentes para imprimir."); return; }
+    const docs = (prog.documentos || []).map((doc, i) => `
+      <tr>
+        <td style="width:42px;text-align:center">${i + 1}</td>
+        <td>${htmlSeguro(doc.nombre)}</td>
+        <td style="width:110px;text-align:center">${doc.obligatorio ? "Obligatorio" : "Opcional"}</td>
+        <td style="width:150px">${[
+          doc.requiereArchivo ? "Subir archivo" : "",
+          doc.requiereTexto ? "Ingresar dato" : "",
+          !doc.requiereArchivo && !doc.requiereTexto ? "Marcar VB" : ""
+        ].filter(Boolean).join(" / ")}</td>
+      </tr>
+    `).join("");
+    const cuerpo = `
+      ${_encabezado()}
+      <div style="text-align:center;margin:8px 0 18px">
+        <h1 style="font-size:16pt;color:#1e3a5f;margin:0 0 6px">REQUISITOS DEL PROGRAMA</h1>
+        <div style="font-size:12pt;font-weight:bold">${htmlSeguro(prog.nombre)}</div>
+        ${prog.descripcion ? `<div style="font-size:10pt;color:#555;margin-top:4px">${htmlSeguro(prog.descripcion)}</div>` : ""}
+        <div style="font-size:9pt;color:#666;margin-top:6px">Generado el ${new Date().toLocaleDateString("es-CL")}</div>
+      </div>
+      <table>
+        <thead><tr><th>N°</th><th>Documento requerido</th><th>Tipo</th><th>Acción requerida</th></tr></thead>
+        <tbody>${docs || `<tr><td colspan="4" style="text-align:center">Sin documentos registrados.</td></tr>`}</tbody>
+      </table>
+      <div style="margin-top:24px;font-size:9pt;color:#555">
+        Estos requisitos corresponden a la configuración vigente del programa en el sistema.
+      </div>
+    `;
+    win.document.write(_wrap("Requisitos del programa", cuerpo));
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 500);
+  };
 
   const guardar = async () => {
     if (!form.nombre.trim()) { alert("El nombre del programa es obligatorio."); return; }
@@ -6145,6 +6181,8 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
               <div><div style={{ fontSize: 22, fontWeight: 800, color: "#059669" }}>{comp}</div><div style={{ fontSize: 11, color: "#888" }}>COMPLETAS</div></div>
             </div>
             <div style={{ display:"flex", gap:6 }}>
+              <button onClick={() => imprimirRequisitos(prog)}
+                style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", color:"#047857", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Imprimir requisitos">🖨 Imprimir</button>
               <button onClick={() => pedirClaveAdmin("editar", prog.id, prog)}
                 style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", color:"#1e3a5f", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Editar programa">✏ Editar</button>
               {prog.esCustom && (
