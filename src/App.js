@@ -7234,10 +7234,10 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ nombre: "", descripcion: "", tipo: "", programaId: "" });
 
-  const [filtroProg, setFiltroProg] = useState(filtroPrograma || "todos");
+  const [filtroProg, setFiltroProg] = useState(filtroPrograma || "");
   const todosLosProgramas = combinarProgramas(programasCustom);
-  const prog = filtroProg !== "todos" ? todosLosProgramas.find(p => p.id === filtroProg) : null;
-  const comitesFiltrados = filtroProg !== "todos" ? comites.filter(c => c.programaId === filtroProg) : comites;
+  const prog = filtroProg ? todosLosProgramas.find(p => p.id === filtroProg) : null;
+  const comitesFiltrados = filtroProg ? comites.filter(c => c.programaId === filtroProg) : [];
 
   const filtered = comitesFiltrados.filter(c =>
     c.nombre.toLowerCase().includes(search.toLowerCase()) ||
@@ -7270,18 +7270,50 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
     if (ok) onSaveComites(comites.filter(c => c.id !== id));
   };
 
+  const tarjetaProgramaComite = (p) => {
+    const count = comites.filter(c => c.programaId === p.id).length;
+    const comitesPrograma = comites.filter(c => c.programaId === p.id);
+    const personasPrograma = personas.filter(per => comitesPrograma.some(c => c.id === per.comiteId));
+    const activo = filtroProg === p.id;
+    return (
+      <button key={p.id} onClick={() => { setFiltroProg(p.id); setSearch(""); }}
+        style={{
+          minHeight: 190,
+          padding: "18px 16px",
+          borderRadius: 12,
+          border: "3px solid " + (activo ? (p.color || "#7C3AED") : "#ddd"),
+          background: activo ? (p.colorLight || p.colorlight || "#F8FAFC") : "#fafafa",
+          cursor: "pointer",
+          textAlign: "center",
+          boxShadow: activo ? "0 10px 24px rgba(30,58,95,0.12)" : "none",
+        }}>
+        <ProgramaFigura programa={p} size={66} />
+        <div style={{ fontSize: 17, fontWeight: 900, color: "#333", marginTop: 10, lineHeight: 1.25 }}>{p.nombre}</div>
+        <div style={{ fontSize: 13, color: "#888", marginTop: 5, lineHeight: 1.35 }}>{p.descripcion || "Con comité"}</div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+          <span style={{ background: p.color || "#7C3AED", color: "#fff", borderRadius: 14, padding: "3px 9px", fontSize: 11, fontWeight: 900 }}>
+            {count} comité{count === 1 ? "" : "s"}
+          </span>
+          <span style={{ background: "#E5E7EB", color: "#374151", borderRadius: 14, padding: "3px 9px", fontSize: 11, fontWeight: 800 }}>
+            {personasPrograma.length} solicitante{personasPrograma.length === 1 ? "" : "s"}
+          </span>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>
-            {prog ? prog.nombre : "Comités"}
+            {prog ? prog.nombre : "Comités por programa"}
           </div>
           <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>
-            {filtered.length} comités{prog ? " en este programa" : " registrados"}
+            {prog ? `${filtered.length} comités en este programa` : "Selecciona un programa para ver sus comités"}
           </div>
         </div>
-        {subtab === "gestion" && (
+        {subtab === "gestion" && prog && (
           <button onClick={() => setShowModal(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo comité</button>
         )}
       </div>
@@ -7301,39 +7333,33 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
       {subtab === "directivas" && <ComitesVivienda comitesSupa={comites} />}
       {subtab === "gestion" && <div>
 
-      {/* Pestañas dinámicas por programa */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {[{ id: "todos", nombre: "Todos", color: "#1e3a5f", colorLight: "#e8edf5" }, ...todosLosProgramas].map(p => {
-          const count = p.id === "todos" ? comites.length : comites.filter(c => c.programaId === p.id).length;
-          const color = p.color || "#1e3a5f";
-          const colorLight = p.colorLight || p.colorlight || "#f5f5f5";
-          const activa = filtroProg === p.id;
-          return (
-            <button key={p.id} onClick={() => setFiltroProg(p.id)}
-              style={{
-                padding: "9px 18px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
-                border: "2px solid " + color,
-                background: activa ? color : colorLight,
-                color: activa ? "#fff" : color,
-                display: "flex", alignItems: "center", gap: 8,
-                opacity: activa ? 1 : 0.85
-              }}>
-              {p.icon && p.id !== "todos" ? p.icon + " " : ""}{p.nombre}
-              <span style={{ background: activa ? "rgba(255,255,255,0.3)" : color, color: "#fff", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 800 }}>
-                {count}
-              </span>
+      <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", padding: "22px 26px", marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "#1e3a5f", marginBottom: 8 }}>Programas</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#333" }}>Elige un programa para ver sus comités</div>
+          </div>
+          {prog && (
+            <button onClick={() => { setFiltroProg(""); setSearch(""); }}
+              style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700, color: "#555", cursor: "pointer" }}>
+              Ver todos los programas
             </button>
-          );
-        })}
+          )}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+          {todosLosProgramas.map(tarjetaProgramaComite)}
+        </div>
       </div>
 
+      {prog && (
+      <>
       <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de" }}>
         <input placeholder="Buscar comité..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
       </div>
 
       {filtered.length === 0 && (
         <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>
-          {comites.length === 0 ? "No hay comités registrados aún." : "No se encontraron resultados."}
+          {comitesFiltrados.length === 0 ? "Este programa aún no tiene comités registrados." : "No se encontraron resultados."}
         </div>
       )}
 
@@ -7390,6 +7416,8 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
           );
         })}
       </div>
+      </>
+      )}
 
       {showModal && (
         <Modal title="Crear nuevo comité" onClose={() => { setShowModal(false); setForm({ nombre: "", descripcion: "", tipo: "", programaId: "" }); }}>
