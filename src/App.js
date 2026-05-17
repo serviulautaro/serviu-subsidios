@@ -225,6 +225,29 @@ const estadoLineaDesmarque = (sol = {}) => {
   };
 };
 
+const estadoActualLineaDesmarque = (sol = {}, fallback = "") => {
+  const st = estadoLineaDesmarque(sol);
+  let actual = { key: "INGRESO_SOLICITANTE", label: "Ingreso solicitante", bg: "#EFF6FF", color: "#1D4ED8" };
+  if (st.docsCompletos) actual = { key: "DOCUMENTOS_OBLIGATORIOS", label: "Documentos obligatorios", bg: "#ECFDF5", color: "#047857" };
+  if (st.calificacion.estado === "CALIFICA") actual = { key: "CALIFICA_PARA_VISITA", label: "Califica para visita", bg: "#ECFDF5", color: "#047857" };
+  if (st.docsCompletos && st.calificacion.estado === "CALIFICA") actual = { key: "LISTO_PARA_VISITA", label: "Listo para visita", bg: "#ECFDF5", color: "#047857" };
+  if (st.visitado) actual = { key: "SOLICITANTE_VISITADO", label: "Solicitante visitado", bg: "#FFF3E0", color: "#C2693A" };
+  if (st.solicitudDom) actual = { key: "SOLICITUD_EN_DOM", label: "Solicitud en DOM", bg: "#F5F3FF", color: "#7C3AED" };
+  if (st.informeAprobado) actual = { key: "INFORME_DOM_APROBADO", label: "Informe DOM aprobado", bg: "#ECFDF5", color: "#047857" };
+  if (st.informeRechazadoApelable) actual = { key: "INFORME_DOM_RECHAZADO_APELABLE", label: "Informe DOM rechazado apelable", bg: "#FFFBEB", color: "#B45309" };
+  if (st.ingresadoServiu) actual = { key: "INFORME EN SERVIU", label: "Informe en SERVIU", bg: "#ECFDF5", color: "#3D5A23" };
+  if (st.calificacion.estado === "NO_CALIFICA") actual = { key: "NO CALIFICA", label: "No califica", bg: "#FEF2F2", color: "#B91C1C" };
+  if (st.informeRechazado) actual = { key: "RECHAZADO DOM", label: "Rechazado DOM", bg: "#FEF2F2", color: "#B91C1C" };
+  if (st.desmarcado) actual = { key: "DESMARCADO", label: "Desmarcado", bg: "#E0F7FA", color: "#0E7490" };
+  if (st.serviuRechazadoApelable) actual = { key: "RECHAZADO APELABLE", label: "Rechazado apelable", bg: "#FFFBEB", color: "#B45309" };
+  if (st.serviuRechazado) actual = { key: "DESMARQUE RECHAZADO", label: "Desmarque rechazado", bg: "#FEF2F2", color: "#B91C1C" };
+  if (!sol || !Array.isArray(sol.documentos)) {
+    const est = ESTADO_DESMARQUE[fallback] || ESTADO_DESMARQUE["NO VISITADO"];
+    return { key: fallback || "NO VISITADO", label: est.label, bg: est.bg, color: est.color };
+  }
+  return actual;
+};
+
 const PROGRAMAS = [
   {
     id: "habitabilidad",
@@ -670,6 +693,7 @@ function Modal({ title, onClose, children }) {
 function LineaAvanceDesmarque({ sol }) {
   const [abiertos, setAbiertos] = useState({});
   const st = estadoLineaDesmarque(sol);
+  const estadoActual = estadoActualLineaDesmarque(sol);
   const paso = (label, estado, detalle = "") => ({ label, estado, detalle });
   const pasos = [
     paso("Ingresa solicitante", "done", "Cédula de identidad inicial"),
@@ -693,6 +717,8 @@ function LineaAvanceDesmarque({ sol }) {
     else pasos.push(paso("Respuesta SERVIU", "pending"));
   }
 
+  const pasoActualIdx = pasos.reduce((ultimo, p, idx) => p.estado !== "pending" ? idx : ultimo, -1);
+
   const styles = {
     done: { bg: "#ECFDF5", border: "#10B981", color: "#047857" },
     pending: { bg: "#F9FAFB", border: "#D1D5DB", color: "#6B7280" },
@@ -703,16 +729,21 @@ function LineaAvanceDesmarque({ sol }) {
 
   return <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: "1px solid #dbeafe", background: "#f8fbff" }}>
     <div style={{ fontSize: 12, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Línea de avance Desmarque de Vivienda</div>
+    <div style={{ display: "inline-block", marginBottom: 10, background: estadoActual.bg, color: estadoActual.color, borderRadius: 9, padding: "4px 11px", fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>
+      Estado actual: {estadoActual.label}
+    </div>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {pasos.map((p, idx) => {
         const s = styles[p.estado] || styles.pending;
         const tieneDetalle = !!(p.detalle || "").trim();
         const abierto = !!abiertos[idx];
+        const esActual = idx === pasoActualIdx;
         return <div key={idx} title={tieneDetalle ? "Pincha para ver/ocultar detalle" : p.label}
           onClick={() => tieneDetalle && setAbiertos(prev => ({ ...prev, [idx]: !prev[idx] }))}
-          style={{ minWidth: 135, flex: "1 1 135px", border: "1.5px solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: "8px 10px", cursor: tieneDetalle ? "pointer" : "default" }}>
+          style={{ minWidth: 135, flex: "1 1 135px", border: (esActual ? "3px" : "1.5px") + " solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: esActual ? "7px 9px" : "8px 10px", cursor: tieneDetalle ? "pointer" : "default", boxShadow: esActual ? "0 0 0 3px rgba(30,58,95,0.10)" : "none" }}>
           <div style={{ fontSize: 10, fontWeight: 800, color: s.color, opacity: .8 }}>PASO {idx + 1}</div>
           <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{p.label}</div>
+          {esActual && <div style={{ fontSize: 9, marginTop: 4, fontWeight: 900, color: s.color, letterSpacing: 0, textTransform: "uppercase" }}>Estado del solicitante</div>}
           {tieneDetalle && <div style={{ fontSize: 10, marginTop: 4, color: s.color, opacity: .85 }}>{abierto ? "Ocultar detalle" : "Ver detalle"}</div>}
           {tieneDetalle && abierto && <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: "rgba(255,255,255,0.72)", border: "1px solid " + s.border, fontSize: 11, lineHeight: 1.35, color: "#111827", whiteSpace: "pre-wrap" }}>{p.detalle}</div>}
         </div>;
@@ -3089,8 +3120,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 </button>
               </>
             )}
-            {persona.estado_desmarque && (() => {
-              const est = ESTADO_DESMARQUE[persona.estado_desmarque] || ESTADO_DESMARQUE["NO VISITADO"];
+            {persona.comiteId === "comite_desmarque" && (() => {
+              const solDesmarque = misSols.find(s => s.programaId === "habitabilidad");
+              const est = estadoActualLineaDesmarque(solDesmarque, persona.estado_desmarque);
               return <span style={{ display:"inline-block", marginTop:6, background:est.bg, color:est.color, borderRadius:10, padding:"4px 14px", fontSize:13, fontWeight:800 }}>{est.label}</span>;
             })()}
           </div>
