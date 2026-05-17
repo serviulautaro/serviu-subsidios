@@ -3045,7 +3045,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setShowModal(false);
   };
 
-  const toggleDoc = (solId, idx) => {
+  const toggleDoc = async (solId, idx) => {
     const sol = solicitudes.find(s => s.id === solId);
     if (!sol) return;
     const doc = sol.documentos[idx];
@@ -3063,6 +3063,18 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       ...s, documentos: s.documentos.map((d, i) => i === idx ? { ...d, entregado: !d.entregado } : d)
     });
     onSaveSolicitudes(nuevasSols);
+    const solActualizada = nuevasSols.find(s => s.id === solId);
+    if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
+  };
+
+  const marcarDocEntregado = async (solId, idx, entregado = true) => {
+    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
+      ...s,
+      documentos: s.documentos.map((d, i) => i === idx ? { ...d, entregado } : d)
+    });
+    onSaveSolicitudes(nuevasSols);
+    const solActualizada = nuevasSols.find(s => s.id === solId);
+    if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
   };
 
   const setDocValor = async (solId, idx, valor) => {
@@ -4133,6 +4145,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esEspecial = !!tipoReal;
                 const opSel = doc.opcionSeleccionada || null;
                 const sinOpcion = esEspecial && !opSel;
+                const docTieneArchivo = !!(doc.archivo || doc.storagePath || doc.archivoData);
 
                 const necesitaArchivo = esEspecial && (
                   (tipoReal === "luz" && opSel && opSel !== "Sin empalme") ||
@@ -4154,7 +4167,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   (esCsp && doc.nombre.toLowerCase().includes("vivienda") && !doc.nombre.toLowerCase().includes("ahorro"))
                 );
                 // Verificar si ya tiene archivo en la carpeta
-                const tieneArchivo = archivos.some(a => {
+                const tieneArchivo = docTieneArchivo || archivos.some(a => {
                   const al = a.toLowerCase();
                   const dn = doc.nombre.toLowerCase();
                   if (dn.includes("cedula")) return al.includes("cedula") || al.includes("rut") || al.includes("ci");
@@ -4169,13 +4182,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 });
 
                 // Para documentos especiales, también exigir archivo real cuando corresponde
-                const tieneArchivoEspecial = esEspecial && archivos.some(a => {
+                const tieneArchivoEspecial = esEspecial && (docTieneArchivo || archivos.some(a => {
                   const al = a.toLowerCase();
-                  if (tipoReal === "luz") return al.includes("luz") || al.includes("boleta") || al.includes("empalme");
-                  if (tipoReal === "agua") return al.includes("agua") || al.includes("arranque") || al.includes("apr");
+                  if (tipoReal === "luz") return al.includes("luz") || al.includes("boleta") || al.includes("empalme") || al.includes("frontel") || al.includes("codiner") || al.includes("cge");
+                  if (tipoReal === "agua") return al.includes("agua") || al.includes("arranque") || al.includes("apr") || al.includes("san isidro") || al.includes("araucania") || al.includes("pozo");
                   if (tipoReal === "discapacidad") return al.includes("discapacidad") || al.includes("credencial");
                   return false;
-                });
+                }));
 
                 // Documentos CSP con lógica propia
                 const esRsh = esCsp && nom.includes("registro social de hogares");
@@ -4288,7 +4301,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const cuentaPartes = esCuentaAhorro ? (doc.valor || "").split("|") : [];
                 const cuentaNum = cuentaPartes[0] || "";
                 const cuentaBanco = cuentaPartes[1] || "";
-                const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
+                const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || docTieneArchivo || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
 
                 // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio|credencialDiscapacidad|movilidadReducida"
                 const rshPartes = esRsh ? (doc.valor || "").split("|") : [];
@@ -4304,26 +4317,38 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const rshOtraComuna = rshComunaEsOtra ? rshComuna.replace(/^OTRA:\s*/, "") : "";
                 const rshComunaLista = rshComunaEsLautaro || (rshComunaEsOtra && rshOtraComuna.trim());
                 const rshDiscapacidadCompleta = rshDiscapacidad === "N/A" || !!(rshDiscapacidad.trim() && rshMovilidad.trim());
-                const rshCompleto = !!(rshPct.trim() && rshComunaLista && rshEstCivil.trim() && rshIntegrantes.trim() && rshSubsidio.trim() && rshDiscapacidadCompleta);
+                const rshCompleto = esMave
+                  ? !!(rshPct.trim() && rshEstCivil.trim() && rshIntegrantes.trim() && rshDiscapacidadCompleta)
+                  : !!(rshPct.trim() && rshComunaLista && rshEstCivil.trim() && rshIntegrantes.trim() && rshSubsidio.trim() && rshDiscapacidadCompleta);
                 const setRsh = (idx, val) => {
                   const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad];
                   p[idx] = val;
                   const newValor = p.join("|");
                   const discCompleta = p[5] === "N/A" || !!(p[5].trim() && p[6].trim());
-                  const completo = p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
-                  onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                  const completo = esMave
+                    ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta
+                    : p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
+                  const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                     ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor, entregado: !!completo })
-                  }));
+                  });
+                  onSaveSolicitudes(nuevasSols);
+                  const solActualizada = nuevasSols.find(s => s.id === sol.id);
+                  if (solActualizada) supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", sol.id);
                 };
                 const setRshMultiple = (updates) => {
                   const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad];
                   Object.entries(updates).forEach(([idx, val]) => { p[Number(idx)] = val; });
                   const newValor = p.join("|");
                   const discCompleta = p[5] === "N/A" || !!(p[5].trim() && p[6].trim());
-                  const completo = p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
-                  onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                  const completo = esMave
+                    ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta
+                    : p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
+                  const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                     ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor, entregado: !!completo })
-                  }));
+                  });
+                  onSaveSolicitudes(nuevasSols);
+                  const solActualizada = nuevasSols.find(s => s.id === sol.id);
+                  if (solActualizada) supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", sol.id);
                 };
 
                 // Tooltip según el motivo del bloqueo
@@ -4378,9 +4403,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         }
                         if (esDocArchivo && tieneArchivo && !doc.entregado) {
                           if (sol.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
-                          toggleDoc(sol.id, i);
+                          marcarDocEntregado(sol.id, i, true);
                         }
-                        if (esCsp && esEspecial && tieneArchivoEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) toggleDoc(sol.id, i);
+                        if (esCsp && esEspecial && tieneArchivoEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, i, true);
                       }}>
                       {esSinDiscapacidad ? (
                         <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>N/A</span>
@@ -4695,7 +4720,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           </label>
                         )}
                         {tieneArchivoCuenta && cuentaNum.trim() && cuentaBanco.trim() && (
-                          <button onClick={() => toggleDoc(sol.id, i)}
+                          <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                             style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
                             Marcar VB ✓
                           </button>
@@ -5158,19 +5183,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             </label>
                           </div>
                         ) : (
-                          esAvaluo ? (
-                            <div style={{ fontSize: 11, color: "#059669", fontWeight: 700, background: "#ECFDF5", borderRadius: 6, padding: "6px 10px" }}>
-                              ✓ Archivo encontrado: VB automático. Para quitar el VB, elimina el documento subido.
-                            </div>
-                          ) : (
-                            <div>
-                              <div style={{ fontSize: 11, color: "#059669", marginBottom: 4 }}>✓ Archivo encontrado en carpeta</div>
-                              <button onClick={() => { toggleDoc(sol.id, i); }}
-                                style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                                Marcar VB ✓
-                              </button>
-                            </div>
-                          )
+                          <div>
+                            <div style={{ fontSize: 11, color: "#059669", marginBottom: 4 }}>✓ Archivo encontrado en carpeta</div>
+                            <button onClick={() => { marcarDocEntregado(sol.id, i, true); }}
+                              style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                              Marcar VB ✓
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
@@ -5204,7 +5223,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         ) : (
                           <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#ECFDF5", borderRadius: 6, padding: "5px 10px" }}>
                             <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Archivo encontrado</span>
-                            <button onClick={() => toggleDoc(sol.id, i)}
+                            <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                               style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
                               Marcar VB ✓
                             </button>
@@ -5214,7 +5233,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         /* Otros programas: comportamiento original */
                         <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
                           <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>⬆ Debe subir el archivo</span>
-                          <button onClick={() => toggleDoc(sol.id, i)}
+                          <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
                             ✓ Marcar subido
                           </button>
