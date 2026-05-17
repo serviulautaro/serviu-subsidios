@@ -3444,15 +3444,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         ) : null;
       })()}
 
-      {/* FICHAS PARA PROGRAMAS PERSONALIZADOS */}
+      {/* FICHAS PARA PROGRAMAS PERSONALIZADOS Y MAVE */}
       {(() => {
-        const customIds = new Set((programasCustom || []).map(p => p.id));
+        const fichaGeneralIds = new Set(["mave_rural", ...(programasCustom || []).map(p => p.id)]);
         const fichas = misSols
-          .filter(s => customIds.has(s.programaId))
+          .filter(s => fichaGeneralIds.has(s.programaId))
           .map(s => ({ solicitud: s, programa: todosProgramas.find(p => p.id === s.programaId) }))
           .filter(x => x.programa);
 
-        if (comite && customIds.has(comite.programaId) && !fichas.some(x => x.programa.id === comite.programaId)) {
+        if (comite && fichaGeneralIds.has(comite.programaId) && !fichas.some(x => x.programa.id === comite.programaId)) {
           const programa = todosProgramas.find(p => p.id === comite.programaId);
           if (programa) fichas.push({ solicitud: null, programa });
         }
