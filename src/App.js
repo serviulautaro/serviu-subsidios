@@ -262,6 +262,20 @@ const DOCUMENTOS_MAVE = [
   { nombre: "Telefono de contacto", obligatorio: true }
 ];
 
+const DOCUMENTOS_AMPLIACION_VIVIENDA = [
+  { nombre: "Cedula de identidad vigente del postulante", obligatorio: true },
+  { nombre: "Cuenta de ahorro de vivienda", obligatorio: true },
+  { nombre: "Fotocopia Escritura completa (DV, DRU, GOCE, USUFRUCTO, OTRO INDICAR)", obligatorio: true },
+  { nombre: "Certificado de antecedentes de la vivienda", obligatorio: true },
+  { nombre: "Certificado de Informaciones previas", obligatorio: true },
+  { nombre: "Certificado Avaluo Fiscal Detallado", obligatorio: true },
+  { nombre: "Registro Social de Hogares", obligatorio: true },
+  { nombre: "Telefono de contacto", obligatorio: true },
+  { nombre: "Correo electronico del solicitante", obligatorio: true },
+  { nombre: "Boleta del suministro electrico", obligatorio: true, tipo: "luz", opciones: ["FRONTEL", "CODINER", "CGE"] },
+  { nombre: "Boleta del agua potable", obligatorio: true, tipo: "agua", opciones: ["Aguas Araucania", "Aguas San Isidro", "APR", "Pozo"] }
+];
+
 const PROGRAMAS = [
   {
     id: "habitabilidad",
@@ -323,6 +337,13 @@ const PROGRAMAS = [
     descripcion: "Mejoramiento y ampliacion de vivienda rural existente",
     color: "#7C3AED", colorLight: "#F5F3FF", icon: "M",
     documentos: DOCUMENTOS_MAVE
+  },
+  {
+    id: "ampliacion_vivienda",
+    nombre: "Programa Ampliacion de la Vivienda",
+    descripcion: "Ampliacion de vivienda existente",
+    color: "#0F766E", colorLight: "#CCFBF1", icon: "AV",
+    documentos: DOCUMENTOS_AMPLIACION_VIVIENDA
   }
 ];
 
@@ -882,15 +903,15 @@ function ProgramaFigura({ programa, tipo = "", size = 56 }) {
       <path d="M66 51 C66 42 72 42 72 51" fill="none" stroke="#15803d" strokeWidth="3" />
     </svg>
   );
-  if (id === "mave_rural") return (
+  if (id === "mave_rural" || id === "ampliacion_vivienda") return (
     <svg {...common} aria-label="Mejoramiento y ampliación de vivienda rural">
       <rect x="8" y="58" width="64" height="8" rx="4" fill="#ddd6fe" />
-      <path d="M16 54 L16 35 L36 20 L56 35 V54 Z" fill="#f5f3ff" stroke="#7c3aed" strokeWidth="3" />
-      <path d="M50 54 V39 H67 V54 Z" fill="#ede9fe" stroke="#7c3aed" strokeWidth="3" />
-      <path d="M12 35 L36 16 L60 35" fill="none" stroke="#6d28d9" strokeWidth="5" strokeLinecap="round" />
-      <path d="M55 39 L67 30 L73 39" fill="none" stroke="#6d28d9" strokeWidth="4" strokeLinecap="round" />
+      <path d="M16 54 L16 35 L36 20 L56 35 V54 Z" fill={id === "ampliacion_vivienda" ? "#ccfbf1" : "#f5f3ff"} stroke={id === "ampliacion_vivienda" ? "#0f766e" : "#7c3aed"} strokeWidth="3" />
+      <path d="M50 54 V39 H67 V54 Z" fill={id === "ampliacion_vivienda" ? "#99f6e4" : "#ede9fe"} stroke={id === "ampliacion_vivienda" ? "#0f766e" : "#7c3aed"} strokeWidth="3" />
+      <path d="M12 35 L36 16 L60 35" fill="none" stroke={id === "ampliacion_vivienda" ? "#115e59" : "#6d28d9"} strokeWidth="5" strokeLinecap="round" />
+      <path d="M55 39 L67 30 L73 39" fill="none" stroke={id === "ampliacion_vivienda" ? "#115e59" : "#6d28d9"} strokeWidth="4" strokeLinecap="round" />
       <path d="M25 46 L35 36 M35 36 L41 42" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round" />
-      <rect x="24" y="43" width="10" height="11" fill="#c4b5fd" />
+      <rect x="24" y="43" width="10" height="11" fill={id === "ampliacion_vivienda" ? "#5eead4" : "#c4b5fd"} />
     </svg>
   );
   if (id.includes("arriendo") || nombreNorm.includes("arriendo")) return (
@@ -3530,7 +3551,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
       {/* FICHAS PARA PROGRAMAS PERSONALIZADOS Y MAVE */}
       {(() => {
-        const fichaGeneralIds = new Set(["mave_rural", ...(programasCustom || []).map(p => p.id)]);
+        const fichaGeneralIds = new Set(["mave_rural", "ampliacion_vivienda", ...(programasCustom || []).map(p => p.id)]);
         const fichas = misSols
           .filter(s => fichaGeneralIds.has(s.programaId))
           .map(s => ({ solicitud: s, programa: todosProgramas.find(p => p.id === s.programaId) }))
@@ -3802,9 +3823,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         const docsVisiblesSol = (sol.documentos || []).filter(d => !d.interno);
         const ok = docsVisiblesSol.filter(d => d.entregado).length;
         const progNombreNorm = (prog?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const esMave = progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
-        const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano" || esMave;
-        const esCustom = !!(prog && prog.esCustom && !esMave);
+        const esMave = sol.programaId === "mave_rural" || progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
+        const esAmpliacion = sol.programaId === "ampliacion_vivienda" || progNombreNorm.includes("ampliacion de la vivienda");
+        const esProgramaEspecialVivienda = esMave || esAmpliacion;
+        const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano" || esProgramaEspecialVivienda;
+        const esCustom = !!(prog && prog.esCustom && !esProgramaEspecialVivienda);
         return (
           <div key={sol.id} style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 16, border: "1px solid #e8e3de" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
@@ -4339,13 +4362,18 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const infoAnio = infoPartes[1] || "";
                 const infoCompleto = !!(infoNumero.trim() && infoAnio.trim());
 
-                // Antecedentes de la vivienda (Urbano): "NA" | "numero|año"
+                // Antecedentes de la vivienda: CSP urbano usa N/A o N°/año; Ampliación guarda permiso, recepción y m2.
                 const antecPartes = esAntecedentesVivienda ? (doc.valor || "").split("|") : [];
                 const antecNumero = antecPartes[0] || "";
                 const antecAnio = antecPartes[1] || "";
+                const antecRecepcionNumero = antecPartes[2] || "";
+                const antecRecepcionFecha = antecPartes[3] || "";
+                const antecM2 = antecPartes[4] || "";
                 const antecEsNA = esAntecedentesVivienda && antecNumero.trim() === "N/A";
                 const antecOpcion = antecEsNA ? "NA" : (antecNumero.trim() || antecAnio.trim() ? "SI" : "");
-                const antecCompleto = antecEsNA || !!(antecNumero.trim() && antecAnio.trim());
+                const antecCompleto = esAmpliacion
+                  ? !!(antecNumero.trim() && antecAnio.trim() && antecRecepcionNumero.trim() && antecRecepcionFecha.trim() && antecM2.trim())
+                  : antecEsNA || !!(antecNumero.trim() && antecAnio.trim());
 
                 // Documentos de trámite Desmarque: "numero|YYYY-MM-DD"
                 const esInformeDOM = !esCsp && doc.nombre && doc.nombre.includes("Informe DOM");
@@ -4375,7 +4403,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const cuentaBanco = cuentaPartes[1] || "";
                 const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || docTieneArchivo || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
 
-                // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio|credencialDiscapacidad|movilidadReducida"
+                // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio|credencialDiscapacidad|movilidadReducida|dormitorios|integrantesNucleo"
                 const rshPartes = esRsh ? (doc.valor || "").split("|") : [];
                 const rshPct = rshPartes[0] || "";
                 const rshComuna = rshPartes[1] || "";
@@ -4384,20 +4412,26 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const rshSubsidio = rshPartes[4] || "";
                 const rshDiscapacidad = rshPartes[5] || "";
                 const rshMovilidad = rshPartes[6] || "";
+                const rshDormitorios = rshPartes[7] || "";
+                const rshIntegrantesNucleo = rshPartes[8] || "";
                 const rshComunaEsLautaro = rshComuna.trim().toUpperCase() === "LAUTARO";
                 const rshComunaEsOtra = rshComuna.startsWith("OTRA: ");
                 const rshOtraComuna = rshComunaEsOtra ? rshComuna.replace(/^OTRA:\s*/, "") : "";
                 const rshComunaLista = rshComunaEsLautaro || (rshComunaEsOtra && rshOtraComuna.trim());
                 const rshDiscapacidadCompleta = rshDiscapacidad === "N/A" || !!(rshDiscapacidad.trim() && rshMovilidad.trim());
-                const rshCompleto = esMave
+                const rshCompleto = esAmpliacion
+                  ? !!(rshPct.trim() && rshEstCivil.trim() && rshIntegrantes.trim() && rshDiscapacidadCompleta && rshDormitorios.trim() && rshIntegrantesNucleo.trim())
+                  : esMave
                   ? !!(rshPct.trim() && rshEstCivil.trim() && rshIntegrantes.trim() && rshDiscapacidadCompleta)
                   : !!(rshPct.trim() && rshComunaLista && rshEstCivil.trim() && rshIntegrantes.trim() && rshSubsidio.trim() && rshDiscapacidadCompleta);
                 const setRsh = (idx, val) => {
-                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad];
+                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad, rshDormitorios, rshIntegrantesNucleo];
                   p[idx] = val;
                   const newValor = p.join("|");
                   const discCompleta = p[5] === "N/A" || !!(p[5].trim() && p[6].trim());
-                  const completo = esMave
+                  const completo = esAmpliacion
+                    ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta && p[7].trim() && p[8].trim()
+                    : esMave
                     ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta
                     : p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
                   const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
@@ -4408,11 +4442,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   if (solActualizada) supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", sol.id);
                 };
                 const setRshMultiple = (updates) => {
-                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad];
+                  const p = [rshPct, rshComuna, rshEstCivil, rshIntegrantes, rshSubsidio, rshDiscapacidad, rshMovilidad, rshDormitorios, rshIntegrantesNucleo];
                   Object.entries(updates).forEach(([idx, val]) => { p[Number(idx)] = val; });
                   const newValor = p.join("|");
                   const discCompleta = p[5] === "N/A" || !!(p[5].trim() && p[6].trim());
-                  const completo = esMave
+                  const completo = esAmpliacion
+                    ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta && p[7].trim() && p[8].trim()
+                    : esMave
                     ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta
                     : p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
                   const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
@@ -4431,8 +4467,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   : esCedula && !cedCompleto ? "Ingresa cédula chilena válida con puntos, guion, dígito verificador y fecha de nacimiento"
                   : esCertRuralidad && !certRuralCompleto ? "Ingresa N° y fecha del certificado primero"
                   : esAvaluo && !avaluoCompleto ? "Ingresa rol y valor de avalúo primero"
-                  : esInfoPrevias && !infoCompleto ? "Ingresa N° y año del documento primero"
-                  : esAntecedentesVivienda && !antecCompleto ? "Ingresa N° y año del documento primero"
+                  : esInfoPrevias && !infoCompleto ? "Ingresa N° y fecha del documento primero"
+                  : esAntecedentesVivienda && !antecCompleto ? (esAmpliacion ? "Ingresa permiso, recepción y m2 primero" : "Ingresa N° y año del documento primero")
                   : esCorreoSolicitante && !correoCompleto ? "Ingresa correo electrónico válido"
                   : esTelefonoContacto && !(doc.valor || "").trim() ? "Ingresa teléfono de contacto"
                   : esLuz && !nClienteLuz.trim() ? "Ingresa el N° de cliente de electricidad primero"
@@ -4635,6 +4671,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 </button>
                               ))}
                             </div>
+                          </>
+                        )}
+                        {esAmpliacion && (
+                          <>
+                            <div style={{ fontSize: 10, color: "#6b7280" }}>Hacinamiento:</div>
+                            <input type="number" min="0" placeholder="N° dormitorios" value={rshDormitorios}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => setRsh(7, e.target.value)}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshDormitorios.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            <input type="number" min="1" placeholder="Integrantes del núcleo familiar" value={rshIntegrantesNucleo}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => setRsh(8, e.target.value)}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshIntegrantesNucleo.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                           </>
                         )}
                         {!rshCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa todos los campos para habilitar el VB</div>}
@@ -5142,34 +5191,78 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       </div>
                     )}
 
-                    {/* Antecedentes de la vivienda (Urbano): N/A o SÍ + N° y Año */}
+                    {/* Antecedentes de la vivienda */}
                     {esAntecedentesVivienda && (
                       <div style={{ marginTop: 8, marginBottom: 4 }}>
-                        {/* Selector N/A | SÍ */}
-                        <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                          {[["NA","N/A — No aplica"],["SI","SÍ — Tiene documento"]].map(([op, lbl]) => (
-                            <button key={op} onClick={e => {
-                              e.stopPropagation();
-                              if (op === "NA") {
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                  ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"N/A", entregado:true})
-                                }));
-                                syncPersona({ antecedentesVivienda: "N/A" });
-                              } else {
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                  ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"", entregado:false})
-                                }));
-                              }
-                            }}
-                              style={{ flex:1, padding:"4px 8px", borderRadius:6, border:"2px solid "+(antecOpcion===op?"#059669":"#ddd"),
-                                background:antecOpcion===op?"#059669":"#fff", color:antecOpcion===op?"#fff":"#555",
-                                fontSize:11, fontWeight:700, cursor:"pointer" }}>
-                              {lbl}
-                            </button>
-                          ))}
-                        </div>
-                        {antecEsNA && <div style={{ fontSize:10, color:"#059669", fontWeight:600 }}>✓ Marcado como N/A — VB activado sin archivo</div>}
-                        {antecOpcion === "SI" && (
+                        {esAmpliacion ? (
+                          <div style={{ display: "grid", gap: 5 }}>
+                            <input type="text" placeholder="N° permiso de edificación" value={antecNumero}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => {
+                                const newValor = e.target.value + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + antecM2;
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            <input type="text" placeholder="Fecha permiso (ej: 01/02/2026)" value={antecAnio}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => {
+                                const newValor = antecNumero + "|" + e.target.value + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + antecM2;
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            <input type="text" placeholder="N° recepción" value={antecRecepcionNumero}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => {
+                                const newValor = antecNumero + "|" + antecAnio + "|" + e.target.value + "|" + antecRecepcionFecha + "|" + antecM2;
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecRecepcionNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            <input type="text" placeholder="Fecha recepción (ej: 01/02/2026)" value={antecRecepcionFecha}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => {
+                                const newValor = antecNumero + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + e.target.value + "|" + antecM2;
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecRecepcionFecha.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            <input type="text" placeholder="M2 de la vivienda" value={antecM2}
+                              onClick={e => e.stopPropagation()}
+                              onChange={async e => {
+                                const newValor = antecNumero + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + e.target.value;
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                if (antecNumero.trim() && antecAnio.trim() && antecRecepcionNumero.trim() && antecRecepcionFecha.trim() && e.target.value.trim()) {
+                                  await syncPersona({ antecedentesVivienda: `Permiso ${antecNumero.trim()} ${antecAnio.trim()} / Recepción ${antecRecepcionNumero.trim()} ${antecRecepcionFecha.trim()} / ${e.target.value.trim()} m2` });
+                                }
+                              }}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecM2.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Antecedentes completos. Sube el archivo para marcar VB.</div>}
+                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa permiso, recepción y m2, luego sube el archivo para el VB</div>}
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                              {[["NA","N/A — No aplica"],["SI","SÍ — Tiene documento"]].map(([op, lbl]) => (
+                                <button key={op} onClick={e => {
+                                  e.stopPropagation();
+                                  if (op === "NA") {
+                                    onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"N/A", entregado:true})
+                                    }));
+                                    syncPersona({ antecedentesVivienda: "N/A" });
+                                  } else {
+                                    onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
+                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"", entregado:false})
+                                    }));
+                                  }
+                                }}
+                                  style={{ flex:1, padding:"4px 8px", borderRadius:6, border:"2px solid "+(antecOpcion===op?"#059669":"#ddd"),
+                                    background:antecOpcion===op?"#059669":"#fff", color:antecOpcion===op?"#fff":"#555",
+                                    fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                                  {lbl}
+                                </button>
+                              ))}
+                            </div>
+                            {antecEsNA && <div style={{ fontSize:10, color:"#059669", fontWeight:600 }}>✓ Marcado como N/A — VB activado sin archivo</div>}
+                            {antecOpcion === "SI" && (
                           <div style={{ display: "grid", gap: 5 }}>
                             <input type="text" placeholder="N° del documento (ej: 25)" value={antecNumero}
                               onClick={e => e.stopPropagation()}
@@ -5191,6 +5284,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {antecNumero}/{antecAnio}</div>}
                             {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y año, luego sube el archivo para el VB</div>}
                           </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
@@ -5205,7 +5300,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (infoNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        <input type="text" placeholder="Año (ej: 2026)" value={infoAnio}
+                        <input type="text" placeholder="Fecha (ej: 01/02/2026)" value={infoAnio}
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = infoNumero + "|" + e.target.value;
@@ -5217,7 +5312,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (infoAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {infoCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {infoNumero}/{infoAnio}</div>}
-                        {!infoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y año para habilitar el upload</div>}
+                        {!infoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para habilitar el upload</div>}
                       </div>
                     )}
 
