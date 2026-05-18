@@ -390,7 +390,6 @@ const PROGRAMAS = [
       { nombre: "Antecedentes de la vivienda", obligatorio: true },
       { nombre: "Boleta de luz", obligatorio: true, tipo: "luz", opciones: ["Con empalme", "Sin empalme"] },
       { nombre: "Boleta de agua (APR o Pozo)", obligatorio: true, tipo: "agua", opciones: ["Con arranque", "Pozo"] },
-      { nombre: "Credencial de discapacidad (si corresponde)", obligatorio: false, tipo: "discapacidad", opciones: ["Con discapacidad", "Sin discapacidad"] },
       { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true }
     ]
   },
@@ -408,7 +407,6 @@ const PROGRAMAS = [
       { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
       { nombre: "Boleta de luz", obligatorio: true, tipo: "luz", opciones: ["Con empalme", "Sin empalme"] },
       { nombre: "Boleta de agua (APR o Pozo)", obligatorio: true, tipo: "agua", opciones: ["Con arranque", "Pozo"] },
-      { nombre: "Credencial de discapacidad (si corresponde)", obligatorio: false, tipo: "discapacidad", opciones: ["Con discapacidad", "Sin discapacidad"] },
       { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true }
     ]
   },
@@ -553,7 +551,6 @@ const DOCS_SOLICITUD = {
     { id: "rut",          label: "Cédula de identidad colores" },
     { id: "agua",         label: "Boleta de agua o factibilidad" },
     { id: "luz",          label: "Boleta de luz o factibilidad" },
-    { id: "discapacidad", label: "Credencial de discapacidad (si corresponde)" },
   ],
   csp_rural: [
     { id: "rut",          label: "Cédula de identidad colores" },
@@ -562,7 +559,6 @@ const DOCS_SOLICITUD = {
     { id: "dominio",      label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
     { id: "avaluo",       label: "Certificado de avalúo detallado" },
     { id: "ruralidad",    label: "Certificado de ruralidad" },
-    { id: "discapacidad", label: "Credencial de discapacidad (si corresponde)" },
     { id: "cuenta",       label: "Cuenta de ahorro para la vivienda" },
   ],
 };
@@ -4105,7 +4101,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       }
                       // Dominio de la propiedad / Título de dominio
                       if (n.includes("dominio") || n.includes("titulo") || n.includes("escritura")) {
-                        const val = p[1] ? "Otro: " + p[1] : p[0];
+                        const base = p[0] === "Otro" && p[1] ? "Otro: " + p[1] : p[0];
+                        const detalle = [
+                          p[2] ? "Fjs: " + p[2].trim() : "",
+                          p[3] ? "N°: " + p[3].trim() : "",
+                          p[4] ? "Año: " + p[4].trim() : "",
+                        ].filter(Boolean).join(", ");
+                        const val = [base, detalle].filter(Boolean).join(" - ");
                         if (val) { db.dominiopropiedad = val; lc.dominiopropiedad = val; }
                       }
                       // Avalúo fiscal
@@ -4208,6 +4210,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             {solsEditando[sol.id] && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {sol.documentos.map((doc, i) => {
                 if (doc.interno) return null;
+                if ((doc.nombre || "").toLowerCase().includes("credencial de discapacidad")) return null;
                 // ── PROGRAMA PERSONALIZADO: renderizado genérico ──────────────
                 if (esCustom) {
                   const reqArch = !!doc.requiereArchivo;
@@ -4456,9 +4459,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esConArranque = esCsp && tipoReal === "agua" && opSel && opSel !== "Pozo";
                 const esCertRuralidad = esCsp && nom.includes("certificado de ruralidad");
                 const esCuentaAhorro = esCsp && nom.includes("cuenta de ahorro");
-                const esTituloDominio = esCsp && (nom.includes("titulo de dominio") || nom.includes("título de dominio"));
+                const esTituloDominio = !esEspecial && (
+                  nom.includes("titulo de dominio") ||
+                  nom.includes("título de dominio") ||
+                  nom.includes("derecho real") ||
+                  nom.includes("goce de tierra")
+                );
                 // "Dominio de la propiedad" (nuevo en CSP Rural, reemplaza Título de dominio)
-                const esDominioProp = esCsp && (nom.includes("dominio de la propiedad") || nom.includes("escritura completa"));
+                const esDominioProp = !esTituloDominio && (nom.includes("dominio de la propiedad") || nom.includes("escritura completa"));
                 const esLuz = esCsp && tipoReal === "luz";
                 const luzPartes = esLuz ? (doc.valor || "").split("|") : [];
                 const proveedorLuz = luzPartes[0] || "";
@@ -4474,11 +4482,26 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const tituloPartes = esTituloDominio ? (doc.valor || "").split("|") : [];
                 const tituloTipo = tituloPartes[0] || "";
                 const tituloDesc = tituloPartes[1] || "";
+                const tituloFjs = tituloPartes[2] || "";
+                const tituloNumero = tituloPartes[3] || "";
+                const tituloAnio = tituloPartes[4] || "";
 
-                // Dominio de la propiedad (CSP Rural): "tipo|descripcion"
+                // Dominio de la propiedad: "tipo|descripcion|fjs|numero|anio"
                 const dominioPartes = esDominioProp ? (doc.valor || "").split("|") : [];
                 const dominioTipo = dominioPartes[0] || "";
                 const dominioDesc = dominioPartes[1] || "";
+                const dominioFjs = dominioPartes[2] || "";
+                const dominioNumero = dominioPartes[3] || "";
+                const dominioAnio = dominioPartes[4] || "";
+                const resumenDominioPropiedad = (tipo, desc, fjs, numero, anio) => {
+                  const base = tipo === "Otro" && desc ? "Otro: " + desc.trim() : tipo;
+                  const detalle = [
+                    fjs ? "Fjs: " + fjs.trim() : "",
+                    numero ? "N°: " + numero.trim() : "",
+                    anio ? "Año: " + anio.trim() : "",
+                  ].filter(Boolean).join(", ");
+                  return [base, detalle].filter(Boolean).join(" - ");
+                };
 
                 // Cédula CSP: "rut|fechaNacimiento" — auto-rellena RUT del solicitante
                 const cedPartes = esCedula ? (doc.valor || "").split("|") : [];
@@ -5066,11 +5089,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <select value={tituloTipo} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const tipo = e.target.value;
-                            const newValor = tipo === "Otro" ? "Otro|" : tipo;
+                            const newValor = [tipo, tipo === "Otro" ? tituloDesc : "", tituloFjs, tituloNumero, tituloAnio].join("|");
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
                               ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
                             }));
-                            if (tipo && tipo !== "Otro") await syncPersona({ dominiopropiedad: tipo });
+                            if (tipo) await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tipo, tipo === "Otro" ? tituloDesc : "", tituloFjs, tituloNumero, tituloAnio) });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloTipo ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
                           <option value="">Selecciona tipo de dominio…</option>
@@ -5080,16 +5103,42 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           <input type="text" placeholder="Describe el tipo de dominio…" value={tituloDesc}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
-                              const newValor = "Otro|" + e.target.value;
+                              const newValor = ["Otro", e.target.value, tituloFjs, tituloNumero, tituloAnio].join("|");
                               onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
                                 ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
                               }));
-                              if (e.target.value.trim()) await syncPersona({ dominiopropiedad: "Otro: " + e.target.value.trim() });
+                              if (e.target.value.trim()) await syncPersona({ dominiopropiedad: resumenDominioPropiedad("Otro", e.target.value, tituloFjs, tituloNumero, tituloAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloDesc.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box", marginTop: 4 }} />
                         )}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5, marginTop: 5 }}>
+                          <input type="text" placeholder="Fjs: 1250" value={tituloFjs}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = [tituloTipo, tituloDesc, e.target.value, tituloNumero, tituloAnio].join("|");
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, e.target.value, tituloNumero, tituloAnio) });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloFjs.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                          <input type="text" placeholder="N°: 120" value={tituloNumero}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = [tituloTipo, tituloDesc, tituloFjs, e.target.value, tituloAnio].join("|");
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, e.target.value, tituloAnio) });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                          <input type="text" placeholder="Año: 2025" value={tituloAnio}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = [tituloTipo, tituloDesc, tituloFjs, tituloNumero, e.target.value].join("|");
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, tituloNumero, e.target.value) });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        </div>
                         {!tituloTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para marcar VB</div>}
-                        {tituloTipo && doc.entregado && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ Tipo: {tituloTipo === "Otro" ? "Otro: " + tituloDesc : tituloTipo}</div>}
+                        {tituloTipo && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, tituloNumero, tituloAnio)}</div>}
                       </div>
                     )}
 
@@ -5205,11 +5254,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <select value={dominioTipo} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const tipo = e.target.value;
-                            const newValor = tipo === "Otro" ? "Otro|" : tipo;
+                            const newValor = [tipo, tipo === "Otro" ? dominioDesc : "", dominioFjs, dominioNumero, dominioAnio].join("|");
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
                               ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
                             }));
-                            if (tipo && tipo !== "Otro") await syncPersona({ dominiopropiedad: tipo });
+                            if (tipo) await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tipo, tipo === "Otro" ? dominioDesc : "", dominioFjs, dominioNumero, dominioAnio) });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioTipo ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
                           <option value="">Selecciona tipo de dominio…</option>
@@ -5219,16 +5268,42 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           <input type="text" placeholder="Describe el tipo de dominio…" value={dominioDesc}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
-                              const newValor = "Otro|" + e.target.value;
+                              const newValor = ["Otro", e.target.value, dominioFjs, dominioNumero, dominioAnio].join("|");
                               onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
                                 ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
                               }));
-                              if (e.target.value.trim()) await syncPersona({ dominiopropiedad: "Otro: " + e.target.value.trim() });
+                              if (e.target.value.trim()) await syncPersona({ dominiopropiedad: resumenDominioPropiedad("Otro", e.target.value, dominioFjs, dominioNumero, dominioAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioDesc.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box", marginTop: 4 }} />
                         )}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5, marginTop: 5 }}>
+                          <input type="text" placeholder="Fjs: 1250" value={dominioFjs}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = [dominioTipo, dominioDesc, e.target.value, dominioNumero, dominioAnio].join("|");
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, e.target.value, dominioNumero, dominioAnio) });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioFjs.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                          <input type="text" placeholder="N°: 120" value={dominioNumero}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = [dominioTipo, dominioDesc, dominioFjs, e.target.value, dominioAnio].join("|");
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, e.target.value, dominioAnio) });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                          <input type="text" placeholder="Año: 2025" value={dominioAnio}
+                            onClick={e => e.stopPropagation()}
+                            onChange={async e => {
+                              const newValor = [dominioTipo, dominioDesc, dominioFjs, dominioNumero, e.target.value].join("|");
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, dominioNumero, e.target.value) });
+                            }}
+                            style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        </div>
                         {!dominioTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para marcar VB</div>}
-                        {dominioTipo && doc.entregado && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {dominioTipo === "Otro" ? "Otro: " + dominioDesc : dominioTipo}</div>}
+                        {dominioTipo && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, dominioNumero, dominioAnio)}</div>}
                       </div>
                     )}
 
