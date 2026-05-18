@@ -1047,9 +1047,10 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
   const programas = useMemo(() => combinarProgramasMeta(programasCustom), [programasCustom]);
   const tarjetas = useMemo(() => ([
     { id: "individual", nombre: "Informe Individual", descripcion: "Informe por persona o por solicitantes de un comite", color: "#2563eb", colorLight: "#eff6ff", icon: "👤" },
+    { id: "completo", nombre: "Informe Completo del Comité", descripcion: "Informe general o detallado de un comité", color: "#7c3aed", colorLight: "#f5f3ff", icon: "📋" },
     ...programas,
   ]), [programas]);
-  const [vistaActiva, setVistaActiva] = useState("individual");
+  const [vistaActiva, setVistaActiva] = useState("");
   const [comiteSelId, setComiteSelId] = useState("");
   const comiteSel = comites.find(c => c.codigo === comiteSelId || c.id === comiteSelId) || null;
   const programaActivo = programas.find(p => p.id === vistaActiva);
@@ -1072,8 +1073,12 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
       <div style={{ color: "#6b7280", marginBottom: 22 }}>Elige el tipo de informe. Los programas muestran sus comites para generar el informe que corresponda.</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14, marginBottom: 22 }}>
-        {tarjetas.map(item => <TarjetaInforme key={item.id} item={item} active={vistaActiva === item.id} onClick={() => setVistaActiva(item.id)} />)}
+        {tarjetas.map(item => <TarjetaInforme key={item.id} item={item} active={vistaActiva === item.id} onClick={() => setVistaActiva(vistaActiva === item.id ? "" : item.id)} />)}
       </div>
+
+      {!vistaActiva && <div style={{ background: "#fff", border: "1px dashed #cbd5e1", borderRadius: 14, padding: "28px 24px", color: "#64748b", fontSize: 14, textAlign: "center", marginBottom: 18 }}>
+        Selecciona una ventana de informe para desplegar sus opciones.
+      </div>}
 
       {vistaActiva === "individual" && <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes, o agrega todos los solicitantes de un comite" color="#2563eb">
         <PanelIndividual personas={personas} solicitudes={solicitudes} comites={comites} onSavePersonas={onSavePersonas} />
@@ -1100,7 +1105,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
 
       </div>
 
-      <Section title="Informe Completo del Comité" subtitle="Datos completos del comité y listado de postulantes" color="#7c3aed">
+      {vistaActiva === "completo" && <Section title="Informe Completo del Comité" subtitle="Datos completos del comité y listado de postulantes" color="#7c3aed">
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10 }}>
           <select value={comiteSelId} onChange={e => setComiteSelId(e.target.value)} style={{ padding: 10, border: "1px solid #c4b5fd", borderRadius: 8, fontSize: 14 }}>
             <option value="">Selecciona un comité</option>
@@ -1110,7 +1115,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
           <button onClick={() => imprimirDetalleComite(comiteSel, personas, solicitudes, comites)} disabled={!comiteSel} style={{ padding: "10px 18px", border: "none", borderRadius: 8, background: comiteSel ? "#1d4ed8" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: comiteSel ? "pointer" : "not-allowed" }}>Informe detallado</button>
         </div>
         {comiteSel && <div style={{ marginTop: 12, color: "#6b7280", fontSize: 13 }}><strong>{comiteSel.nombre}</strong> · {miembrosComite(comiteSel, personas).length} postulantes</div>}
-      </Section>
+      </Section>}
     </div>
   </div>;
 }
