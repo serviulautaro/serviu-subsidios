@@ -2777,14 +2777,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     });
     return { nombre: nombreSubido, dataUrl: archivoUrl, mimeType: file.type, storagePath: storagePathFinal };
   };
-  const archivoLigero = (subida, carp = carpeta) => ({
-    archivo: subida.nombre,
-    archivoData: subida.storagePath ? "" : (subida.dataUrl || ""),
-    archivoTipo: subida.mimeType || "",
-    storagePath: subida.storagePath || "",
-    carpeta: carp
-  });
-
   const cargarArchivos = async () => {
     const fetchLista = async (p) => {
       if (!p) return [];
@@ -4238,13 +4230,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   }) : true;
                   const textoOk = reqTxt ? !!(doc.valor && doc.valor.trim()) : true;
 
-                  // Validaciones específicas
-                  const cedulaOk    = esCedula  ? archivoOk : true;
-                  const ahorroOk    = esAhorro  ? (archivoOk && !!(valObj.numeroCuenta || "").trim()) : true;
+                  // Validaciones específicas. Los archivos se suben solo en Carpeta de documentos;
+                  // en Solicitudes activas se completan datos y se marca VB.
+                  const cedulaOk    = true;
+                  const ahorroOk    = esAhorro  ? !!(valObj.numeroCuenta || "").trim() : true;
                   const rshOk       = esRsh     ? !!(valObj.porcentaje || doc.valor || "").toString().trim() : true;
                   const ingresoOk   = esIngreso ? !!(valObj.monto || doc.valor || "").toString().trim() : true;
                   const correoOk    = esCorreo  ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((doc.valor || persona.email || "").trim()) : true;
-                  const archivoReqOk = reqArch || esCedula || esAhorro ? archivoOk : true;
+                  const archivoReqOk = true;
                   const requisitosOk = archivoReqOk && textoOk && cedulaOk && ahorroOk && rshOk && ingresoOk && correoOk;
 
                   const bgColor    = doc.entregado ? "#ECFDF5" : requisitosOk ? "#FFFBEB" : "#FAFAFA";
@@ -4267,19 +4260,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
                   };
 
-                  const guardarArchivoDoc = async (fileOrName) => {
-                    const nombreArchivo = typeof fileOrName === "string" ? fileOrName : (fileOrName.nombre || fileOrName.name);
-                    const archivoExtra = typeof fileOrName === "object" && (fileOrName.dataUrl || fileOrName.storagePath)
-                      ? archivoLigero(fileOrName, carpeta)
-                      : {};
-                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                      ...s,
-                      documentos: s.documentos.map((d, j) => j === i ? { ...d, archivo: nombreArchivo, ...archivoExtra } : d)
-                    });
-                    onSaveSolicitudes(nuevasSols);
-                    await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
-                  };
-
                   return (
                     <div key={i} style={{ borderRadius: 9, border: "1.5px solid " + bordeColor, background: bgColor, padding: "10px 14px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -4290,7 +4270,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           <div style={{ fontSize: 12, fontWeight: 600, color: doc.entregado ? "#065f46" : "#374151" }}>{doc.nombre}</div>
                           {!doc.obligatorio && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
                           {requisitosOk && !doc.entregado && <div style={{ fontSize: 10, color: "#D97706", fontWeight: 700 }}>✓ Listo para marcar VB</div>}
-                          {(reqArch || esCedula || esAhorro) && !archivoOk && !doc.entregado && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>Primero sube el archivo correspondiente</div>}
+                          {(reqArch || esCedula || esAhorro) && !doc.entregado && (
+                            <div style={{ fontSize: 10, color: archivoOk ? "#059669" : "#B45309", marginTop: 2 }}>
+                              {archivoOk ? "Archivo encontrado en carpeta de documentos" : "Sube el archivo en Carpeta de documentos y marca VB aquí"}
+                            </div>
+                          )}
                         </div>
                         {!doc.entregado && requisitosOk && (
                           <button onClick={marcarVB} style={{ padding: "4px 12px", borderRadius: 6, background: "#059669", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓ VB</button>
@@ -4300,44 +4284,26 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       {!doc.entregado && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 
-                          {/* CÉDULA: solo subir archivo */}
+                          {/* CÉDULA: el archivo se sube en Carpeta de documentos */}
                           {esCedula && (
-                            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#f0f0f0", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: archivoOk ? "#059669" : "#555", fontWeight: 600 }}>
-                              📎 {archivoOk ? "Archivo subido ✓" : "Subir cédula de identidad"}
-                              {!archivoOk && <input type="file" style={{ display: "none" }} onChange={async e => {
-                                const file = e.target.files[0]; if (!file) return;
-                                try {
-                                  const nombreSubido = await subirArchivoServidor(file, carpeta);
-                                  await guardarArchivoDoc(nombreSubido);
-                                  await marcarVB();
-                                } catch (err) { alert("Error al subir cédula de identidad: " + (err.message || "")); }
-                                finally { e.target.value = ""; }
-                              }} />}
-                            </label>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "6px 12px", fontSize: 11, color: archivoOk ? "#059669" : "#B45309", fontWeight: 600 }}>
+                              {archivoOk ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
+                            </div>
                           )}
 
-                          {/* AHORRO: subir archivo + número de cuenta */}
+                          {/* AHORRO: número de cuenta; archivo solo en Carpeta de documentos */}
                           {esAhorro && (
                             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#f0f0f0", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: archivoOk ? "#059669" : "#555", fontWeight: 600 }}>
-                                📎 {archivoOk ? "Comprobante subido ✓" : "Subir libreta/comprobante de ahorro"}
-                                {!archivoOk && <input type="file" style={{ display: "none" }} onChange={async e => {
-                                  const file = e.target.files[0]; if (!file) return;
-                                  try {
-                                    const nombreSubido = await subirArchivoServidor(file, carpeta);
-                                    await guardarArchivoDoc(nombreSubido);
-                                    if ((valObj.numeroCuenta || "").trim()) await marcarVB();
-                                  } catch (err) { alert("Error al subir comprobante de ahorro: " + (err.message || "")); }
-                                  finally { e.target.value = ""; }
-                                }} />}
-                              </label>
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "6px 12px", fontSize: 11, color: archivoOk ? "#059669" : "#B45309", fontWeight: 600 }}>
+                                {archivoOk ? "✓ Comprobante encontrado en carpeta" : "📁 Subir comprobante en Carpeta de documentos"}
+                              </div>
                               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                 <input value={valObj.numeroCuenta || ""} placeholder="N° de cuenta de ahorro"
                                   onChange={async e => {
                                     const numeroCuenta = e.target.value;
                                     const nuevo = JSON.stringify({ ...valObj, numeroCuenta });
                                     await guardarValorYFicha(nuevo, "numero_cuenta_ahorro", numeroCuenta);
-                                    if (archivoOk && numeroCuenta.trim()) await marcarVB();
+                                    if (numeroCuenta.trim()) await marcarVB();
                                   }}
                                   style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
                                 {!(valObj.numeroCuenta||"").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° de cuenta</div>}
@@ -4387,19 +4353,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             </div>
                           )}
 
-                          {/* Documento genérico con archivo */}
+                          {/* Documento genérico con archivo: se sube en Carpeta de documentos */}
                           {reqArch && !esCedula && !esAhorro && (
-                            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#f0f0f0", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: archivoOk ? "#059669" : "#555" }}>
-                              📎 {archivoOk ? "Archivo subido ✓" : "Subir archivo"}
-                              {!archivoOk && <input type="file" style={{ display: "none" }} onChange={async e => {
-                                const file = e.target.files[0]; if (!file) return;
-                                try {
-                                  const nombreSubido = await subirArchivoServidor(file, carpeta);
-                                  await guardarArchivoDoc(nombreSubido);
-                                } catch (err) { alert("Error al subir archivo: " + (err.message || "")); }
-                                finally { e.target.value = ""; }
-                              }} />}
-                            </label>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "6px 12px", fontSize: 11, color: archivoOk ? "#059669" : "#B45309" }}>
+                              {archivoOk ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
+                            </div>
                           )}
 
                           {/* Texto adicional genérico */}
@@ -4452,7 +4410,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   (tipoReal === "discapacidad" && opSel === "Con discapacidad")
                 );
 
-                // Documentos que requieren subir archivo antes del VB
+                // Documentos con respaldo en archivo. La carga se realiza en Carpeta de documentos;
+                // desde Solicitudes activas solo se revisan datos y se marca VB.
                 const esDocArchivo = !esEspecial && doc.nombre && (
                   doc.nombre.toLowerCase().includes("cedula") ||
                   doc.nombre.toLowerCase().includes("título") ||
@@ -4480,7 +4439,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   return false;
                 });
 
-                // Para documentos especiales, también exigir archivo real cuando corresponde
+                // Para documentos especiales, detectar archivo si ya existe en carpeta.
                 const tieneArchivoEspecial = esEspecial && (docTieneArchivo || archivos.some(a => {
                   const al = a.toLowerCase();
                   if (tipoReal === "luz") return al.includes("luz") || al.includes("boleta") || al.includes("empalme") || al.includes("frontel") || al.includes("codiner") || al.includes("cge");
@@ -4601,7 +4560,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const discMovilidad = discPartes[1] || "";
                 const discCompleto = !!(discFolio.trim() && discMovilidad);
 
-                // Valores cuenta ahorro: "cuenta|banco|ok" en doc.valor (el "|ok" se añade al subir archivo)
+                // Valores cuenta ahorro: "cuenta|banco|ok" en doc.valor (se conserva compatibilidad con registros antiguos)
                 const cuentaPartes = esCuentaAhorro ? (doc.valor || "").split("|") : [];
                 const cuentaNum = cuentaPartes[0] || "";
                 const cuentaBanco = cuentaPartes[1] || "";
@@ -4676,9 +4635,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   : esCorreoSolicitante && !correoCompleto ? "Ingresa correo electrónico válido"
                   : esTelefonoContacto && !(doc.valor || "").trim() ? "Ingresa teléfono de contacto"
                   : esLuz && !nClienteLuz.trim() ? "Ingresa el N° de cliente de electricidad primero"
-                  : "Sube el documento primero";
+                  : "Completa los datos requeridos primero";
 
-                // Checkbox bloqueado si falta archivo o datos requeridos (CSP)
+                // Checkbox bloqueado solo si faltan datos requeridos. Los archivos se suben en Carpeta de documentos.
                 const bloqueadoPorArchivo =
                   (esCedula && !cedCompleto && !doc.entregado) ||
                   (esCertRuralidad && !certRuralCompleto && !doc.entregado) ||
@@ -4689,15 +4648,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   (esCorreoSolicitante && !correoCompleto && !doc.entregado) ||
                   (esTelefonoContacto && !(doc.valor || "").trim() && !doc.entregado) ||
                   (esTituloDominio && !tituloTipo && !doc.entregado) ||
-                  (esDocArchivo && !esTituloDominio && !esDominioProp && !esCedula && !esAvaluo && !esInfoPrevias && !esAntecedentesVivienda && !esCertRuralidad && !tieneArchivo && !doc.entregado) ||
-                  (esDocArchivo && (esTituloDominio || esDominioProp || esCedula || esAvaluo || esInfoPrevias || esAntecedentesVivienda || esCertRuralidad) && !tieneArchivo && (tituloTipo || dominioTipo || cedCompleto || avaluoCompleto || infoCompleto || antecCompleto || certRuralCompleto) && !doc.entregado) ||
-                  (esCsp && necesitaArchivo && !esSinDiscapacidad && !tieneArchivoEspecial && !doc.entregado) ||
                   (esLuz && !nClienteLuz.trim() && !doc.entregado) ||
                   (esRsh && !rshCompleto && !doc.entregado) ||
                   (esFechaNac && !(doc.valor || "").trim() && !doc.entregado) ||
-                  (esConArranque && (!aprCompleto || !tieneArchivoEspecial) && !doc.entregado) ||
-                  (esConDiscapacidad && (!discCompleto || !tieneArchivoEspecial) && !doc.entregado) ||
-                  (esCuentaAhorro && (!tieneArchivoCuenta || !cuentaNum.trim() || !cuentaBanco.trim()) && !doc.entregado);
+                  (esConArranque && !aprCompleto && !doc.entregado) ||
+                  (esConDiscapacidad && !discCompleto && !doc.entregado) ||
+                  (esCuentaAhorro && (!cuentaNum.trim() || !cuentaBanco.trim()) && !doc.entregado);
 
                 const bordeColor = doc.entregado ? "#BBF7D0" : sinOpcion ? "#FDE68A" : doc.obligatorio ? "#FED7D7" : "#E5E7EB";
                 const bgColor = doc.entregado ? "#F0FDF4" : sinOpcion ? "#FFFBEB" : doc.obligatorio ? "#FFF5F5" : "#FAFAFA";
@@ -4709,15 +4665,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       cursor: bloqueadoPorArchivo ? "not-allowed" : (!esEspecial && !esRsh && !esFechaNac && !esTelefonoContacto ? "pointer" : "default") }}
                       onClick={() => {
                         if (bloqueadoPorArchivo) return;
-                        const esDesmarque = sol.programaId === "habitabilidad";
                         if (!esEspecial && !esDocArchivo && !esRsh && !esFechaNac && !esTelefonoContacto) {
                           toggleDoc(sol.id, i);
                         }
-                        if (esDocArchivo && tieneArchivo && !doc.entregado) {
+                        if (esDocArchivo && !doc.entregado) {
                           if (sol.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
                           marcarDocEntregado(sol.id, i, true);
                         }
-                        if (esCsp && esEspecial && tieneArchivoEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, i, true);
+                        if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, i, true);
                       }}>
                       {esSinDiscapacidad ? (
                         <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>N/A</span>
@@ -4990,7 +4945,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (certRuralFecha ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {certRuralCompleto
                           ? <div style={{ fontSize: 10, color: "#059669" }}>✓ N° {certRuralNum} — {certRuralFecha}</div>
-                          : <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para habilitar el upload</div>}
+                          : <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para marcar VB</div>}
                       </div>
                     )}
 
@@ -5014,32 +4969,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           <option value="">Seleccionar banco…</option>
                           {["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","Itaú","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"].map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
-                        {!tieneArchivoCuenta && (
-                          <label style={{ display: "inline-block", background: "#1e3a5f", color: "#fff", borderRadius: 7, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
-                            📎 Subir cartola / certificado
-                            <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
-                              onChange={async e => {
-                                const file = e.target.files[0]; if (!file) return;
-                                try {
-                                  const subida = await subirArchivoServidor(file, carpeta);
-                                  // Marcar flag de archivo subido en doc.valor
-                                  const newValor = cuentaNum + "|" + cuentaBanco + "|ok";
-                                  const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, ...archivoLigero(subida), valor: newValor }) });
-                                  onSaveSolicitudes(nuevasSols);
-                                  await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
-                                } catch (err) { alert("Error al subir cartola/certificado: " + (err.message || "")); }
-                                finally { e.target.value = ""; }
-                              }} />
-                          </label>
-                        )}
-                        {tieneArchivoCuenta && cuentaNum.trim() && cuentaBanco.trim() && (
+                        <div style={{ fontSize: 10, color: tieneArchivoCuenta ? "#059669" : "#B45309", fontWeight: 600 }}>
+                          {tieneArchivoCuenta ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir cartola/certificado en Carpeta de documentos"}
+                        </div>
+                        {cuentaNum.trim() && cuentaBanco.trim() && (
                           <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                             style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
                             Marcar VB ✓
                           </button>
                         )}
-                        {(!cuentaNum.trim() || !cuentaBanco.trim() || !tieneArchivoCuenta) && (
-                          <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa N° cuenta, banco y sube el archivo</div>
+                        {(!cuentaNum.trim() || !cuentaBanco.trim()) && (
+                          <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa N° cuenta y banco para marcar VB</div>
                         )}
                       </div>
                     )}
@@ -5148,7 +5088,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloDesc.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box", marginTop: 4 }} />
                         )}
-                        {!tituloTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para habilitar el upload</div>}
+                        {!tituloTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para marcar VB</div>}
                         {tituloTipo && doc.entregado && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ Tipo: {tituloTipo === "Otro" ? "Otro: " + tituloDesc : tituloTipo}</div>}
                       </div>
                     )}
@@ -5230,7 +5170,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           onChange={e => guardarCedula(rut2, e.target.value)}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (fechaCedula ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {!rut2Valido && <div style={{ fontSize: 10, color: "#DC2626", marginTop: 2 }}>⚠ La cédula debe ser chilena válida, con puntos, guion y dígito verificador correcto.</div>}
-                        {!(rut2Valido && fechaCedula) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>⚠ Ingresa cédula de identidad válida y fecha completa para habilitar el upload</div>}
+                        {!(rut2Valido && fechaCedula) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>⚠ Ingresa cédula de identidad válida y fecha completa para marcar VB</div>}
                         {rut2Valido && fechaCedula && <div style={{ fontSize: 10, color: "#059669" }}>✓ Cédula de identidad: {formatRut(rut2)} — Nacimiento: {fmtFecha(fechaCedula)}</div>}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginTop: 2 }}>
                           {[
@@ -5287,7 +5227,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioDesc.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box", marginTop: 4 }} />
                         )}
-                        {!dominioTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para habilitar el upload</div>}
+                        {!dominioTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para marcar VB</div>}
                         {dominioTipo && doc.entregado && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {dominioTipo === "Otro" ? "Otro: " + dominioDesc : dominioTipo}</div>}
                       </div>
                     )}
@@ -5366,7 +5306,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (e.target.value.trim()) await syncPersona({ coordenadas: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoCoordenadas.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!avaluoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa rol y valor de avalúo para habilitar el upload</div>}
+                        {!avaluoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa rol y valor de avalúo para marcar VB</div>}
                       </div>
                     )}
 
@@ -5413,8 +5353,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 }
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecM2.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Antecedentes completos. Sube el archivo para marcar VB.</div>}
-                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa permiso, recepción y m2, luego sube el archivo para el VB</div>}
+                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Antecedentes completos. Marca VB y sube el respaldo en Carpeta de documentos.</div>}
+                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa permiso, recepción y m2 para marcar VB</div>}
                           </div>
                         ) : (
                           <>
@@ -5461,7 +5401,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                             {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {antecNumero}/{antecAnio}</div>}
-                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y año, luego sube el archivo para el VB</div>}
+                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y año para marcar VB</div>}
                           </div>
                             )}
                           </>
@@ -5491,11 +5431,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (infoAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {infoCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {infoNumero}/{infoAnio}</div>}
-                        {!infoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para habilitar el upload</div>}
+                        {!infoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para marcar VB</div>}
                       </div>
                     )}
 
-                    {/* Botón subir archivo para Cédula, Avalúo, Título, Dominio, Ruralidad, Antecedentes */}
+                    {/* Marcar VB; los archivos se suben en Carpeta de documentos */}
                     {esDocArchivo && !doc.entregado &&
                       (!esTituloDominio || !!tituloTipo) &&
                       (!esDominioProp || !!dominioTipo) &&
@@ -5505,88 +5445,43 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       (!esInfoPrevias || infoCompleto) &&
                       (!esAntecedentesVivienda || antecCompleto) && (
                       <div style={{ marginTop: 8 }}>
-                        {!tieneArchivo ? (
-                          <div>
-                            <div style={{ fontSize: 11, color: "#B45309", marginBottom: 6 }}>⚠ Suba el archivo para marcar el VB</div>
-                            <label style={{ display: "inline-block", background: "#1e3a5f", color: "#fff", borderRadius: 7, padding: "6px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                              📎 Subir archivo
-                              <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={async e => {
-                                  const file = e.target.files[0];
-                                  if (!file) return;
-                                  try {
-                                    const subida = await subirArchivoServidor(file, carpeta);
-                                    // Marcar como entregado
-                                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                                      ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, ...archivoLigero(subida), entregado: true } : d2)
-                                    });
-                                    onSaveSolicitudes(nuevasSols);
-                                    await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
-                                  } catch (err) { alert("Error al subir archivo: " + (err.message || "")); }
-                                  finally { e.target.value = ""; }
-                                }} />
-                            </label>
-                          </div>
-                        ) : (
-                          <div>
-                            <div style={{ fontSize: 11, color: "#059669", marginBottom: 4 }}>✓ Archivo encontrado en carpeta</div>
-                            <button onClick={() => { marcarDocEntregado(sol.id, i, true); }}
-                              style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                              Marcar VB ✓
-                            </button>
-                          </div>
-                        )}
+                        <div style={{ fontSize: 11, color: tieneArchivo ? "#059669" : "#B45309", marginBottom: 4, fontWeight: 600 }}>
+                          {tieneArchivo ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir respaldo en Carpeta de documentos"}
+                        </div>
+                        <button onClick={() => { marcarDocEntregado(sol.id, i, true); }}
+                          style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                          Marcar VB ✓
+                        </button>
                       </div>
                     )}
 
                     {/* Mensaje según opción seleccionada */}
                     {necesitaArchivo && !doc.entregado && !esSinDiscapacidad && (
                       <>{esCsp ? (
-                        /* CSP: exige archivo real antes del VB */
-                        !tieneArchivoEspecial ? (
-                          <div style={{ marginTop: 4, background: "#FFFBEB", borderRadius: 6, padding: "6px 10px" }}>
-                            <div style={{ fontSize: 11, color: "#B45309", marginBottom: 5 }}>⚠ Suba el archivo para marcar el VB</div>
-                            <label style={{ display: "inline-block", background: "#1e3a5f", color: "#fff", borderRadius: 7, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                              📎 Subir archivo
-                              <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={async e => {
-                                  const file = e.target.files[0];
-                                  if (!file) return;
-                                  try {
-                                    const subida = await subirArchivoServidor(file, carpeta);
-                                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                                      ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, ...archivoLigero(subida), entregado: true } : d2)
-                                    });
-                                    onSaveSolicitudes(nuevasSols);
-                                    await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
-                                  } catch (err) { alert("Error al subir archivo: " + (err.message || "")); }
-                                  finally { e.target.value = ""; }
-                                }} />
-                            </label>
-                          </div>
-                        ) : (
-                          <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#ECFDF5", borderRadius: 6, padding: "5px 10px" }}>
-                            <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Archivo encontrado</span>
-                            <button onClick={() => marcarDocEntregado(sol.id, i, true)}
-                              style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
-                              Marcar VB ✓
-                            </button>
-                          </div>
-                        )
-                      ) : (
-                        /* Otros programas: comportamiento original */
-                        <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
-                          <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>⬆ Debe subir el archivo</span>
+                        /* CSP: archivo en carpeta, VB desde solicitudes */
+                        <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: tieneArchivoEspecial ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "5px 10px" }}>
+                          <span style={{ fontSize: 11, color: tieneArchivoEspecial ? "#059669" : "#B45309", fontWeight: 700 }}>
+                            {tieneArchivoEspecial ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
+                          </span>
                           <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
-                            ✓ Marcar subido
+                            Marcar VB ✓
+                          </button>
+                        </div>
+                      ) : (
+                        /* Otros programas: archivo en carpeta, VB desde solicitudes */
+                        <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
+                          <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>📁 Subir archivo en Carpeta de documentos</span>
+                          <button onClick={() => marcarDocEntregado(sol.id, i, true)}
+                            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
+                            Marcar VB ✓
                           </button>
                         </div>
                       )}
                     </> )}
                     {necesitaArchivo && doc.entregado && !esSinDiscapacidad && (
                       <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#F0FDF4", borderRadius: 6, padding: "5px 8px" }}>
-                        <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Archivo subido</span>
+                        <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ VB marcado</span>
                       </div>
                     )}
                   </div>
