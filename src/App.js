@@ -3355,6 +3355,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   const guardarPrioridadSolicitud = async (solId, valor) => {
+    const solActual = solicitudes.find(s => s.id === solId);
+    if (solActual && prioridadSolicitud(solActual) === valor) return;
+    const clave = window.prompt("Ingrese clave del administrador para cambiar prioridad:");
+    if (clave !== "196560") {
+      if (clave !== null) alert("Clave de administrador incorrecta.");
+      return;
+    }
     const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s,
       documentos: documentosConPrioridad(s.documentos, valor)
@@ -4150,19 +4157,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 )}
               </div>
             </div>
-            {sol.programaId === "habitabilidad" && (
-              <div style={{ marginBottom: 14, padding: "10px 14px", background: prioridadActual === "prioridad" ? "#FFFBEB" : "#F9FAFB", borderRadius: 8, border: "1px solid " + (prioridadActual === "prioridad" ? "#F59E0B" : "#E5E7EB"), display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 11, fontWeight: 900, color: "#374151", textTransform: "uppercase" }}>Prioridad del solicitante</div>
-                <button onClick={() => guardarPrioridadSolicitud(sol.id, "prioridad")}
-                  style={{ padding: "6px 12px", border: "1.5px solid #F59E0B", borderRadius: 7, background: prioridadActual === "prioridad" ? "#F59E0B" : "#fff", color: prioridadActual === "prioridad" ? "#111827" : "#92400E", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
-                  Prioridad
-                </button>
-                <button onClick={() => guardarPrioridadSolicitud(sol.id, "normal")}
-                  style={{ padding: "6px 12px", border: "1.5px solid #D1D5DB", borderRadius: 7, background: prioridadActual === "normal" ? "#1F2937" : "#fff", color: prioridadActual === "normal" ? "#fff" : "#374151", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
-                  Solicitante normal
-                </button>
-              </div>
-            )}
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: prioridadActual === "prioridad" ? "#FFFBEB" : "#F9FAFB", borderRadius: 8, border: "1px solid " + (prioridadActual === "prioridad" ? "#F59E0B" : "#E5E7EB"), display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: "#374151", textTransform: "uppercase" }}>Prioridad del solicitante</div>
+              <button onClick={() => guardarPrioridadSolicitud(sol.id, "prioridad")}
+                style={{ padding: "6px 12px", border: "1.5px solid #F59E0B", borderRadius: 7, background: prioridadActual === "prioridad" ? "#F59E0B" : "#fff", color: prioridadActual === "prioridad" ? "#111827" : "#92400E", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
+                Prioridad
+              </button>
+              <button onClick={() => guardarPrioridadSolicitud(sol.id, "normal")}
+                style={{ padding: "6px 12px", border: "1.5px solid #D1D5DB", borderRadius: 7, background: prioridadActual === "normal" ? "#1F2937" : "#fff", color: prioridadActual === "normal" ? "#fff" : "#374151", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                Solicitante normal
+              </button>
+            </div>
             <div style={{ height: 8, background: "#f0ede8", borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
               <div style={{ height: "100%", width: p + "%", background: statusColor(p), borderRadius: 4 }} />
             </div>
