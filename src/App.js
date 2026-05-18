@@ -386,7 +386,7 @@ const PROGRAMAS = [
       { nombre: "Registro Social de Hogares en la comuna", obligatorio: true },
       { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
       { nombre: "Informaciones previas", obligatorio: true },
-      { nombre: "Antecedentes de la vivienda", obligatorio: true },
+      { nombre: "Certificados de antecedentes de la vivienda", obligatorio: true },
       { nombre: "Boleta de luz", obligatorio: true, tipo: "luz", opciones: ["Con empalme", "Sin empalme"] },
       { nombre: "Boleta de agua (APR o Pozo)", obligatorio: true, tipo: "agua", opciones: ["Con arranque", "Pozo"] },
       { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true }
@@ -4477,7 +4477,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esCedula = esCsp && nom.includes("cedula");
                 const esAvaluo = esCsp && nom.includes("avaluo");
                 const esInfoPrevias = esCsp && nom.includes("informaciones previas");
-                const esAntecedentesVivienda = esCsp && nom.includes("antecedentes de la vivienda");
+                const esAntecedentesVivienda = esCsp && (nom.includes("antecedentes de la vivienda") || nom.includes("certificado de la vivienda"));
                 const esCorreoSolicitante = nom.includes("correo") && nom.includes("solicitante");
                 const esTelefonoContacto = esCsp && nom.includes("telefono");
 
@@ -4683,6 +4683,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
                 const bordeColor = doc.entregado ? "#BBF7D0" : sinOpcion ? "#FDE68A" : doc.obligatorio ? "#FED7D7" : "#E5E7EB";
                 const bgColor = doc.entregado ? "#F0FDF4" : sinOpcion ? "#FFFBEB" : doc.obligatorio ? "#FFF5F5" : "#FAFAFA";
+                const nombreVisibleDoc = esAntecedentesVivienda ? "Certificados de antecedentes de la vivienda" : doc.nombre;
 
                 return (
                   <div key={i} style={{ borderRadius: 9, border: "1.5px solid " + bordeColor, background: bgColor, padding: "10px 14px" }}>
@@ -4708,7 +4709,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         </div>
                       )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 12, color: doc.entregado ? "#065f46" : "#374151", fontWeight: 600 }}>{doc.nombre}</div>
+                        <div style={{ fontSize: 12, color: doc.entregado ? "#065f46" : "#374151", fontWeight: 600 }}>{nombreVisibleDoc}</div>
                         {bloqueadoPorArchivo && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{tooltipBloqueado}</div>}
                         {doc.etiqueta && !esSinDiscapacidad && <div style={{ fontSize: 12, fontWeight: 800, color: "#059669", marginTop: 2 }}>{doc.etiqueta}</div>}
                         {esSinDiscapacidad && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>Sin discapacidad — no requiere documento</div>}
