@@ -7548,7 +7548,7 @@ function PantallaBienvenida({ onEntrar }) {
         {/* Logos + Título */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, marginBottom: 28 }}>
           {/* Logo izquierdo: Municipalidad */}
-          <img src={LOGO_MUNI} alt="Municipalidad de Lautaro" style={{ height: 110, objectFit: "contain" }} />
+          <img src={LOGO_MUNI} alt="Municipalidad de Lautaro" style={{ width: 130, height: 130, objectFit: "contain" }} />
 
           {/* Títulos centrales */}
           <div style={{ flex: 1 }}>
@@ -7565,7 +7565,7 @@ function PantallaBienvenida({ onEntrar }) {
           </div>
 
           {/* Logo derecho: Unidad de Vivienda */}
-          <img src={LOGO_VIVIENDA} alt="Unidad de Vivienda" style={{ height: 110, objectFit: "contain" }} />
+          <img src={LOGO_VIVIENDA} alt="Unidad de Vivienda" style={{ width: 160, height: 160, objectFit: "contain" }} />
         </div>
 
         {/* Separador */}
