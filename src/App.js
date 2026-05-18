@@ -44,6 +44,12 @@ const rutNumeroGuionValido = (rut) => {
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const today = () => new Date().toLocaleDateString("es-CL");
+const todayISO = () => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 const formatPesosChilenos = (value) => {
   const digits = String(value || "").replace(/\D/g, "");
   return digits ? "$" + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
@@ -59,6 +65,22 @@ const textoEdad = (fechaNac) => {
   return edad !== null ? `${edad} años` : "";
 };
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const DOC_PRIORIDAD_SOLICITANTE = "__prioridad_solicitante";
+const prioridadSolicitud = (sol = {}) => {
+  const doc = (sol.documentos || []).find(d => d.nombre === DOC_PRIORIDAD_SOLICITANTE);
+  return doc?.valor === "prioridad" ? "prioridad" : "normal";
+};
+const solicitantePrioritario = (personaId, solicitudes = []) => (solicitudes || []).some(s =>
+  s.personaId === personaId && prioridadSolicitud(s) === "prioridad"
+);
+const documentosConPrioridad = (docs = [], valor = "normal") => {
+  const base = Array.isArray(docs) ? docs : [];
+  const existe = base.some(d => d.nombre === DOC_PRIORIDAD_SOLICITANTE);
+  const doc = { nombre: DOC_PRIORIDAD_SOLICITANTE, interno: true, obligatorio: false, entregado: true, valor };
+  return existe
+    ? base.map(d => d.nombre === DOC_PRIORIDAD_SOLICITANTE ? { ...d, ...doc } : d)
+    : [...base, doc];
+};
 const DOC_CORREO_SOLICITANTE = { nombre: "Correo del solicitante", obligatorio: true, requiereTexto: true, etiquetaTexto: "Correo electrónico" };
 const asegurarCorreoSolicitante = (documentos = []) => {
   const docs = Array.isArray(documentos) ? documentos : [];
@@ -162,6 +184,8 @@ const ESTADO_DESMARQUE = {
   "DESMARCADO":                { color: "#0891B2", bg: "#E0F7FA", label: "Desmarcado" },
   "INFORME EN DOM":            { color: "#7C3AED", bg: "#F5F3FF", label: "Informe en DOM" },
   "NO CALIFICA":               { color: "#DC2626", bg: "#FEF2F2", label: "No Califica" },
+  "Informe DOM aprobado":      { color: "#047857", bg: "#ECFDF5", label: "Informe DOM aprobado" },
+  "INFORME DOM APROBADO":      { color: "#047857", bg: "#ECFDF5", label: "Informe DOM aprobado" },
   "INFORME EN SERVIU":         { color: "#3D5A23", bg: "#ECFDF5", label: "Informe en SERVIU" },
   "VISITA HECHA FALTA INFORME":{ color: "#C2693A", bg: "#FFF3E0", label: "Visita hecha falta informe" },
   "EN DOM POR RETIRAR":        { color: "#C2185B", bg: "#FCE4EC", label: "En DOM por retirar" },
@@ -176,7 +200,7 @@ const ESTADO_DESMARQUE = {
 // Calcula estado desmarque automáticamente según documentos ingresados
 const calcularEstadoDesmarque = (sol, estadoActual) => {
   if (!sol || sol.programaId !== "habitabilidad") return estadoActual;
-  if (["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO"].includes(estadoActual)) return estadoActual;
+  if (["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(estadoActual)) return estadoActual;
   const docs = sol.documentos || [];
   const tieneCarta = docs.some(d => d.nombre && d.nombre.includes("Carta SERVIU") && d.entregado && d.valor);
   const tieneMemo = docs.some(d => d.nombre && d.nombre.includes("Memo DOM") && d.entregado && d.valor);
@@ -1357,6 +1381,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
 // ─── VISTA SOLICITANTES ──────────────────────────────────────────────────────
 function PersonasView({ personas, solicitudes, comites, onSave, onDetail, programasCustom }) {
   const [search, setSearch] = useState("");
+  const [modoBusqueda, setModoBusqueda] = useState("cedula");
   const [showModal, setShowModal] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [claveInput, setClaveInput] = useState("");
@@ -1364,14 +1389,16 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId: "" };
   const [form, setForm] = useState(EMPTY);
 
-  const searchRut = limpiarRut(search.trim());
-  const searchActivo = searchRut.length > 0;
-  const searchRutValido = !searchActivo || rutNumeroGuionValido(searchRut);
+  const normalizarBusqueda = (s = "") => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const searchTexto = search.trim();
+  const searchRut = limpiarRut(searchTexto);
+  const searchActivo = searchTexto.length > 0;
+  const searchRutValido = modoBusqueda !== "cedula" || !searchActivo || rutNumeroGuionValido(searchRut);
   const filtered = !searchActivo
     ? personas
-    : searchRutValido
-      ? personas.filter(p => limpiarRut(p.rut || "") === searchRut)
-      : [];
+    : modoBusqueda === "cedula"
+      ? (searchRutValido ? personas.filter(p => limpiarRut(p.rut || "") === searchRut) : [])
+      : personas.filter(p => normalizarBusqueda(p.nombre || "").includes(normalizarBusqueda(searchTexto)));
 
   const getSols = (id) => solicitudes.filter(s => s.personaId === id);
   const getDocPct = (id) => {
@@ -1456,25 +1483,31 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: searchActivo && !searchRutValido ? 6 : 18, display: "flex", alignItems: "center", gap: 10, border: "1.5px solid " + (searchActivo && !searchRutValido ? "#DC2626" : "#e8e3de") }}>
+        {["cedula", "nombre"].map(modo => (
+          <button key={modo} onClick={() => { setModoBusqueda(modo); setSearch(""); }}
+            style={{ border: "1.5px solid " + (modoBusqueda === modo ? "#1e3a5f" : "#e5e7eb"), background: modoBusqueda === modo ? "#1e3a5f" : "#fff", color: modoBusqueda === modo ? "#fff" : "#374151", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
+            {modo === "cedula" ? "Cédula" : "Nombre"}
+          </button>
+        ))}
         <input
-          placeholder="Buscar solo por cédula: 10398338-K"
+          placeholder={modoBusqueda === "cedula" ? "Buscar por cédula: 10398338-K" : "Buscar por nombre del solicitante"}
           value={search}
-          onChange={e => setSearch(limpiarRut(e.target.value))}
+          onChange={e => setSearch(modoBusqueda === "cedula" ? limpiarRut(e.target.value) : e.target.value)}
           style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }}
         />
       </div>
-      {searchActivo && !searchRutValido && (
+      {modoBusqueda === "cedula" && searchActivo && !searchRutValido && (
         <div style={{ marginBottom: 18, fontSize: 12, color: "#DC2626", fontWeight: 700 }}>
           La cédula debe ingresarse sin puntos, con guion y dígito verificador chileno correcto. Ejemplo: 10398338-K
         </div>
       )}
-      {searchActivo && searchRutValido && (
+      {modoBusqueda === "cedula" && searchActivo && searchRutValido && (
         <div style={{ marginBottom: 18, fontSize: 12, color: "#059669", fontWeight: 700 }}>
           Cédula válida: {searchRut}
         </div>
       )}
 
-      {filtered.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>{searchActivo ? "No hay solicitantes para esa cédula válida." : "No hay solicitantes registrados aun."}</div>}
+      {filtered.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>{searchActivo ? (modoBusqueda === "cedula" ? "No hay solicitantes para esa cédula válida." : "No hay solicitantes con ese nombre.") : "No hay solicitantes registrados aun."}</div>}
 
       <div style={{ display: "grid", gap: 10 }}>
         {filtered.map(p => {
@@ -1482,6 +1515,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
           const solsAll = getSols(p.id);
           const sols = solsAll.length;
           const comite = comites.find(c => c.id === p.comiteId);
+          const esPrioritario = solicitantePrioritario(p.id, solicitudes);
 
           // Detectar "Desmarque en trámite": tiene habitabilidad + otro programa,
           // y Respuesta SERVIU no está aprobada
@@ -1498,13 +1532,13 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
 
           return (
             <div key={p.id} onClick={() => onDetail(p.id)} style={{
-              background: desmarqueEnTramite ? "#FFF7ED" : "#fff",
+              background: esPrioritario ? "#FFFBEB" : desmarqueEnTramite ? "#FFF7ED" : "#fff",
               borderRadius: 12, padding: "16px 20px",
-              border: desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de",
+              border: esPrioritario ? "2px solid #F59E0B" : desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de",
               display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer"
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 22, background: desmarqueEnTramite ? "#F97316" : "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: esPrioritario ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
@@ -1512,6 +1546,11 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
                   {desmarqueEnTramite && (
                     <div style={{ display: "inline-block", marginTop: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: 0.3 }}>
                       ⚠ Desmarque en trámite
+                    </div>
+                  )}
+                  {esPrioritario && (
+                    <div style={{ display: "inline-block", marginTop: 4, marginLeft: desmarqueEnTramite ? 6 : 0, background: "#F59E0B", color: "#111827", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 900, letterSpacing: 0.3 }}>
+                      Prioridad
                     </div>
                   )}
                 </div>
@@ -2405,6 +2444,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
   const misSols = solicitudes.filter(s => s.personaId === personaId);
+  const esPrioritario = solicitantePrioritario(personaId, solicitudes);
 
   const cargarVisitas = async () => {
     try {
@@ -2968,7 +3008,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setNotaResultado("");
     await new Promise(r => setTimeout(r, 50));
     let nuevoEstado = persona.estado_desmarque;
-    if (res === "APROBADO") nuevoEstado = "INFORME EN SERVIU";
+    if (res === "APROBADO") nuevoEstado = "Informe DOM aprobado";
     else if (res === "RECHAZADO_APELABLE") nuevoEstado = "RECHAZADO APELABLE";
     else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "RECHAZADO DOM";
     try {
@@ -3055,7 +3095,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? solActualizada : s));
       await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", sol.id);
       // Auto-cambiar estado según datos ingresados
-      if (!["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO"].includes(persona.estado_desmarque)) {
+      if (!["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
         const nuevoEstado = calcularEstadoDesmarque(solActualizada, persona.estado_desmarque);
         if (nuevoEstado !== persona.estado_desmarque) {
           await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
@@ -3317,7 +3357,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     });
     onSaveSolicitudes(nuevasSols);
     // Actualizar estado automático si es desmarque
-    if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO"].includes(persona.estado_desmarque)) {
+    if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
       const sol = nuevasSols.find(s => s.id === solId);
       const nuevoEstado = calcularEstadoDesmarque(sol, persona.estado_desmarque);
       if (nuevoEstado !== persona.estado_desmarque) {
@@ -3325,6 +3365,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
       }
     }
+  };
+
+  const guardarPrioridadSolicitud = async (solId, valor) => {
+    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
+      ...s,
+      documentos: documentosConPrioridad(s.documentos, valor)
+    });
+    onSaveSolicitudes(nuevasSols);
+    const solActualizada = nuevasSols.find(s => s.id === solId);
+    if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
+    await registrarAuditoria?.("actualizar_prioridad", "solicitudes", solId, { persona: persona?.nombre || "", prioridad: valor });
   };
 
   // Setea la opción especial de un documento (luz/agua/discapacidad)
@@ -3353,14 +3404,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
   };
 
-  const totalDocs = misSols.flatMap(s => s.documentos);
+  const totalDocs = misSols.flatMap(s => s.documentos).filter(d => !d.interno);
   const docsOk = totalDocs.filter(d => d.entregado).length;
 
   return (
     <div>
       <button onClick={onBack} style={{ background: "transparent", border: "1px solid #ddd", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 22, cursor: "pointer" }}>← Volver</button>
 
-      <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", marginBottom: 20, border: "1px solid #e8e3de" }}>
+      <div style={{ background: esPrioritario ? "#FFFBEB" : "#fff", borderRadius: 14, padding: "24px 28px", marginBottom: 20, border: esPrioritario ? "2px solid #F59E0B" : "1px solid #e8e3de" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <div style={{ width: 58, height: 58, borderRadius: 29, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 24 }}>{persona.nombre[0].toUpperCase()}</div>
           <div>
@@ -3394,6 +3445,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               const est = estadoActualLineaDesmarque(solDesmarque, persona.estado_desmarque);
               return <span style={{ display:"inline-block", marginTop:6, background:est.bg, color:est.color, borderRadius:10, padding:"4px 14px", fontSize:13, fontWeight:800 }}>{est.label}</span>;
             })()}
+            {esPrioritario && (
+              <span style={{ display: "inline-block", marginTop: 6, marginLeft: 8, background: "#FDE68A", color: "#92400E", borderRadius: 10, padding: "4px 14px", fontSize: 13, fontWeight: 900, border: "1px solid #F59E0B" }}>
+                Prioridad
+              </span>
+            )}
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 28, textAlign: "center" }}>
             <div><div style={{ fontSize: 28, fontWeight: 800, color: "#1e3a5f" }}>{misSols.length}</div><div style={{ fontSize: 11, color: "#aaa" }}>PROGRAMAS</div></div>
@@ -3449,7 +3505,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
         <div style={{ background: "#f8f7ff", borderBottom: "2px solid #7C3AED", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#4C1D95" }}>📋 Registro de Visitas a Oficina</div>
-          <button onClick={() => { setShowFormVisita(v => !v); setFormVisita({ fecha: "", profesional: currentUser?.nombre || "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: currentUser?.nombre || "" }); }}
+          <button onClick={() => { setShowFormVisita(v => !v); setFormVisita({ fecha: todayISO(), profesional: currentUser?.nombre || "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: currentUser?.nombre || "" }); }}
             style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
             {showFormVisita ? "✕ Cancelar" : "+ Agregar visita"}
           </button>
@@ -3958,6 +4014,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         const esProgramaEspecialVivienda = esMave || esAmpliacion;
         const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano" || esProgramaEspecialVivienda;
         const esCustom = !!(prog && prog.esCustom && !esProgramaEspecialVivienda);
+        const prioridadActual = prioridadSolicitud(sol);
         return (
           <div key={sol.id} style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 16, border: "1px solid #e8e3de" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
@@ -4100,6 +4157,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 )}
               </div>
             </div>
+            {sol.programaId === "habitabilidad" && (
+              <div style={{ marginBottom: 14, padding: "10px 14px", background: prioridadActual === "prioridad" ? "#FFFBEB" : "#F9FAFB", borderRadius: 8, border: "1px solid " + (prioridadActual === "prioridad" ? "#F59E0B" : "#E5E7EB"), display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 11, fontWeight: 900, color: "#374151", textTransform: "uppercase" }}>Prioridad del solicitante</div>
+                <button onClick={() => guardarPrioridadSolicitud(sol.id, "prioridad")}
+                  style={{ padding: "6px 12px", border: "1.5px solid #F59E0B", borderRadius: 7, background: prioridadActual === "prioridad" ? "#F59E0B" : "#fff", color: prioridadActual === "prioridad" ? "#111827" : "#92400E", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
+                  Prioridad
+                </button>
+                <button onClick={() => guardarPrioridadSolicitud(sol.id, "normal")}
+                  style={{ padding: "6px 12px", border: "1.5px solid #D1D5DB", borderRadius: 7, background: prioridadActual === "normal" ? "#1F2937" : "#fff", color: prioridadActual === "normal" ? "#fff" : "#374151", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                  Solicitante normal
+                </button>
+              </div>
+            )}
             <div style={{ height: 8, background: "#f0ede8", borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
               <div style={{ height: "100%", width: p + "%", background: statusColor(p), borderRadius: 4 }} />
             </div>
