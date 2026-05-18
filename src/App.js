@@ -384,7 +384,6 @@ const PROGRAMAS = [
       { ...DOC_CORREO_SOLICITANTE },
       { nombre: "Titulo de dominio del terreno", obligatorio: true },
       { nombre: "Registro Social de Hogares en la comuna", obligatorio: true },
-      { nombre: "Fecha de nacimiento", obligatorio: true },
       { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
       { nombre: "Informaciones previas", obligatorio: true },
       { nombre: "Antecedentes de la vivienda", obligatorio: true },
@@ -4384,7 +4383,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 }
                 // ── FIN PROGRAMA PERSONALIZADO ────────────────────────────────
 
-                // Ocultar documentos obsoletos de CSP Rural (preservando índice original para updates)
+                // Ocultar documentos obsoletos o duplicados (preservando índice original para updates)
+                if (sol.programaId === "csp_urbano") {
+                  const n = (doc.nombre || "").toLowerCase();
+                  if (n.includes("fecha de nacimiento")) return null;
+                }
                 if (sol.programaId === "csp_rural") {
                   const n = (doc.nombre||"").toLowerCase();
                   if (n.includes("fecha de nacimiento")) return null;
