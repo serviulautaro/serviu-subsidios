@@ -1,6 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 
+const PROGRAMAS_META_BASE = [
+  { id: "habitabilidad", nombre: "Habitabilidad de Vivienda (Desmarque de Vivienda)", descripcion: "Desmarque", color: "#2563EB", colorLight: "#EFF6FF", icon: "H" },
+  { id: "csp_urbano", nombre: "Construccion Sitio Propio Urbano", descripcion: "Subsidio de construccion en sitio propio - zona urbana", color: "#059669", colorLight: "#ECFDF5", icon: "U" },
+  { id: "csp_rural", nombre: "Construccion Sitio Propio Rural", descripcion: "Subsidio de construccion en sitio propio - zona rural", color: "#D97706", colorLight: "#FFFBEB", icon: "R" },
+  { id: "mave_rural", nombre: "Programa de Mejoramiento de Vivienda Rural y Ampliacion de Vivienda Existente (MAVE)", descripcion: "Mejoramiento y ampliacion de vivienda rural existente", color: "#7C3AED", colorLight: "#F5F3FF", icon: "M" },
+  { id: "ampliacion_vivienda", nombre: "Programa Ampliacion de la Vivienda", descripcion: "Ampliacion de vivienda existente", color: "#0F766E", colorLight: "#CCFBF1", icon: "AV" },
+  { id: "mejoramiento_termico", nombre: "Programa Mejoramiento Termico", descripcion: "Mejoramiento termico de vivienda", color: "#EA580C", colorLight: "#FFF7ED", icon: "MT" },
+  { id: "mejoramiento_electrico", nombre: "Programa Mejoramiento Electrico", descripcion: "Mejoramiento electrico de vivienda", color: "#CA8A04", colorLight: "#FEFCE8", icon: "ME" },
+  { id: "colector_solar", nombre: "Programa Colector Solar", descripcion: "Sistema de colector solar para vivienda", color: "#0284C7", colorLight: "#E0F2FE", icon: "CS" },
+];
+
+function combinarProgramasMeta(programasCustom = []) {
+  const porId = new Map(PROGRAMAS_META_BASE.map(p => [p.id, { ...p }]));
+  (programasCustom || []).forEach(p => {
+    if (!p?.id) return;
+    const base = porId.get(p.id) || {};
+    porId.set(p.id, {
+      ...base,
+      ...p,
+      colorLight: p.colorLight || p.colorlight || base.colorLight || "#F9FAFB",
+      icon: p.icon || base.icon || "P",
+    });
+  });
+  return Array.from(porId.values());
+}
+
 const PROGRAMAS = {
   habitabilidad: "Habitabilidad de Vivienda (Desmarque de Vivienda)",
   csp_rural: "Construcción Sitio Propio Rural",
@@ -69,8 +95,8 @@ function programaId(sol) {
   return sol?.programaId || sol?.programa_id || "";
 }
 
-function programaNombre(id) {
-  return PROGRAMAS[id] || id || "Programa";
+function programaNombre(id, programas = PROGRAMAS_META_BASE) {
+  return programas.find(p => p.id === id)?.nombre || PROGRAMAS[id] || id || "Programa";
 }
 
 function mergeComites(comitesSupa = []) {
@@ -88,6 +114,7 @@ function mergeComites(comitesSupa = []) {
       id: sc.id,
       codigo,
       nombre: sc.nombre,
+      programaId: sc.programaId || sc.programa_id || "",
       familias: Number(sc.familias || sc.cantidad_familias || 0),
       tipo,
       constructora: sc.descripcion || sc.constructora || "-",
@@ -110,6 +137,24 @@ function personaEnComite(persona, comite) {
 
 function miembrosComite(comite, personas) {
   return (personas || []).filter(p => personaEnComite(p, comite));
+}
+
+function programaComite(comite) {
+  if (comite?.programaId || comite?.programa_id) return comite.programaId || comite.programa_id;
+  if (comite?.tipo === "Urbano") return "csp_urbano";
+  if (comite?.tipo === "Rural") return "csp_rural";
+  return "";
+}
+
+function comitesPrograma(comites, programa) {
+  const id = programa?.id || "";
+  return (comites || []).filter(c => {
+    const pid = programaComite(c);
+    if (pid === id) return true;
+    if (!pid && id === "csp_rural" && c.tipo === "Rural") return true;
+    if (!pid && id === "csp_urbano" && c.tipo === "Urbano") return true;
+    return false;
+  });
 }
 
 function personasRelacionadas(persona, personas = []) {
@@ -668,6 +713,69 @@ function PanelOpcionesCsp({ tipo, comites, personas, solicitudes, color }) {
   </div>;
 }
 
+function PanelInformePrograma({ programa, comites, personas, solicitudes }) {
+  const color = programa?.color || "#2563eb";
+  const lista = comitesPrograma(comites, programa);
+  const [comiteId, setComiteId] = useState("todos");
+  const [contenido, setContenido] = useState("solo");
+  const [detalleId, setDetalleId] = useState("");
+  const seleccionados = comiteId === "todos" ? lista : lista.filter(c => (c.id || c.codigo) === comiteId || c.codigo === comiteId);
+  const totalPersonas = seleccionados.reduce((acc, c) => acc + miembrosComite(c, personas).length, 0);
+  const comiteDetalle = lista.find(c => (c.id || c.codigo) === detalleId || c.codigo === detalleId) || null;
+
+  const imprimir = () => {
+    const html = seleccionados.map(c => {
+      const miembros = miembrosComite(c, personas);
+      if (contenido === "solo") {
+        return `<div class="page"><div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe ${v(programa?.nombre)}</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div><div class="bar"><span>${v(c.nombre)}</span><span>${v(programa?.nombre)}</span></div><div class="grid">${campoHtml("Constructora", c.constructora)}${campoHtml("Profesional", c.profesional)}${campoHtml("Familias", c.familias || miembros.length)}${campoHtml("Personalidad juridica", c.pj)}</div></div>`;
+      }
+      const filas = miembros.map((p, i) => `<tr><td>${i + 1}</td><td>${v(p.nombre)}</td><td>${v(p.rut)}</td><td>${v(p.telefono)}</td><td>${v(p.direccion)}</td><td>${v(p.coordenadas)}</td></tr>`).join("");
+      return `<div class="page"><div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe ${v(programa?.nombre)}</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div><div class="bar"><span>${v(c.nombre)}</span><span>${miembros.length} integrantes</span></div><div class="grid">${campoHtml("Constructora", c.constructora)}${campoHtml("Profesional", c.profesional)}${campoHtml("Familias", c.familias || miembros.length)}${campoHtml("Personalidad juridica", c.pj)}</div><div class="section"><h2>Integrantes</h2><table><thead><tr><th>#</th><th>Nombre</th><th>Cedula</th><th>Telefono</th><th>Direccion</th><th>Coordenadas</th></tr></thead><tbody>${filas}</tbody></table></div></div>`;
+    }).join("");
+    imprimirVentana(`Informe ${programa?.nombre || "programa"}`, html);
+  };
+
+  if (!programa) return null;
+
+  return <div>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div style={{ width: 46, height: 46, borderRadius: 12, background: programa.colorLight || `${color}18`, color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 18 }}>{programa.icon || "P"}</div>
+      <div>
+        <div style={{ fontWeight: 900, color: "#111827", fontSize: 18 }}>{programa.nombre}</div>
+        <div style={{ color: "#6b7280", fontSize: 13 }}>{programa.descripcion || "Selecciona comite, contenido y tipo de informe"}</div>
+      </div>
+    </div>
+
+    <div style={{ fontSize: 13, fontWeight: 800, color: "#1f2937", marginBottom: 8 }}>1. Selector de comite</div>
+    <select value={comiteId} onChange={e => setComiteId(e.target.value)} style={{ width: "100%", padding: 10, border: `1px solid ${color}`, borderRadius: 8, fontSize: 14 }}>
+      <option value="todos">Todos los comites del programa ({lista.length})</option>
+      {lista.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre}</option>)}
+    </select>
+    <div style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>{seleccionados.length} comites seleccionados - {totalPersonas} personas en total</div>
+
+    <div style={{ fontSize: 13, fontWeight: 800, color: "#1f2937", margin: "22px 0 10px" }}>2. Contenido del informe</div>
+    {[{ id: "solo", titulo: "Solo datos del comite", bajada: "Incluye datos del comite y directiva, sin listado de solicitantes" }, { id: "integrantes", titulo: "Incluir integrantes", bajada: "Incluye datos del comite y listado completo de solicitantes" }].map(op => <label key={op.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: 14, border: `1px solid ${contenido === op.id ? color : "#e5e7eb"}`, borderRadius: 8, background: contenido === op.id ? `${color}10` : "#fff", marginBottom: 10, cursor: "pointer" }}>
+      <input type="radio" checked={contenido === op.id} onChange={() => setContenido(op.id)} />
+      <span><strong style={{ color: contenido === op.id ? color : "#111827" }}>{op.titulo}</strong><br /><span style={{ color: "#6b7280", fontSize: 12 }}>{op.bajada}</span></span>
+    </label>)}
+
+    <button onClick={imprimir} disabled={!seleccionados.length} style={{ width: "100%", padding: "14px 18px", border: "none", borderRadius: 8, background: seleccionados.length ? color : "#d1d5db", color: "#fff", fontWeight: 800, cursor: seleccionados.length ? "pointer" : "not-allowed" }}>
+      Generar informe {comiteId === "todos" ? "de todos los comites" : "del comite seleccionado"}
+    </button>
+
+    <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #e5e7eb" }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: "#1f2937", marginBottom: 8 }}>3. Informe detallado por solicitante del comite</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
+        <select value={detalleId} onChange={e => setDetalleId(e.target.value)} style={{ padding: 10, border: `1px solid ${color}`, borderRadius: 8, fontSize: 14 }}>
+          <option value="">Selecciona un comite</option>
+          {lista.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre} ({miembrosComite(c, personas).length})</option>)}
+        </select>
+        <button onClick={() => imprimirDetalleComite(comiteDetalle, personas, solicitudes, comites)} disabled={!comiteDetalle} style={{ padding: "10px 18px", border: "none", borderRadius: 8, background: comiteDetalle ? "#1d4ed8" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: comiteDetalle ? "pointer" : "not-allowed" }}>Informe detallado</button>
+      </div>
+    </div>
+  </div>;
+}
+
 function PanelIndividual({ personas, solicitudes, comites, onSavePersonas }) {
   const [busqueda, setBusqueda] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
@@ -915,10 +1023,36 @@ function PanelAuditoriaUsuarios({ currentUser }) {
   </div>;
 }
 
-export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser, soloAuditoria = false, onSavePersonas }) {
+function TarjetaInforme({ item, active, onClick }) {
+  return <button type="button" onClick={onClick} style={{
+    border: `2px solid ${active ? item.color : "#e5e7eb"}`,
+    background: active ? item.colorLight || "#eff6ff" : "#fff",
+    borderRadius: 12,
+    padding: 16,
+    minHeight: 150,
+    cursor: "pointer",
+    textAlign: "center",
+    boxShadow: active ? "0 10px 24px rgba(15,23,42,0.12)" : "0 2px 8px rgba(15,23,42,0.04)",
+  }}>
+    <div style={{ width: 58, height: 58, borderRadius: 18, background: item.colorLight || "#f3f4f6", color: item.color, margin: "0 auto 10px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 22 }}>
+      {item.icon}
+    </div>
+    <div style={{ color: "#1f2937", fontWeight: 900, fontSize: 15, lineHeight: 1.25 }}>{item.nombre}</div>
+    <div style={{ color: "#6b7280", fontSize: 12, marginTop: 6, lineHeight: 1.25 }}>{item.descripcion}</div>
+  </button>;
+}
+
+export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser, soloAuditoria = false, onSavePersonas, programasCustom = [] }) {
   const comites = useMemo(() => mergeComites(comitesSupa), [comitesSupa]);
+  const programas = useMemo(() => combinarProgramasMeta(programasCustom), [programasCustom]);
+  const tarjetas = useMemo(() => ([
+    { id: "individual", nombre: "Informe Individual", descripcion: "Informe por persona o por solicitantes de un comite", color: "#2563eb", colorLight: "#eff6ff", icon: "👤" },
+    ...programas,
+  ]), [programas]);
+  const [vistaActiva, setVistaActiva] = useState("individual");
   const [comiteSelId, setComiteSelId] = useState("");
   const comiteSel = comites.find(c => c.codigo === comiteSelId || c.id === comiteSelId) || null;
+  const programaActivo = programas.find(p => p.id === vistaActiva);
 
   if (soloAuditoria) {
     return <div style={{ padding: 24, background: "#f3f4f6", minHeight: "100vh" }}>
@@ -935,6 +1069,21 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
   return <div style={{ padding: 24, background: "#f3f4f6", minHeight: "100vh" }}>
     <div style={{ maxWidth: 1180, margin: "0 auto" }}>
       <h1 style={{ margin: "0 0 6px", color: "#111827" }}>Informes</h1>
+      <div style={{ color: "#6b7280", marginBottom: 22 }}>Elige el tipo de informe. Los programas muestran sus comites para generar el informe que corresponda.</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14, marginBottom: 22 }}>
+        {tarjetas.map(item => <TarjetaInforme key={item.id} item={item} active={vistaActiva === item.id} onClick={() => setVistaActiva(item.id)} />)}
+      </div>
+
+      {vistaActiva === "individual" && <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes, o agrega todos los solicitantes de un comite" color="#2563eb">
+        <PanelIndividual personas={personas} solicitudes={solicitudes} comites={comites} onSavePersonas={onSavePersonas} />
+      </Section>}
+
+      {programaActivo && <Section title={`Informes - ${programaActivo.nombre}`} subtitle="Selecciona comite, contenido del informe o informe detallado por solicitante" color={programaActivo.color || "#2563eb"}>
+        <PanelInformePrograma programa={programaActivo} comites={comites} personas={personas} solicitudes={solicitudes} />
+      </Section>}
+
+      <div style={{ display: "none" }}>
       <div style={{ color: "#6b7280", marginBottom: 22 }}>Generación de informes individuales, comités rurales, comités urbanos y resumen completo.</div>
 
       <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes y el programa que debe informar cada uno" color="#2563eb">
@@ -948,6 +1097,8 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
       <Section title="Informe CSP Urbano" subtitle="Construcción Sitio Propio Urbano - selecciona comité, contenido y detalle de documentos" color="#059669">
         <PanelOpcionesCsp tipo="Urbano" comites={comites} personas={personas} solicitudes={solicitudes} color="#059669" />
       </Section>
+
+      </div>
 
       <Section title="Informe Completo del Comité" subtitle="Datos completos del comité y listado de postulantes" color="#7c3aed">
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10 }}>
