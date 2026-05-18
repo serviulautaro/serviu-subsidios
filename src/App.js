@@ -4896,10 +4896,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
                     {/* Campo fecha de nacimiento */}
                     {esFechaNac && (() => {
-                      const [fY, fM, fD] = (doc.valor||"").length===10 ? (doc.valor||"").split("-") : ["","",""];
-                      const guardarFecha = async (dia, mes, anio) => {
-                        const fechaCompleta = anio.length===4 && mes.length===2 && dia.length===2 ? anio+"-"+mes+"-"+dia : "";
-                        setDocValor(sol.id, i, fechaCompleta || (anio+"-"+mes+"-"+dia));
+                      const fechaValor = /^\d{4}-\d{2}-\d{2}$/.test(doc.valor || "") ? doc.valor : "";
+                      const guardarFecha = async (fechaCompleta) => {
+                        setDocValor(sol.id, i, fechaCompleta);
                         if (fechaCompleta) {
                           const edad = calcularEdad(fechaCompleta);
                           const am = edad!==null ? `${edad} años` : "";
@@ -4909,23 +4908,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       };
                       return (
                       <div style={{ marginBottom: 4 }}>
-                        <div style={{ fontSize: 10, color: "#555", fontWeight: 700, marginBottom: 3, textTransform: "uppercase" }}>DD / MM / AAAA</div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 4 }}>
-                          <input type="text" placeholder="DD" maxLength={2} value={fD||""}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => guardarFecha(e.target.value.replace(/\D/g,"").slice(0,2), fM||"", fY||"")}
-                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
-                          <input type="text" placeholder="MM" maxLength={2} value={fM||""}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => guardarFecha(fD||"", e.target.value.replace(/\D/g,"").slice(0,2), fY||"")}
-                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
-                          <input type="text" placeholder="AAAA" maxLength={4} value={fY||""}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => guardarFecha(fD||"", fM||"", e.target.value.replace(/\D/g,"").slice(0,4))}
-                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
-                        </div>
+                        <div style={{ fontSize: 10, color: "#555", fontWeight: 700, marginBottom: 3, textTransform: "uppercase" }}>Fecha de nacimiento</div>
+                        <input type="date" value={fechaValor}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => guardarFecha(e.target.value)}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (fechaValor ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {!doc.valor && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Ingresa la fecha para habilitar el VB</div>}
-                        {fY&&fM&&fD && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {fD}/{fM}/{fY}</div>}
+                        {fechaValor && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {fmtFecha(fechaValor)}</div>}
                       </div>
                       );
                     })()}
@@ -5213,11 +5202,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       const rut2 = cedPartes2[0] || persona.rut || "";
                       const fecha2 = cedPartes2[1] || "";
                       const tipoRut2 = cedPartes2[2] || persona.rutColores || persona.rutcolores || "";
-                      // fecha2 es YYYY-MM-DD
-                      const [fY, fM, fD] = fecha2 ? fecha2.split("-") : ["","",""];
-                      const guardarCedula = async (rut, dia, mes, anio) => {
-                        const fechaCompleta = anio.length===4 && mes.length===2 && dia.length===2
-                          ? anio+"-"+mes+"-"+dia : (anio+"-"+mes+"-"+dia).replace(/^-+|-+$/g,"") || "";
+                      const fechaCedula = /^\d{4}-\d{2}-\d{2}$/.test(fecha2 || "") ? fecha2 : "";
+                      const guardarCedula = async (rut, fechaCompleta) => {
                         const rutOk = rutFormatoChilenoValido(rut);
                         const rutFinal = rutOk ? formatRut(rut) : rut;
                         const newValor = rutFinal + "|" + fechaCompleta + "|" + tipoRut2;
@@ -5236,26 +5222,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>Cédula de identidad del solicitante</div>
                         <input type="text" placeholder="ej: 10.398.338-K" value={formatRut(rut2)}
                           onClick={e => e.stopPropagation()}
-                          onChange={e => guardarCedula(e.target.value, fD||"", fM||"", fY||"")}
+                          onChange={e => guardarCedula(e.target.value, fechaCedula)}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid "+(rut2Valido?"#059669":"#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha de Nacimiento</div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 4 }}>
-                          <input type="text" placeholder="DD" maxLength={2} value={fD||""}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => guardarCedula(rut2, e.target.value.replace(/\D/g,"").slice(0,2), fM||"", fY||"")}
-                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
-                          <input type="text" placeholder="MM" maxLength={2} value={fM||""}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => guardarCedula(rut2, fD||"", e.target.value.replace(/\D/g,"").slice(0,2), fY||"")}
-                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
-                          <input type="text" placeholder="AAAA" maxLength={4} value={fY||""}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => guardarCedula(rut2, fD||"", fM||"", e.target.value.replace(/\D/g,"").slice(0,4))}
-                            style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #ddd", fontSize: 12, background: "#fff", textAlign: "center" }} />
-                        </div>
+                        <input type="date" value={fechaCedula}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => guardarCedula(rut2, e.target.value)}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (fechaCedula ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {!rut2Valido && <div style={{ fontSize: 10, color: "#DC2626", marginTop: 2 }}>⚠ La cédula debe ser chilena válida, con puntos, guion y dígito verificador correcto.</div>}
-                        {!(rut2Valido && fecha2.length===10) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>⚠ Ingresa cédula de identidad válida y fecha completa para habilitar el upload</div>}
-                        {rut2Valido && fecha2.length===10 && <div style={{ fontSize: 10, color: "#059669" }}>✓ Cédula de identidad: {formatRut(rut2)} — Nacimiento: {fD}/{fM}/{fY}</div>}
+                        {!(rut2Valido && fechaCedula) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>⚠ Ingresa cédula de identidad válida y fecha completa para habilitar el upload</div>}
+                        {rut2Valido && fechaCedula && <div style={{ fontSize: 10, color: "#059669" }}>✓ Cédula de identidad: {formatRut(rut2)} — Nacimiento: {fmtFecha(fechaCedula)}</div>}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginTop: 2 }}>
                           {[
                             ["RUT colores", "ok"],
@@ -5264,7 +5240,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             <button key={valor} type="button"
                               onClick={async e => {
                                 e.stopPropagation();
-                                const newValor = formatRut(rut2) + "|" + fecha2 + "|" + valor;
+                                const newValor = formatRut(rut2) + "|" + fechaCedula + "|" + valor;
                                 const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                                   ...s,
                                   documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
