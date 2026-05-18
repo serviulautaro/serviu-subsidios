@@ -54,6 +54,10 @@ const mostrarSiNo = (value) => {
   if (txt === "N" || txt === "NO") return "No";
   return value || "";
 };
+const textoEdad = (fechaNac) => {
+  const edad = calcularEdad(fechaNac);
+  return edad !== null ? `${edad} años` : "";
+};
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const DOC_CORREO_SOLICITANTE = { nombre: "Correo del solicitante", obligatorio: true, requiereTexto: true, etiquetaTexto: "Correo electrónico" };
 const asegurarCorreoSolicitante = (documentos = []) => {
@@ -99,9 +103,19 @@ const docCompletoEquivalente = (doc, docs = []) => {
   }
   return false;
 };
+const docsParaConteoSolicitud = (docs = []) => (docs || []).filter(d => {
+  if (d.interno) return false;
+  if (d.obligatorio === false && !docTieneValor(d)) return false;
+  return true;
+});
+const conteoDocumentosSolicitud = (docs = []) => {
+  const visibles = docsParaConteoSolicitud(docs);
+  const completos = visibles.filter(d => docCompletoEquivalente(d, visibles)).length;
+  return { visibles, completos, total: visibles.length };
+};
 const pct = (docs = []) => {
-  const visibles = (docs || []).filter(d => !d.interno);
-  return visibles.length ? Math.round(visibles.filter(d => docCompletoEquivalente(d, visibles)).length / visibles.length * 100) : 0;
+  const { completos, total } = conteoDocumentosSolicitud(docs);
+  return total ? Math.round(completos / total * 100) : 0;
 };
 const statusColor = (p) => p === 100 ? "#059669" : p >= 50 ? "#D97706" : "#DC2626";
 const statusLabel = (p) => p === 100 ? "Completo" : p >= 50 ? "En proceso" : "Incompleto";
@@ -468,9 +482,17 @@ function normNomDirectiva(s) {
 }
 
 // Infiere el cargo de un solicitante comparando su nombre con la directiva del comité
-function inferirCargo(personaNombre, comiteId) {
+const buscarComitePersona = (comites = [], persona = {}) => (comites || []).find(c =>
+  c.id === persona.comiteId ||
+  c.codigo === persona.comiteId ||
+  normNomDirectiva(c.nombre) === normNomDirectiva(persona.comite)
+);
+
+function inferirCargo(personaNombre, comiteId, comites = []) {
   if (!personaNombre || !comiteId) return "Socio";
-  const comite = COMITES_DIRECTIVA.find(c => c.codigo === comiteId);
+  const comiteDinamico = (comites || []).find(c => c.id === comiteId || c.codigo === comiteId);
+  const directivaDinamica = Array.isArray(comiteDinamico?.directiva) ? comiteDinamico.directiva : [];
+  const comite = directivaDinamica.length ? { directiva: directivaDinamica } : COMITES_DIRECTIVA.find(c => c.codigo === comiteId);
   if (!comite || !comite.directiva || comite.directiva.length === 0) return "Socio";
   const normPersona = normNomDirectiva(personaNombre);
   const palabrasPersona = normPersona.split(" ").filter(p => p.length > 2);
@@ -483,6 +505,15 @@ function inferirCargo(personaNombre, comiteId) {
   }
   return "Socio";
 }
+
+const constructoraDeComite = (persona = {}, comites = []) => {
+  const comite = buscarComitePersona(comites, persona);
+  return persona.constructoraSeleccionada ||
+    comite?.constructoraSeleccionada ||
+    comite?.constructoraseleccionada ||
+    comite?.constructora ||
+    "";
+};
 
 const DOCS_SOLICITUD = {
   habitabilidad: [
@@ -1568,7 +1599,7 @@ function calcularAhorro(rsh) {
   return "";
 }
 
-function FichaRural({ persona, misSols, onSave, esCsp }) {
+function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   const [modo, setModo] = useState("ver");
   const [form, setForm] = useState({ ...persona });
   const [confirmModal, setConfirmModal] = useState(null);
@@ -1583,7 +1614,9 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
     setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Rural?", fn: async () => {
       const edadCalc = calcularEdad(form.fechaNacimiento);
       const formFinal = protegerDatosFicha(form, persona, {
-        adultoMayor: edadCalc !== null ? (edadCalc >= 60 ? "ADULTO MAYOR" : "NO") : form.adultoMayor
+        adultoMayor: edadCalc !== null ? `${edadCalc} años` : form.adultoMayor,
+        cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
+        constructoraSeleccionada: constructoraDeComite(form, comites)
       });
       await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
       onSave(formFinal);
@@ -1595,7 +1628,7 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
 
   const handleFechaNac = (val) => {
     const edad = calcularEdad(val);
-    const adulto = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : (form.adultoMayor || "");
+    const adulto = edad !== null ? `${edad} años` : (form.adultoMayor || "");
     setForm(f => ({ ...f, fechaNacimiento: val, adultoMayor: adulto }));
   };
 
@@ -1657,7 +1690,7 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div style={sectionTitleStyle}>Información General</div>
             {campo("Nombre del Comité", persona.comite)}
-            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId))}
+            {campo("Cargo en el Comité", persona.cargo_comite || inferirCargo(persona.nombre, persona.comiteId, comites))}
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
@@ -1672,9 +1705,8 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
             {campo("N° Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
-              const e = calcularEdad(persona.fechaNacimiento);
-              const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : (persona.adultoMayor || "");
-              return campo("Adulto Mayor", val + (e !== null ? ` (${e} años)` : ""));
+              const val = textoEdad(persona.fechaNacimiento) || persona.adultoMayor || "";
+              return campo("Adulto Mayor", val);
             })()}
 
             <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Técnica</div>
@@ -1690,7 +1722,7 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
             {campo("Avalúo Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
             {campo("Permiso Edificación", persona.permisoEdificacion)}
             {campo("Recepción Definitiva", persona.recepcionDefinitiva)}
-            {campo("Constructora Seleccionada", persona.constructoraSeleccionada)}
+            {campo("Constructora Seleccionada", constructoraDeComite(persona, comites))}
             {campo("Metros Viv. Original", persona.metrosOriginal)}
             {campo("Metros Ampliación", persona.metrosAmpl)}
             {campo("Metros No Regularizados", persona.metrosNoRegul)}
@@ -1715,7 +1747,7 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
             <div>
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comité</label>
               <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#374151", fontWeight: 600 }}>
-                {inferirCargo(form.nombre, persona.comiteId)}
+                {inferirCargo(form.nombre, persona.comiteId, comites)}
                 <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(automático)</span>
               </div>
             </div>
@@ -1892,7 +1924,7 @@ function FichaRural({ persona, misSols, onSave, esCsp }) {
 }
 
 // ─── FICHA URBANA ─────────────────────────────────────────────────────────────
-function FichaUrbana({ persona, misSols, onSave, esCsp }) {
+function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   const [modo, setModo] = useState("ver");
   const [form, setForm] = useState({ ...persona });
   const [confirmModal, setConfirmModal] = useState(null);
@@ -1907,7 +1939,9 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
     setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Urbana?", fn: async () => {
       const edadCalc = calcularEdad(form.fechaNacimiento);
       const formFinal = protegerDatosFicha(form, persona, {
-        adultoMayor: edadCalc !== null ? (edadCalc >= 60 ? "ADULTO MAYOR" : "NO") : form.adultoMayor
+        adultoMayor: edadCalc !== null ? `${edadCalc} años` : form.adultoMayor,
+        cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
+        constructoraSeleccionada: constructoraDeComite(form, comites)
       });
       await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
       onSave(formFinal);
@@ -1919,7 +1953,7 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
 
   const handleFechaNac = (val) => {
     const edad = calcularEdad(val);
-    const adulto = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : (form.adultoMayor || "");
+    const adulto = edad !== null ? `${edad} años` : (form.adultoMayor || "");
     setForm(f => ({ ...f, fechaNacimiento: val, adultoMayor: adulto }));
   };
 
@@ -1981,7 +2015,7 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div style={sectionTitleStyle}>Información General</div>
             {campo("Nombre del Comité", persona.comite)}
-            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId))}
+            {campo("Cargo en el Comité", persona.cargo_comite || inferirCargo(persona.nombre, persona.comiteId, comites))}
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
@@ -1996,9 +2030,8 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
             {campo("N° Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
-              const e = calcularEdad(persona.fechaNacimiento);
-              const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : (persona.adultoMayor || "");
-              return campo("Adulto Mayor", val + (e !== null ? ` (${e} años)` : ""));
+              const val = textoEdad(persona.fechaNacimiento) || persona.adultoMayor || "";
+              return campo("Adulto Mayor", val);
             })()}
 
             <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Técnica</div>
@@ -2013,7 +2046,7 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
             {campo("Avalúo Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
             {campo("Permiso Edificación", persona.permisoEdificacion)}
             {campo("Recepción Definitiva", persona.recepcionDefinitiva)}
-            {campo("Constructora Seleccionada", persona.constructoraSeleccionada)}
+            {campo("Constructora Seleccionada", constructoraDeComite(persona, comites))}
             {campo("Metros Viv. Original", persona.metrosOriginal)}
             {campo("Metros Ampliación", persona.metrosAmpl)}
             {campo("Metros No Regularizados", persona.metrosNoRegul)}
@@ -2038,7 +2071,7 @@ function FichaUrbana({ persona, misSols, onSave, esCsp }) {
             <div>
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comité</label>
               <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#374151", fontWeight: 600 }}>
-                {inferirCargo(form.nombre, persona.comiteId)}
+                {inferirCargo(form.nombre, persona.comiteId, comites)}
                 <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(automático)</span>
               </div>
             </div>
@@ -3631,7 +3664,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         // Si hay programa pero es solo urbano, no mostrar Rural
         if (tienePrograma && !tieneRural) return null;
         return (tieneRural || comiteRural || sinComite) ? (
-          <FichaRural persona={persona} misSols={misSols} esCsp={tieneRural} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+          <FichaRural persona={persona} misSols={misSols} comites={comites} esCsp={tieneRural} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
         ) : null;
       })()}
 
@@ -3646,7 +3679,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         // Si hay programa pero es solo rural, no mostrar Urbana
         if (tienePrograma && !tieneUrbano) return null;
         return (tieneUrbano || comiteUrbano) ? (
-          <FichaUrbana persona={persona} misSols={misSols} esCsp={tieneUrbano} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+          <FichaUrbana persona={persona} misSols={misSols} comites={comites} esCsp={tieneUrbano} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
         ) : null;
       })()}
 
@@ -3917,8 +3950,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       {misSols.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
         const p = pct(sol.documentos);
-        const docsVisiblesSol = (sol.documentos || []).filter(d => !d.interno);
-        const ok = docsVisiblesSol.filter(d => d.entregado).length;
+        const conteoSol = conteoDocumentosSolicitud(sol.documentos);
+        const ok = conteoSol.completos;
         const progNombreNorm = (prog?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const esMave = sol.programaId === "mave_rural" || progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
         const esAmpliacion = sol.programaId === "ampliacion_vivienda" || progNombreNorm.includes("ampliacion de la vivienda");
@@ -3937,7 +3970,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ background: statusBg(p), color: statusColor(p), borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>{statusLabel(p)}</div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{docsVisiblesSol.length}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{conteoSol.total}</div>
                 <button onClick={() => setSolsEditando(prev => ({ ...prev, [sol.id]: !prev[sol.id] }))}
                   style={{ padding: "5px 14px", borderRadius: 8, border: "1.5px solid " + (solsEditando[sol.id] ? "#059669" : "#1e3a5f"), background: solsEditando[sol.id] ? "#059669" : "#1e3a5f", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   {solsEditando[sol.id] ? "✓ Editando" : "✏ Editar"}
@@ -3959,7 +3992,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           db.fecha_nacimiento = p[1];
                           lc.fechaNacimiento = p[1];
                           const edad = calcularEdad(p[1]);
-                          db.adultomayor = lc.adultoMayor = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : "";
+                          if (edad !== null) db.adultomayor = lc.adultoMayor = `${edad} años`;
                         }
                         if (p[2]) { db.rutcolores = p[2].trim(); lc.rutColores = p[2].trim(); }
                       }
@@ -3971,7 +4004,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       if (n.includes("fecha de nacimiento") && v.length === 10) {
                         db.fecha_nacimiento = v; lc.fechaNacimiento = v;
                         const edad = calcularEdad(v);
-                        db.adultomayor = lc.adultoMayor = edad !== null ? (edad >= 60 ? "ADULTO MAYOR" : "NO") : "";
+                        if (edad !== null) db.adultomayor = lc.adultoMayor = `${edad} años`;
                       }
                       // RSH → puntaje, comuna, estado civil, integrantes, subsidio
                       if (n.includes("registro social") || n.includes("rsh")) {
@@ -4046,6 +4079,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       // Rol
                       if (n.includes("rol") && v) { db.rol = v; lc.rol = v; }
                       if (n.includes("telefono") && v) { db.telefono = v.trim(); lc.telefono = v.trim(); }
+                    }
+                    const cargoAuto = inferirCargo(persona.nombre, persona.comiteId, comites);
+                    if (cargoAuto) { db.cargo_comite = cargoAuto; lc.cargo_comite = cargoAuto; }
+                    const constructoraAuto = constructoraDeComite({ ...persona, ...lc }, comites);
+                    if (constructoraAuto) {
+                      db.constructoraseleccionada = constructoraAuto;
+                      lc.constructoraSeleccionada = constructoraAuto;
                     }
                     if (Object.keys(db).length > 0) {
                       await supabase.from("personas").update(db).eq("id", persona.id);
@@ -4792,7 +4832,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         setDocValor(sol.id, i, fechaCompleta || (anio+"-"+mes+"-"+dia));
                         if (fechaCompleta) {
                           const edad = calcularEdad(fechaCompleta);
-                          const am = edad!==null ? (edad>=60?"ADULTO MAYOR":"NO") : "";
+                          const am = edad!==null ? `${edad} años` : "";
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
                           onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
                         }
@@ -5114,7 +5154,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : { ...d2, valor: newValor, entregado: !!(rutOk && fechaCompleta.length===10) }) }));
                         if (fechaCompleta.length===10) {
                           const edad = calcularEdad(fechaCompleta);
-                          const am = edad!==null ? (edad>=60?"ADULTO MAYOR":"NO") : "";
+                          const am = edad!==null ? `${edad} años` : "";
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
                           onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
                         }
@@ -6903,7 +6943,8 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
           const prog = todosProgramas.find(p => p.id === s.programaId);
           const docs = s.documentos || [];
           const p = pct(docs);
-          const ok = docs.filter(d => docCompletoEquivalente(d, docs)).length;
+          const conteo = conteoDocumentosSolicitud(docs);
+          const ok = conteo.completos;
           return (
             <div key={s.id} style={{ background: "#fff", borderRadius: 12, padding: "16px 22px", border: "1px solid #e8e3de" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -6916,7 +6957,7 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ background: statusBg(p), color: statusColor(p), borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 700 }}>{statusLabel(p)}</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{docs.length}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{conteo.total}</div>
                 </div>
               </div>
               <div style={{ height: 5, background: "#f0ede8", borderRadius: 3, overflow: "hidden" }}>
