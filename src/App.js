@@ -281,6 +281,44 @@ const DOCUMENTOS_AMPLIACION_VIVIENDA = [
   { nombre: "Boleta del agua potable", obligatorio: true, tipo: "agua", opciones: ["Aguas Araucania", "Aguas San Isidro", "APR", "Pozo"] }
 ];
 
+const DOCUMENTOS_MEJORAMIENTO_TERMICO = [
+  { nombre: "Cedula de identidad vigente del postulante", obligatorio: true },
+  { nombre: "Cuenta de ahorro de vivienda", obligatorio: true },
+  { nombre: "Fotocopia Escritura completa (DV, DRU, GOCE, USUFRUCTO, OTRO INDICAR)", obligatorio: true },
+  { nombre: "Certificado de antecedentes de la vivienda", obligatorio: true },
+  { nombre: "Certificado de Informaciones previas", obligatorio: true },
+  { nombre: "Certificado Avaluo Fiscal Detallado", obligatorio: true },
+  { nombre: "Registro Social de Hogares", obligatorio: true },
+  { nombre: "Telefono de contacto", obligatorio: true },
+  { nombre: "Correo electronico del solicitante", obligatorio: true }
+];
+
+const DOCUMENTOS_MEJORAMIENTO_ELECTRICO = [
+  { nombre: "Cedula de identidad vigente del postulante", obligatorio: true },
+  { nombre: "Cuenta de ahorro de vivienda", obligatorio: true },
+  { nombre: "Fotocopia Escritura completa (DV, DRU, GOCE, USUFRUCTO, OTRO INDICAR)", obligatorio: true },
+  { nombre: "Certificado de antecedentes de la vivienda", obligatorio: true },
+  { nombre: "Certificado de Informaciones previas", obligatorio: true },
+  { nombre: "Certificado Avaluo Fiscal Detallado", obligatorio: true },
+  { nombre: "Telefono de contacto", obligatorio: true },
+  { nombre: "Correo electronico del solicitante", obligatorio: true },
+  { nombre: "Boleta del suministro electrico", obligatorio: true, tipo: "luz", opciones: ["FRONTEL", "CODINER", "CGE"] },
+  { nombre: "Registro Social de Hogares", obligatorio: true }
+];
+
+const DOCUMENTOS_COLECTOR_SOLAR = [
+  { nombre: "Cedula de identidad vigente del postulante", obligatorio: true },
+  { nombre: "Cuenta de ahorro de vivienda", obligatorio: true },
+  { nombre: "Fotocopia Escritura completa (DV, DRU, GOCE, USUFRUCTO, OTRO INDICAR)", obligatorio: true },
+  { nombre: "Certificado de antecedentes de la vivienda", obligatorio: true },
+  { nombre: "Certificado de Informaciones previas", obligatorio: true },
+  { nombre: "Certificado Avaluo Fiscal Detallado", obligatorio: true },
+  { nombre: "Registro Social de Hogares", obligatorio: true },
+  { nombre: "Telefono de contacto", obligatorio: true },
+  { nombre: "Correo electronico del solicitante", obligatorio: true },
+  { nombre: "Boleta del agua potable", obligatorio: true, tipo: "agua", opciones: ["Aguas Araucania", "Aguas San Isidro", "APR", "Pozo"] }
+];
+
 const PROGRAMAS = [
   {
     id: "habitabilidad",
@@ -349,6 +387,27 @@ const PROGRAMAS = [
     descripcion: "Ampliacion de vivienda existente",
     color: "#0F766E", colorLight: "#CCFBF1", icon: "AV",
     documentos: DOCUMENTOS_AMPLIACION_VIVIENDA
+  },
+  {
+    id: "mejoramiento_termico",
+    nombre: "Programa Mejoramiento Termico",
+    descripcion: "Mejoramiento termico de vivienda",
+    color: "#EA580C", colorLight: "#FFF7ED", icon: "MT",
+    documentos: DOCUMENTOS_MEJORAMIENTO_TERMICO
+  },
+  {
+    id: "mejoramiento_electrico",
+    nombre: "Programa Mejoramiento Electrico",
+    descripcion: "Mejoramiento electrico de vivienda",
+    color: "#CA8A04", colorLight: "#FEFCE8", icon: "ME",
+    documentos: DOCUMENTOS_MEJORAMIENTO_ELECTRICO
+  },
+  {
+    id: "colector_solar",
+    nombre: "Programa Colector Solar",
+    descripcion: "Sistema de colector solar para vivienda",
+    color: "#0284C7", colorLight: "#E0F2FE", icon: "CS",
+    documentos: DOCUMENTOS_COLECTOR_SOLAR
   }
 ];
 
