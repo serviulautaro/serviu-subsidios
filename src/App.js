@@ -2434,6 +2434,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [showFormVisita, setShowFormVisita] = useState(false);
   const [formVisita, setFormVisita] = useState({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "" });
   const [guardandoVisita, setGuardandoVisita] = useState(false);
+  const [showFichaSolicitante, setShowFichaSolicitante] = useState(false);
 
   const persona = personas.find(p => p.id === personaId);
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
@@ -2641,7 +2642,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   useEffect(() => {
     if (persona) { cargarVisitas(); }
+    setShowFichaSolicitante(false);
   }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setShowFichaSolicitante(false);
+  }, [currentUser?.usuario, currentUser?.nombre]);
 
   // Re-cargar archivos cuando carpeta cambia (puede cambiar al cargar solicitudes)
   useEffect(() => {
@@ -3701,58 +3707,71 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         </div>
       </div>
 
-      {/* FICHA COMPLETA RURAL */}
-      {(() => {
-        const tieneRural = misSols.some(s => s.programaId === "csp_rural");
-        const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
-        const tienePrograma = misSols.length > 0;
-        const comiteRural = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
-          (persona.tipoComite === "Rural" || persona.tipo_comite === "RURAL" ||
-           (comite && comite.nombre && comite.nombre.toUpperCase().includes("RURAL")));
-        // Solo usar como fallback cuando NO hay programa asignado todavía
-        const sinComite = !tienePrograma && (!persona.comiteId || persona.comiteId === "");
-        // Si hay programa pero es solo urbano, no mostrar Rural
-        if (tienePrograma && !tieneRural) return null;
-        return (tieneRural || comiteRural || sinComite) ? (
-          <FichaRural persona={persona} misSols={misSols} comites={comites} esCsp={tieneRural} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
-        ) : null;
-      })()}
+      <div style={{ background: "#fff", borderRadius: 14, padding: "14px 20px", marginBottom: 20, border: "1px solid #e8e3de", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#1e3a5f" }}>Ficha del solicitante</div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>La ficha permanece oculta hasta que se solicite mostrarla.</div>
+        </div>
+        <button onClick={() => setShowFichaSolicitante(v => !v)}
+          style={{ background: showFichaSolicitante ? "#6B7280" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+          {showFichaSolicitante ? "Ocultar ficha" : "Mostrar ficha"}
+        </button>
+      </div>
 
-      {/* FICHA COMPLETA URBANA */}
-      {(() => {
-        const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
-        const tieneRural = misSols.some(s => s.programaId === "csp_rural");
-        const tienePrograma = misSols.length > 0;
-        const comiteUrbano = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
-          (persona.tipoComite === "Urbano" || persona.tipo_comite === "URBANO" ||
-           (comite && comite.nombre && comite.nombre.toUpperCase().includes("URBANO")));
-        // Si hay programa pero es solo rural, no mostrar Urbana
-        if (tienePrograma && !tieneUrbano) return null;
-        return (tieneUrbano || comiteUrbano) ? (
-          <FichaUrbana persona={persona} misSols={misSols} comites={comites} esCsp={tieneUrbano} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
-        ) : null;
-      })()}
+      {showFichaSolicitante && (
+        <>
+          {/* FICHA COMPLETA RURAL */}
+          {(() => {
+            const tieneRural = misSols.some(s => s.programaId === "csp_rural");
+            const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
+            const tienePrograma = misSols.length > 0;
+            const comiteRural = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
+              (persona.tipoComite === "Rural" || persona.tipo_comite === "RURAL" ||
+               (comite && comite.nombre && comite.nombre.toUpperCase().includes("RURAL")));
+            // Solo usar como fallback cuando NO hay programa asignado todavía
+            const sinComite = !tienePrograma && (!persona.comiteId || persona.comiteId === "");
+            // Si hay programa pero es solo urbano, no mostrar Rural
+            if (tienePrograma && !tieneRural) return null;
+            return (tieneRural || comiteRural || sinComite) ? (
+              <FichaRural persona={persona} misSols={misSols} comites={comites} esCsp={tieneRural} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+            ) : null;
+          })()}
 
-      {/* FICHAS PARA PROGRAMAS PERSONALIZADOS Y MAVE */}
-      {(() => {
-        const fichaGeneralIds = new Set(["mave_rural", "ampliacion_vivienda", ...(programasCustom || []).map(p => p.id)]);
-        const fichas = misSols
-          .filter(s => fichaGeneralIds.has(s.programaId))
-          .map(s => ({ solicitud: s, programa: todosProgramas.find(p => p.id === s.programaId) }))
-          .filter(x => x.programa);
+          {/* FICHA COMPLETA URBANA */}
+          {(() => {
+            const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
+            const tieneRural = misSols.some(s => s.programaId === "csp_rural");
+            const tienePrograma = misSols.length > 0;
+            const comiteUrbano = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
+              (persona.tipoComite === "Urbano" || persona.tipo_comite === "URBANO" ||
+               (comite && comite.nombre && comite.nombre.toUpperCase().includes("URBANO")));
+            // Si hay programa pero es solo rural, no mostrar Urbana
+            if (tienePrograma && !tieneUrbano) return null;
+            return (tieneUrbano || comiteUrbano) ? (
+              <FichaUrbana persona={persona} misSols={misSols} comites={comites} esCsp={tieneUrbano} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+            ) : null;
+          })()}
 
-        if (comite && fichaGeneralIds.has(comite.programaId) && !fichas.some(x => x.programa.id === comite.programaId)) {
-          const programa = todosProgramas.find(p => p.id === comite.programaId);
-          if (programa) fichas.push({ solicitud: null, programa });
-        }
+          {/* FICHAS PARA PROGRAMAS PERSONALIZADOS Y MAVE */}
+          {(() => {
+            const fichaGeneralIds = new Set(["mave_rural", "ampliacion_vivienda", ...(programasCustom || []).map(p => p.id)]);
+            const fichas = misSols
+              .filter(s => fichaGeneralIds.has(s.programaId))
+              .map(s => ({ solicitud: s, programa: todosProgramas.find(p => p.id === s.programaId) }))
+              .filter(x => x.programa);
 
-        return fichas.map(({ programa, solicitud }) => (
-          <FichaProgramaCustom key={programa.id + "-" + (solicitud ? solicitud.id : "comite")} persona={persona} programa={programa} solicitud={solicitud} />
-        ));
-      })()}
+            if (comite && fichaGeneralIds.has(comite.programaId) && !fichas.some(x => x.programa.id === comite.programaId)) {
+              const programa = todosProgramas.find(p => p.id === comite.programaId);
+              if (programa) fichas.push({ solicitud: null, programa });
+            }
 
-      {/* FICHA COMPLETA DESMARQUE */}
-      {persona.comiteId === "comite_desmarque" && (
+            return fichas.map(({ programa, solicitud }) => (
+              <FichaProgramaCustom key={programa.id + "-" + (solicitud ? solicitud.id : "comite")} persona={persona} programa={programa} solicitud={solicitud} />
+            ));
+          })()}
+
+          {/* FICHA COMPLETA DESMARQUE */}
+          {persona.comiteId === "comite_desmarque" && (
         <div style={{ background: "#fff", borderRadius: 14, padding: "20px 24px", marginBottom: 20, border: "1px solid #e8e3de" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1e3a5f" }}>📋 Ficha Desmarque</div>
@@ -3824,6 +3843,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             );
           })()}
         </div>
+          )}
+        </>
       )}
 
       <div style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 20, border: "1px solid #e8e3de" }}>
