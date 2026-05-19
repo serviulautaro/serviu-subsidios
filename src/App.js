@@ -7391,70 +7391,75 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const destino = comitesDestino.find(c => c.id === comiteDestinoMover);
     if (!destino) return;
     setMoviendoPersona(true);
-    const origenNombre = comite?.nombre || personaMover.comite || personaMover.comiteId || "Sin comité anterior";
-    const usuario = currentUser?.nombre || "Usuario no identificado";
-    const nota = `[${today()}] Cambio de comité/programa: ${origenNombre} -> ${destino.nombre}. Motivo: ${motivo}. Usuario: ${usuario}`;
-    const observaciones = [personaMover.observaciones, nota].filter(Boolean).join("\n");
-    const tipoDestino = destino.tipo || (destino.programaId === "csp_urbano" ? "URBANO" : destino.programaId === "csp_rural" ? "RURAL" : "");
-    const personaActualizada = {
-      ...personaMover,
-      comiteId: destino.id,
-      comite: destino.nombre,
-      tipo_comite: tipoDestino,
-      observaciones,
-    };
-
-    const { supabase: sb } = await import("./supabaseClient");
-    await sb.from("personas").update({
-      comite_id: destino.id,
-      comite: destino.nombre,
-      tipo_comite: tipoDestino,
-      observaciones,
-    }).eq("id", personaMover.id);
-
-    const programaDestino = todosProgramas.find(p => p.id === destino.programaId);
-    let nuevasSolicitudes = solicitudes;
-    if (programaDestino && !solicitudes.some(s => s.personaId === personaMover.id && s.programaId === programaDestino.id)) {
-      const nuevaSol = {
-        id: uid(),
-        personaId: personaMover.id,
-        personaNombre: personaMover.nombre,
-        programaId: programaDestino.id,
-        fecha: today(),
+    try {
+      const origenNombre = comite?.nombre || personaMover.comite || personaMover.comiteId || "Sin comité anterior";
+      const usuario = currentUser?.nombre || "Usuario no identificado";
+      const nota = `[${today()}] Cambio de comité/programa: ${origenNombre} -> ${destino.nombre}. Motivo: ${motivo}. Usuario: ${usuario}`;
+      const observaciones = [personaMover.observaciones, nota].filter(Boolean).join("\n");
+      const tipoDestino = destino.tipo || (destino.programaId === "csp_urbano" ? "URBANO" : destino.programaId === "csp_rural" ? "RURAL" : "");
+      const personaActualizada = {
+        ...personaMover,
+        comiteId: destino.id,
         comite: destino.nombre,
-        codigoComite: destino.id,
-        tipoComite: tipoDestino,
-        documentos: (programaDestino.documentos || []).map(d => ({
-          nombre: d.nombre,
-          obligatorio: d.obligatorio,
-          entregado: false,
-          tipo: d.tipo || null,
-          opciones: d.opciones || null,
-          opcionSeleccionada: null,
-          etiqueta: null,
-          valor: d.valor || "",
-          requiereArchivo: !!d.requiereArchivo,
-          requiereTexto: !!d.requiereTexto,
-          etiquetaTexto: d.etiquetaTexto || "",
-        })),
+        tipo_comite: tipoDestino,
+        observaciones,
       };
-      nuevasSolicitudes = [...solicitudes, nuevaSol];
-      await onSaveSolicitudes(nuevasSolicitudes);
-    }
 
-    onSavePersonas(personas.map(p => p.id === personaMover.id ? personaActualizada : p));
-    await registrarAuditoria?.("mover_solicitante", "personas", personaMover.id, {
-      solicitante: personaMover.nombre,
-      desde: origenNombre,
-      hacia: destino.nombre,
-      programaDestino: programaDestino?.nombre || "",
-      motivo,
-    });
-    setPersonaMover(null);
-    setComiteDestinoMover("");
-    setMotivoMovimiento("");
-    setMoviendoPersona(false);
-    alert("Solicitante movido correctamente. La razón del cambio quedó guardada en observaciones.");
+      const { supabase: sb } = await import("./supabaseClient");
+      const { error: personaError } = await sb.from("personas").update({
+        comite_id: destino.id,
+        comite: destino.nombre,
+        tipo_comite: tipoDestino,
+        observaciones,
+      }).eq("id", personaMover.id);
+      if (personaError) throw personaError;
+
+      const programaDestino = todosProgramas.find(p => p.id === destino.programaId);
+      if (programaDestino && !solicitudes.some(s => s.personaId === personaMover.id && s.programaId === programaDestino.id)) {
+        const nuevaSol = {
+          id: uid(),
+          personaId: personaMover.id,
+          personaNombre: personaMover.nombre,
+          programaId: programaDestino.id,
+          fecha: today(),
+          comite: destino.nombre,
+          codigoComite: destino.id,
+          tipoComite: tipoDestino,
+          documentos: (programaDestino.documentos || []).map(d => ({
+            nombre: d.nombre,
+            obligatorio: d.obligatorio,
+            entregado: false,
+            tipo: d.tipo || null,
+            opciones: d.opciones || null,
+            opcionSeleccionada: null,
+            etiqueta: null,
+            valor: d.valor || "",
+            requiereArchivo: !!d.requiereArchivo,
+            requiereTexto: !!d.requiereTexto,
+            etiquetaTexto: d.etiquetaTexto || "",
+          })),
+        };
+        await onSaveSolicitudes([...solicitudes, nuevaSol]);
+      }
+
+      onSavePersonas(personas.map(p => p.id === personaMover.id ? personaActualizada : p));
+      await registrarAuditoria?.("mover_solicitante", "personas", personaMover.id, {
+        solicitante: personaMover.nombre,
+        desde: origenNombre,
+        hacia: destino.nombre,
+        programaDestino: programaDestino?.nombre || "",
+        motivo,
+      });
+      setPersonaMover(null);
+      setComiteDestinoMover("");
+      setMotivoMovimiento("");
+      alert("Solicitante movido correctamente. La razón del cambio quedó guardada en observaciones.");
+    } catch (err) {
+      console.error("Error moviendo solicitante", err);
+      alert("No se pudo mover el solicitante. Revise la conexión e intente nuevamente. Detalle: " + (err.message || "error desconocido"));
+    } finally {
+      setMoviendoPersona(false);
+    }
   };
 
   const lineasCondicionalidad = (persona = {}) => String(persona.observaciones || "")
@@ -8835,6 +8840,19 @@ export default function App() {
     setSolicitudes(lista);
     const anterioresPorId = new Map(solicitudes.map(s => [s.id, s]));
     for (const s of lista) {
+      const anterior = anterioresPorId.get(s.id);
+      const cambioBase = !anterior ||
+        anterior.personaId !== s.personaId ||
+        anterior.personaNombre !== s.personaNombre ||
+        anterior.programaId !== s.programaId ||
+        anterior.fecha !== s.fecha ||
+        (anterior.comite || "") !== (s.comite || "") ||
+        (anterior.codigoComite || "") !== (s.codigoComite || "") ||
+        (anterior.tipoComite || "") !== (s.tipoComite || "") ||
+        (anterior.profesionalComite || "") !== (s.profesionalComite || "") ||
+        (anterior.fecha_visita || "") !== (s.fecha_visita || "") ||
+        JSON.stringify(anterior.documentos || []) !== JSON.stringify(s.documentos || []);
+      if (!cambioBase) continue;
       await supabase.from("solicitudes").upsert({
         id: s.id, persona_id: s.personaId, persona_nombre: s.personaNombre,
         programa_id: s.programaId, fecha: s.fecha, comite: s.comite || null,
@@ -8843,7 +8861,6 @@ export default function App() {
         documentos: s.documentos,
         fecha_visita: s.fecha_visita || null
       });
-      const anterior = anterioresPorId.get(s.id);
       const cambios = resumenCambiosDocumentos(anterior?.documentos, s.documentos);
       if (cambios.length) {
         await registrarAuditoria("guardar_solicitudes", "solicitudes", s.id, {
