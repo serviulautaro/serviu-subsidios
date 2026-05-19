@@ -8404,6 +8404,7 @@ export default function App() {
   const [programasCustom, setProgramasCustom] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const lastActivityRef = useRef(Date.now());
+  const cargaDatosSeqRef = useRef(0);
 
   const limpiarSesionNavegador = () => {
     DB.set("serviu_user", null);
@@ -8598,14 +8599,26 @@ export default function App() {
   // Cargar datos desde Supabase al iniciar
   useEffect(() => {
     const cargarDatos = async (silencioso = false) => {
+      const secuencia = ++cargaDatosSeqRef.current;
       if (!silencioso) setCargando(true);
       try {
-        const [{ data: c }, { data: p }, { data: s }, { data: pc }] = await Promise.all([
+        const [comitesRes, personasRes, solicitudesRes, programasRes] = await Promise.all([
           supabase.from("comites").select("*"),
           supabase.from("personas").select("*"),
           supabase.from("solicitudes").select("*"),
           supabase.from("programas_custom").select("*"),
         ]);
+        const errores = [comitesRes, personasRes, solicitudesRes, programasRes]
+          .map(r => r.error?.message)
+          .filter(Boolean);
+        if (errores.length) {
+          throw new Error("Recarga incompleta desde Supabase: " + errores.join(" | "));
+        }
+        if (secuencia !== cargaDatosSeqRef.current) return;
+        const c = comitesRes.data || [];
+        const p = personasRes.data || [];
+        const s = solicitudesRes.data || [];
+        const pc = programasRes.data || [];
         const programasCustomCargados = (pc || []).map(x => ({
           ...x,
           colorLight: x.colorlight || "#F9FAFB",
@@ -8716,8 +8729,14 @@ export default function App() {
         setRecargandoDatos(false);
       }
     };
+    const usuarioEstaEditando = () => {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = (el.tagName || "").toLowerCase();
+      return ["input", "textarea", "select"].includes(tag) || el.isContentEditable;
+    };
     const recargarSiVisible = () => {
-      if (document.visibilityState === "visible") cargarDatos(true);
+      if (document.visibilityState === "visible" && !usuarioEstaEditando()) cargarDatos(true);
     };
     const timer = window.setInterval(recargarSiVisible, 60 * 1000);
     document.addEventListener("visibilitychange", recargarSiVisible);
