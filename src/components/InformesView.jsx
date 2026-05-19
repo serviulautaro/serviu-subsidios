@@ -255,9 +255,32 @@ function imprimirVentana(titulo, html) {
   const w = window.open("", "_blank");
   if (!w) return;
   const firma = `<div class="firma-footer">PROPIETARO DEL SOFTWEARE JORGE ANTONIO CAMPOS CAMPOS</div>`;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo}</title>${estilosImpresion()}</head><body><div class="print-actions"><button onclick="window.print()">Imprimir</button></div>${html}${firma}</body></html>`);
+  const htmlConEncabezado = agregarEncabezadoInstitucional(html);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo}</title>${estilosImpresion()}</head><body><div class="print-actions"><button onclick="window.print()">Imprimir</button></div>${htmlConEncabezado}${firma}</body></html>`);
   w.document.close();
   w.focus();
+}
+
+function encabezadoInstitucionalHtml() {
+  const logos = typeof window !== "undefined" ? window.SERVIU_LOGOS || {} : {};
+  const logoMuni = logos.muni ? `<img src="${logos.muni}" alt="Municipalidad de Lautaro">` : "";
+  const logoVivienda = logos.vivienda ? `<img src="${logos.vivienda}" alt="Unidad de Vivienda Lautaro">` : "";
+  return `<div class="institutional-header">
+    <div class="institutional-logo">${logoMuni}</div>
+    <div class="institutional-title">
+      <h1>Ilustre Municipalidad de Lautaro</h1>
+      <div class="institutional-line"></div>
+      <h2>Unidad de Vivienda Municipalidad de Lautaro</h2>
+      <p>Entidad Patrocinante</p>
+    </div>
+    <div class="institutional-logo">${logoVivienda}</div>
+  </div>`;
+}
+
+function agregarEncabezadoInstitucional(html) {
+  const header = encabezadoInstitucionalHtml();
+  if (!html || !html.includes('<div class="page">')) return `${header}${html || ""}`;
+  return html.split('<div class="page">').join(`<div class="page">${header}`);
 }
 
 function formatFechaHora(value) {
@@ -359,6 +382,13 @@ function estilosImpresion() {
   return `<style>
     body{font-family:Arial,sans-serif;color:#111827;margin:0;padding:28px;background:#fff;font-size:12px}
     .page{max-width:940px;margin:0 auto;page-break-after:always}.page:last-child{page-break-after:auto}
+    .institutional-header{display:grid;grid-template-columns:132px 1fr 132px;align-items:center;gap:28px;border-bottom:1px solid #d1d5db;padding:0 0 22px;margin:0 0 22px;text-align:center}
+    .institutional-logo{width:132px;height:132px;display:flex;align-items:center;justify-content:center}
+    .institutional-logo img{width:118px;height:118px;object-fit:contain;display:block}
+    .institutional-title h1{margin:0;color:#173b67;font-size:24px;line-height:1.18;font-weight:900;text-transform:uppercase;letter-spacing:.03em}
+    .institutional-title h2{margin:12px 0 6px;color:#2563eb;font-size:14px;line-height:1.2;font-weight:900;text-transform:uppercase}
+    .institutional-title p{margin:0;color:#6b7280;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+    .institutional-line{width:74px;height:4px;background:#2563eb;border-radius:999px;margin:12px auto 0}
     .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid #333;padding-bottom:16px;margin-bottom:24px}
     h1{font-size:18px;margin:0 0 4px;text-transform:uppercase}.muted{color:#6b7280}.bar{background:#333;color:#fff;padding:14px 20px;border-radius:6px;margin-bottom:10px;display:flex;justify-content:space-between;gap:16px;font-size:14px;font-weight:700}
     .section{margin-top:22px}.section h2{font-size:12px;text-transform:uppercase;border-bottom:2px solid #d1d5db;padding-bottom:6px;letter-spacing:.03em}
