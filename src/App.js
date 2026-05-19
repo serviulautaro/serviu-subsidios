@@ -522,6 +522,17 @@ const COMITES_DIRECTIVA = [
   { codigo:"gr2U", directiva:[]},
 ];
 
+const COMITES_BASE_DATOS = [
+  { codigo: "gr1R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curín Castro", pj: "P.J. 376054", vencimiento: "07/02/2028" },
+  { codigo: "gr2R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "P.J. 379826", vencimiento: "14/05/2028" },
+  { codigo: "gr3R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "En trámite", vencimiento: "-" },
+  { codigo: "gr4R", constructora: "Falta Licitar", profesional: "Priscilla Curín Castro", pj: "-", vencimiento: "-" },
+  { codigo: "gr5R", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", vencimiento: "-" },
+  { codigo: "gr6R", constructora: "Falta Licitar", profesional: "Priscilla Curín Castro", pj: "-", vencimiento: "-" },
+  { codigo: "gr1U", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curín Castro", pj: "P.J. 379720", vencimiento: "08/05/2028" },
+  { codigo: "gr2U", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", vencimiento: "-" },
+];
+
 // Normaliza nombre para comparación (sin tildes, minúsculas, sin caracteres especiales)
 function normNomDirectiva(s) {
   return (s||"").toLowerCase().trim()
@@ -530,17 +541,37 @@ function normNomDirectiva(s) {
 }
 
 // Infiere el cargo de un solicitante comparando su nombre con la directiva del comité
-const buscarComitePersona = (comites = [], persona = {}) => (comites || []).find(c =>
-  c.id === persona.comiteId ||
-  c.codigo === persona.comiteId ||
-  normNomDirectiva(c.nombre) === normNomDirectiva(persona.comite)
-);
+const comitesBaseCompletos = () => COMITES_FIJOS.map(c => {
+  const datos = COMITES_BASE_DATOS.find(d => d.codigo === c.codigo) || {};
+  const directiva = COMITES_DIRECTIVA.find(d => d.codigo === c.codigo)?.directiva || [];
+  return { ...c, ...datos, id: c.codigo, directiva };
+});
+
+const buscarComitePersona = (comites = [], persona = {}) => {
+  const base = comitesBaseCompletos();
+  const todos = [...base, ...(comites || [])];
+  const encontrado = todos.find(c =>
+    c.id === persona.comiteId ||
+    c.codigo === persona.comiteId ||
+    normNomDirectiva(c.nombre) === normNomDirectiva(persona.comite)
+  );
+  if (!encontrado) return null;
+  const baseRelacionado = base.find(c =>
+    c.codigo === encontrado.codigo ||
+    c.codigo === encontrado.id ||
+    normNomDirectiva(c.nombre) === normNomDirectiva(encontrado.nombre)
+  );
+  return baseRelacionado ? {
+    ...baseRelacionado,
+    ...encontrado,
+    directiva: Array.isArray(encontrado.directiva) && encontrado.directiva.length ? encontrado.directiva : baseRelacionado.directiva,
+    constructora: encontrado.constructora || encontrado.constructoraSeleccionada || encontrado.constructoraseleccionada || baseRelacionado.constructora,
+  } : encontrado;
+};
 
 function inferirCargo(personaNombre, comiteId, comites = []) {
   if (!personaNombre || !comiteId) return "Socio";
-  const comiteDinamico = (comites || []).find(c => c.id === comiteId || c.codigo === comiteId);
-  const directivaDinamica = Array.isArray(comiteDinamico?.directiva) ? comiteDinamico.directiva : [];
-  const comite = directivaDinamica.length ? { directiva: directivaDinamica } : COMITES_DIRECTIVA.find(c => c.codigo === comiteId);
+  const comite = buscarComitePersona(comites, { comiteId, comite: comiteId });
   if (!comite || !comite.directiva || comite.directiva.length === 0) return "Socio";
   const normPersona = normNomDirectiva(personaNombre);
   const palabrasPersona = normPersona.split(" ").filter(p => p.length > 2);
@@ -556,10 +587,11 @@ function inferirCargo(personaNombre, comiteId, comites = []) {
 
 const constructoraDeComite = (persona = {}, comites = []) => {
   const comite = buscarComitePersona(comites, persona);
-  return persona.constructoraSeleccionada ||
-    comite?.constructoraSeleccionada ||
+  return comite?.constructoraSeleccionada ||
     comite?.constructoraseleccionada ||
     comite?.constructora ||
+    persona.constructoraSeleccionada ||
+    persona.constructoraseleccionada ||
     "";
 };
 
@@ -1677,7 +1709,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
       const formFinal = protegerDatosFicha(form, persona, {
         adultoMayor: edadCalc !== null ? `${edadCalc} años` : form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
-        constructoraSeleccionada: constructoraDeComite(form, comites)
+        constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
       await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
       onSave(formFinal);
@@ -1751,7 +1783,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div style={sectionTitleStyle}>Información General</div>
             {campo("Nombre del Comité", persona.comite)}
-            {campo("Cargo en el Comité", persona.cargo_comite || inferirCargo(persona.nombre, persona.comiteId, comites))}
+            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId, comites) || persona.cargo_comite)}
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
@@ -2002,7 +2034,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
       const formFinal = protegerDatosFicha(form, persona, {
         adultoMayor: edadCalc !== null ? `${edadCalc} años` : form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
-        constructoraSeleccionada: constructoraDeComite(form, comites)
+        constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
       await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
       onSave(formFinal);
@@ -2076,7 +2108,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div style={sectionTitleStyle}>Información General</div>
             {campo("Nombre del Comité", persona.comite)}
-            {campo("Cargo en el Comité", persona.cargo_comite || inferirCargo(persona.nombre, persona.comiteId, comites))}
+            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId, comites) || persona.cargo_comite)}
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
