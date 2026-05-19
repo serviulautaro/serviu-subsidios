@@ -34,13 +34,13 @@ const PROGRAMAS = {
 };
 
 const COMITES_BASE = [
-  { codigo: "gr1R", nombre: "Comite de Vivienda Rural Mi Nuevo Hogar", familias: 30, tipo: "Rural", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curin Castro", pj: "P.J. 376054", venc: "Venc. 07/02/2028", directiva: [{ rol: "Presidente", nombre: "Juan Perez Gonzalez" }, { rol: "Secretario", nombre: "Carlos Hernan Paillaleo Paillaleo" }, { rol: "Tesorero", nombre: "Elias Fernando Apablaza Riffo" }] },
-  { codigo: "gr2R", nombre: "Comite de Vivienda Rural La Fuerza", familias: 30, tipo: "Rural", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "P.J. 379826", venc: "Venc. 14/05/2028", directiva: [] },
-  { codigo: "gr3R", nombre: "Comite de Vivienda Rural Kume Ruka", familias: 29, tipo: "Rural", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "En tramite", venc: "-", directiva: [] },
+  { codigo: "gr1R", nombre: "Comite de Vivienda Rural Mi Nuevo Hogar", familias: 30, tipo: "Rural", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curin Castro", pj: "P.J. 376054", venc: "Venc. 07/02/2028", directiva: [{ rol: "Presidente", nombre: "Juan Perez Gonzalez" }, { rol: "Secretario", nombre: "Carlos Hernan Paillaleo Paillaleo" }, { rol: "Tesorero", nombre: "Elias Fernando Apablaza Riffo" }, { rol: "1er Director", nombre: "Juan Carlos Huenchuan Mendez" }] },
+  { codigo: "gr2R", nombre: "Comite de Vivienda Rural La Fuerza", familias: 30, tipo: "Rural", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "P.J. 379826", venc: "Venc. 14/05/2028", directiva: [{ rol: "Presidente", nombre: "Liber Omar Cancino Campos" }, { rol: "Vicepresidente", nombre: "Orfelina Leonor Inostroza Burgos" }, { rol: "Secretario", nombre: "Alejandra Maribel Lefian Silva" }, { rol: "Tesorero", nombre: "Mirta Rosa Martin Vallejos" }, { rol: "1er Director", nombre: "Luis Fernando Sanchez Llancamil" }] },
+  { codigo: "gr3R", nombre: "Comite de Vivienda Rural Kume Ruka", familias: 29, tipo: "Rural", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "En tramite", venc: "-", directiva: [{ rol: "Presidente", nombre: "Rosa Llancapan Liempe" }, { rol: "Vicepresidente", nombre: "Maria Angelica Antinao Liempe" }, { rol: "Secretario", nombre: "Elias Rivas Espinoza" }, { rol: "Tesorero", nombre: "Monica Maribel Rubilar Antilaf" }, { rol: "1er Director", nombre: "Juan Miguel Tripainan Huenulao" }] },
   { codigo: "gr4R", nombre: "Comite de Vivienda Rural Newen Mapu", familias: 26, tipo: "Rural", constructora: "Falta Licitar", profesional: "Priscilla Curin Castro", pj: "-", venc: "-", directiva: [] },
   { codigo: "gr5R", nombre: "Comite de Vivienda Rural Kimey Ruca", familias: 28, tipo: "Rural", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", venc: "-", directiva: [] },
   { codigo: "gr6R", nombre: "Comite de Vivienda Rural Por Constituir", familias: 25, tipo: "Rural", constructora: "Falta Licitar", profesional: "Priscilla Curin Castro", pj: "-", venc: "-", directiva: [] },
-  { codigo: "gr1U", nombre: "Comite de Vivienda Urbano Pioneros de Lautaro", familias: 30, tipo: "Urbano", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curin Castro", pj: "P.J. 379720", venc: "Venc. 08/05/2028", directiva: [] },
+  { codigo: "gr1U", nombre: "Comite de Vivienda Urbano Pioneros de Lautaro", familias: 30, tipo: "Urbano", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curin Castro", pj: "P.J. 379720", venc: "Venc. 08/05/2028", directiva: [{ rol: "Presidente", nombre: "Luis Armando Espinoza Mendoza" }, { rol: "Vicepresidente", nombre: "Tomas Salvador Diaz Barrientos" }, { rol: "Secretario", nombre: "Margot Leticia Contreras Marquez" }, { rol: "Tesorero", nombre: "Iris del Carmen Godoy Morales" }, { rol: "1er Director", nombre: "Domingo Antonio Bucarey Torres" }] },
   { codigo: "gr2U", nombre: "Comite de Vivienda Urbano Por Constituir", familias: 8, tipo: "Urbano", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", venc: "-", directiva: [] },
 ];
 
@@ -106,7 +106,22 @@ function mergeComites(comitesSupa = []) {
   let nextU = base.filter(c => c.tipo === "Urbano").length + 1;
 
   (comitesSupa || []).forEach(sc => {
-    if (!sc?.nombre || usados.has(norm(sc.nombre))) return;
+    if (!sc?.nombre) return;
+    const existente = base.find(c => norm(c.nombre) === norm(sc.nombre));
+    if (existente) {
+      const directivaSupa = Array.isArray(sc.directiva) ? sc.directiva.filter(d => d?.rol || d?.cargo || d?.nombre) : [];
+      existente.id = sc.id || existente.id;
+      existente.programaId = sc.programaId || sc.programa_id || existente.programaId;
+      existente.familias = Number(sc.familias || sc.cantidad_familias || existente.familias || 0);
+      existente.tipo = sc.tipo || existente.tipo;
+      existente.constructora = sc.constructora || sc.descripcion || existente.constructora;
+      existente.profesional = sc.profesional || existente.profesional;
+      existente.pj = sc.pj || sc.personalidad_juridica || existente.pj;
+      existente.venc = sc.venc || sc.vencimiento || existente.venc;
+      if (directivaSupa.length) existente.directiva = directivaSupa;
+      return;
+    }
+    if (usados.has(norm(sc.nombre))) return;
     const texto = `${sc.programaId || ""} ${sc.programa_id || ""} ${sc.tipo || ""} ${sc.nombre || ""}`.toUpperCase();
     const tipo = texto.includes("URBANO") ? "Urbano" : "Rural";
     const codigo = tipo === "Urbano" ? `gr${nextU++}U` : `gr${nextR++}R`;
@@ -136,7 +151,9 @@ function personaEnComite(persona, comite) {
 }
 
 function miembrosComite(comite, personas) {
-  return (personas || []).filter(p => personaEnComite(p, comite));
+  return (personas || [])
+    .filter(p => personaEnComite(p, comite))
+    .sort((a, b) => norm(a?.nombre).localeCompare(norm(b?.nombre), "es"));
 }
 
 function programaComite(comite) {
