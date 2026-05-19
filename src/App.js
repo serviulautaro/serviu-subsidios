@@ -7326,7 +7326,16 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const ordenarSolicitantes = (lista = []) => [...lista].sort((a, b) =>
     String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" })
   );
-  const miembros = ordenarSolicitantes(personas.filter(p => p.comiteId === comiteId));
+  const normComite = (v) => (v || "").toString().toLowerCase().trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+  const perteneceAlComiteActual = (p) => {
+    const idsComite = [comite.id, comite.codigo, comiteId].filter(Boolean).map(String);
+    const idPersona = String(p.comiteId || "");
+    if (idPersona && idsComite.includes(idPersona)) return true;
+    return normComite(p.comite) && normComite(p.comite) === normComite(comite.nombre);
+  };
+  const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
   const filtered = ordenarSolicitantes(miembros.filter(p => {
     const matchSearch = (p.nombre || "").toLowerCase().includes(search.toLowerCase()) ||
       (p.rut || "").includes(search) ||
@@ -7787,16 +7796,27 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
 
   const eliminar = (e, id) => {
     e.stopPropagation();
-    const miembros = personas.filter(p => p.comiteId === id).length;
+    const comiteEliminar = comites.find(c => c.id === id) || COMITES_FIJOS.find(c => c.codigo === id);
+    const miembros = personas.filter(p => pertenecePersonaComite(p, comiteEliminar || { id })).length;
     if (miembros > 0) { alert("No se puede eliminar un comité con integrantes. Reasigne o elimine primero a los integrantes."); return; }
     const ok = window["confirm"]("Eliminar este comité?");
     if (ok) onSaveComites(comites.filter(c => c.id !== id));
   };
 
+  const normComite = (v) => (v || "").toString().toLowerCase().trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+  const pertenecePersonaComite = (persona, comiteRef = {}) => {
+    const ids = [comiteRef.id, comiteRef.codigo].filter(Boolean).map(String);
+    const personaId = String(persona.comiteId || "");
+    if (personaId && ids.includes(personaId)) return true;
+    return normComite(persona.comite) && normComite(comiteRef.nombre) && normComite(persona.comite) === normComite(comiteRef.nombre);
+  };
+
   const tarjetaProgramaComite = (p) => {
     const count = comites.filter(c => c.programaId === p.id).length;
     const comitesPrograma = comites.filter(c => c.programaId === p.id);
-    const personasPrograma = personas.filter(per => comitesPrograma.some(c => c.id === per.comiteId));
+    const personasPrograma = personas.filter(per => comitesPrograma.some(c => pertenecePersonaComite(per, c)));
     const activo = filtroProg === p.id;
     return (
       <button key={p.id} onClick={() => { setFiltroProg(p.id); setSearch(""); }}
@@ -7888,7 +7908,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
 
       <div style={{ display: "grid", gap: 12 }}>
         {filtered.map(c => {
-          const miembros = personas.filter(p => p.comiteId === c.id);
+          const miembros = personas.filter(p => pertenecePersonaComite(p, c));
           const totalSols = solicitudes.filter(s => miembros.some(m => m.id === s.personaId));
           const completas = totalSols.filter(s => pct(s.documentos) === 100).length;
           const pctComite = miembros.length > 0
