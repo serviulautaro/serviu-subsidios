@@ -6712,13 +6712,20 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     const porId = nombreComitePorId(p.comiteId);
     return porId || p.comite || "";
   };
-  const comitePorCedula = new Map();
+  const comitesPorCedula = new Map();
   personas.forEach(p => {
     const key = rutKey(p.rut);
     const nombreComite = nombreComiteAsignado(p);
-    if (key && nombreComite) comitePorCedula.set(key, nombreComite);
+    if (!key || !nombreComite) return;
+    const actuales = comitesPorCedula.get(key) || [];
+    const existe = actuales.some(c => normLocal(c) === normLocal(nombreComite));
+    if (!existe) comitesPorCedula.set(key, [...actuales, nombreComite]);
   });
-  const comitePersonaPorCedula = (p) => comitePorCedula.get(rutKey(p.rut)) || "";
+  const comitesPersonaPorCedula = (p) => comitesPorCedula.get(rutKey(p.rut)) || [];
+  const textoComitesPersona = (p) => {
+    const nombres = comitesPersonaPorCedula(p);
+    return nombres.length ? nombres.map(nombre => `Comité: ${nombre}`).join(" | ") : "SIN COMITE";
+  };
   const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => s.personaId === personaId && s.programaId === "habitabilidad");
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
@@ -6734,12 +6741,11 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     return "";
   };
   const comitePersona = (p) => {
-    const porCedula = comitePersonaPorCedula(p);
-    return porCedula ? `Comité: ${porCedula}` : "SIN COMITE";
+    return textoComitesPersona(p);
   };
   const sinComite = personas.filter(p => {
     const sinAsignacionDirecta = !p.comiteId || p.comiteId === "" || p.comiteId === null;
-    const esSeguimientoSinComite = estadoSeguimiento(p) && !comitePersonaPorCedula(p);
+    const esSeguimientoSinComite = estadoSeguimiento(p) && comitesPersonaPorCedula(p).length === 0;
     return sinAsignacionDirecta || esSeguimientoSinComite;
   });
   const sectoresDesmarque = [...new Set(
@@ -6783,7 +6789,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
       </style></head><body>
       <h1>Informe Habitabilidad de Vivienda (DESMARQUE DE VIVIENDA)</h1>
       <div class="sub">Estados: DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. Búsqueda de comité realizada solo por cédula de identidad.</div>
-      <table><thead><tr><th>Cédula de identidad</th><th>Solicitante</th><th>Estado</th><th>Comité</th><th>Línea solicitada</th></tr></thead><tbody>
+      <table><thead><tr><th>Cédula de identidad</th><th>Solicitante</th><th>Estado</th><th>Comités encontrados</th><th>Línea solicitada</th></tr></thead><tbody>
       ${filas.map(f => `<tr><td>${esc(f.rut)}</td><td>${esc(f.nombre)}</td><td>${esc(f.estado)}</td><td class="${f.comite === "SIN COMITE" ? "sin" : ""}">${esc(f.comite)}</td><td>${esc(`${f.rut}= Estado=${f.estado}=${f.comite}`)}</td></tr>`).join("")}
       </tbody></table></body></html>`;
     const win = window.open("", "_blank");
