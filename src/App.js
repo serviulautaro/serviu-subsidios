@@ -2944,16 +2944,66 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const eliminarArchivo = async (nombre) => {
     const ok = window["confirm"]("Eliminar " + nombre + "?");
     if (!ok) return;
+    const errores = [];
+    const registrosSupa = [];
     try {
-      await fetch(apiPath("/archivos/", carpeta, nombre), { method: "DELETE" }).catch(() => {});
+      const res = await fetch(apiPath("/archivos/", carpeta, nombre), { method: "DELETE" });
+      if (!res.ok) errores.push("servidor local");
       if (carpeta !== carpetaVieja) {
-        await fetch(apiPath("/archivos/", carpetaVieja, nombre), { method: "DELETE" }).catch(() => {});
+        const resViejo = await fetch(apiPath("/archivos/", carpetaVieja, nombre), { method: "DELETE" });
+        if (!resViejo.ok && resViejo.status !== 404) errores.push("carpeta anterior");
       }
-    } catch {}
+    } catch {
+      errores.push("servidor local");
+    }
     try {
-      await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
-    } catch {}
+      const { data } = await supabase
+        .from("archivos_solicitante")
+        .select("storage_bucket, storage_path")
+        .eq("persona_id", persona.id)
+        .eq("nombre", nombre);
+      (data || []).forEach(r => registrosSupa.push(r));
+    } catch {
+      errores.push("consulta Supabase");
+    }
+    try {
+      const porBucket = registrosSupa.reduce((acc, r) => {
+        if (!r.storage_path) return acc;
+        const bucket = r.storage_bucket || STORAGE_BUCKET;
+        acc[bucket] = acc[bucket] || [];
+        acc[bucket].push(r.storage_path);
+        return acc;
+      }, {});
+      for (const [bucket, paths] of Object.entries(porBucket)) {
+        const { error } = await supabase.storage.from(bucket).remove(paths);
+        if (error) errores.push("Storage: " + error.message);
+      }
+    } catch (err) {
+      errores.push("Storage: " + (err.message || "no se pudo borrar"));
+    }
+    try {
+      const { error } = await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
+      if (error) errores.push("registro Supabase: " + error.message);
+    } catch {
+      errores.push("registro Supabase");
+    }
+    setArchivos(prev => prev.filter(a => a !== nombre));
+    setArchivosDatos(prev => {
+      const next = { ...prev };
+      delete next[nombre];
+      return next;
+    });
+    setArchivosRutas(prev => {
+      const next = { ...prev };
+      delete next[nombre];
+      return next;
+    });
+    setDocMenu(null);
     try { await cargarArchivos(); } catch {}
+    if (errores.length) {
+      console.warn("[eliminarArchivo]", errores.join(" | "));
+      alert("Se intentó eliminar el documento, pero hubo una respuesta incompleta: " + errores.join(", ") + ". Si sigue apareciendo, actualice la página e intente nuevamente.");
+    }
   };
 
   const descargarZip = async () => {
@@ -6647,18 +6697,29 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   const [clavePaso, setClavePaso] = useState(false); // true = clave ya validada
   const todosProgramas = combinarProgramas(programasCustom);
 
-  const sinComite = personas.filter(p =>
-    !p.comiteId || p.comiteId === "" || p.comiteId === null
-  );
-
   const normLocal = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const rutKey = (v) => (v || "").toString().replace(/[^0-9kK]/g, "").toUpperCase();
+  const comitesDisponibles = [
+    ...COMITES_FIJOS.map(c => ({ id: c.codigo, codigo: c.codigo, nombre: c.nombre, tipo: c.tipo })),
+    ...(comites || [])
+  ];
+  const nombreComitePorId = (id) => {
+    if (!id) return "";
+    const comite = comitesDisponibles.find(c => c.id === id || c.codigo === id);
+    return comite?.nombre || "";
+  };
+  const nombreComiteAsignado = (p) => {
+    const porId = nombreComitePorId(p.comiteId);
+    return porId || p.comite || "";
+  };
+  const comitePorCedula = new Map();
+  personas.forEach(p => {
+    const key = rutKey(p.rut);
+    const nombreComite = nombreComiteAsignado(p);
+    if (key && nombreComite) comitePorCedula.set(key, nombreComite);
+  });
+  const comitePersonaPorCedula = (p) => comitePorCedula.get(rutKey(p.rut)) || "";
   const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => s.personaId === personaId && s.programaId === "habitabilidad");
-  const sectoresDesmarque = [...new Set(
-    sinComite
-      .filter(p => tieneSolicitudDesmarque(p.id))
-      .map(p => (p.sector || p.direccion || "").toString().trim())
-      .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b, "es"));
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
     const estado = estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
@@ -6667,18 +6728,70 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   const estadoSeguimiento = (p) => {
     const estado = estadoDesmarquePersona(p);
     const clave = normLocal(`${estado.key} ${estado.label} ${p.estado_desmarque || ""}`).toUpperCase();
-    if (clave.includes("DESMARCADO")) return "DESMARCADA";
+    if (clave.includes("DESMARCADO")) return "DESMARCADO";
+    if (clave.includes("RECHAZADO APELABLE")) return "RECHAZADO APELABLE";
     if (clave.includes("INFORME EN SERVIU")) return "INFORME EN SERVIU";
     return "";
   };
   const comitePersona = (p) => {
-    const comite = comites.find(c => c.id === p.comiteId);
-    return comite?.nombre || p.comite || "NO ESTÁ EN NINGÚN COMITÉ";
+    const porCedula = comitePersonaPorCedula(p);
+    return porCedula ? `Comité: ${porCedula}` : "SIN COMITE";
   };
-  const seguimientoDesmarque = personas
-    .map(p => ({ persona: p, estado: estadoSeguimiento(p) }))
-    .filter(x => x.estado)
+  const sinComite = personas.filter(p => {
+    const sinAsignacionDirecta = !p.comiteId || p.comiteId === "" || p.comiteId === null;
+    const esSeguimientoSinComite = estadoSeguimiento(p) && !comitePersonaPorCedula(p);
+    return sinAsignacionDirecta || esSeguimientoSinComite;
+  });
+  const sectoresDesmarque = [...new Set(
+    sinComite
+      .filter(p => tieneSolicitudDesmarque(p.id))
+      .map(p => (p.sector || p.direccion || "").toString().trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, "es"));
+  const seguimientoPorCedula = new Map();
+  personas
+    .filter(p => tieneSolicitudDesmarque(p.id))
+    .forEach(p => {
+      const key = rutKey(p.rut) || p.id;
+      const estado = estadoSeguimiento(p);
+      if (!estado) return;
+      const actual = seguimientoPorCedula.get(key);
+      const item = { persona: p, estado, comite: comitePersona(p) };
+      if (!actual || (actual.comite === "SIN COMITE" && item.comite !== "SIN COMITE")) {
+        seguimientoPorCedula.set(key, item);
+      }
+    });
+  const seguimientoDesmarque = Array.from(seguimientoPorCedula.values())
     .sort((a, b) => a.persona.nombre.localeCompare(b.persona.nombre, "es"));
+  const imprimirSeguimientoDesmarque = () => {
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    const filas = seguimientoDesmarque.map(({ persona: p, estado, comite }) => ({
+      rut: formatRut(p.rut),
+      nombre: p.nombre || "",
+      estado,
+      comite
+    }));
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Informe Desmarque</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#111827;margin:28px}
+        h1{font-size:20px;color:#1e3a5f;margin:0 0 4px}
+        .sub{font-size:12px;color:#6b7280;margin-bottom:18px}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        th,td{border:1px solid #d1d5db;padding:8px;text-align:left;vertical-align:top}
+        th{background:#eff6ff;color:#1e3a5f}
+        .sin{color:#b91c1c;font-weight:700}
+      </style></head><body>
+      <h1>Informe Habitabilidad de Vivienda (DESMARQUE DE VIVIENDA)</h1>
+      <div class="sub">Estados: DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. Búsqueda de comité realizada solo por cédula de identidad.</div>
+      <table><thead><tr><th>Cédula de identidad</th><th>Solicitante</th><th>Estado</th><th>Comité</th><th>Línea solicitada</th></tr></thead><tbody>
+      ${filas.map(f => `<tr><td>${esc(f.rut)}</td><td>${esc(f.nombre)}</td><td>${esc(f.estado)}</td><td class="${f.comite === "SIN COMITE" ? "sin" : ""}">${esc(f.comite)}</td><td>${esc(`${f.rut}= Estado=${f.estado}=${f.comite}`)}</td></tr>`).join("")}
+      </tbody></table></body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 300);
+  };
 
   const filtered = sinComite.filter(p => {
     const q = normLocal(search);
@@ -6787,17 +6900,28 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", marginBottom: 18, border: "1px solid #e8e3de" }}>
-        <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 4 }}>Seguimiento Desmarque</div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>Solicitantes desmarcados o con informe en SERVIU, indicando si están en comité.</div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 4 }}>Seguimiento Desmarque</div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>Solicitantes en DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. La revisión de comité usa solo la cédula de identidad.</div>
+          </div>
+          {seguimientoDesmarque.length > 0 && (
+            <button onClick={imprimirSeguimientoDesmarque}
+              style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+              Imprimir informe
+            </button>
+          )}
+        </div>
         {seguimientoDesmarque.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#999", padding: "10px 0" }}>No hay solicitantes en estado DESMARCADA o INFORME EN SERVIU.</div>
+          <div style={{ fontSize: 13, color: "#999", padding: "10px 0" }}>No hay solicitantes en estado DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU.</div>
         ) : (
           <div style={{ display: "grid", gap: 7 }}>
-            {seguimientoDesmarque.map(({ persona: p, estado }) => (
-              <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 180px 1fr", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 9, background: estado === "DESMARCADA" ? "#E0F7FA" : "#ECFDF5", border: "1px solid " + (estado === "DESMARCADA" ? "#99F6E4" : "#BBF7D0") }}>
+            {seguimientoDesmarque.map(({ persona: p, estado, comite }) => (
+              <div key={rutKey(p.rut) || p.id} style={{ display: "grid", gridTemplateColumns: "150px 1.4fr 180px 1fr", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 9, background: estado === "DESMARCADO" ? "#E0F7FA" : estado === "RECHAZADO APELABLE" ? "#FEF3C7" : "#ECFDF5", border: "1px solid " + (estado === "DESMARCADO" ? "#99F6E4" : estado === "RECHAZADO APELABLE" ? "#FDE68A" : "#BBF7D0") }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>{formatRut(p.rut)}</div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: "#1e3a5f" }}>{p.nombre}</div>
-                <div style={{ fontSize: 12, fontWeight: 900, color: estado === "DESMARCADA" ? "#0E7490" : "#166534" }}>{estado}</div>
-                <div style={{ fontSize: 12, color: comitePersona(p).includes("NO ESTÁ") ? "#B91C1C" : "#374151", fontWeight: 700 }}>{comitePersona(p)}</div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: estado === "DESMARCADO" ? "#0E7490" : estado === "RECHAZADO APELABLE" ? "#A16207" : "#166534" }}>{estado}</div>
+                <div style={{ fontSize: 12, color: comite === "SIN COMITE" ? "#B91C1C" : "#374151", fontWeight: 700 }}>{comite}</div>
               </div>
             ))}
           </div>
