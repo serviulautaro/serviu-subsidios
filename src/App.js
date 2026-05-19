@@ -8399,6 +8399,8 @@ export default function App() {
   const [fromView, setFromView] = useState("personas");
   const [filtroPrograma, setFiltroPrograma] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [recargandoDatos, setRecargandoDatos] = useState(false);
+  const [ultimaRecargaDatos, setUltimaRecargaDatos] = useState("");
   const [programasCustom, setProgramasCustom] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const lastActivityRef = useRef(Date.now());
@@ -8595,8 +8597,8 @@ export default function App() {
 
   // Cargar datos desde Supabase al iniciar
   useEffect(() => {
-    const cargarDatos = async () => {
-      setCargando(true);
+    const cargarDatos = async (silencioso = false) => {
+      if (!silencioso) setCargando(true);
       try {
         const [{ data: c }, { data: p }, { data: s }, { data: pc }] = await Promise.all([
           supabase.from("comites").select("*"),
@@ -8698,12 +8700,34 @@ export default function App() {
         });
         setSolicitudes(solicitudesMapeadas);
         setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesMapeadas); }, 1500);
+        setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
       } catch (err) {
         console.error("Error cargando datos:", err);
+      } finally {
+        if (!silencioso) setCargando(false);
       }
-      setCargando(false);
     };
     cargarDatos();
+    window.serviuRecargarDatos = async () => {
+      setRecargandoDatos(true);
+      try {
+        await cargarDatos(true);
+      } finally {
+        setRecargandoDatos(false);
+      }
+    };
+    const recargarSiVisible = () => {
+      if (document.visibilityState === "visible") cargarDatos(true);
+    };
+    const timer = window.setInterval(recargarSiVisible, 60 * 1000);
+    document.addEventListener("visibilitychange", recargarSiVisible);
+    window.addEventListener("focus", recargarSiVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", recargarSiVisible);
+      window.removeEventListener("focus", recargarSiVisible);
+      if (window.serviuRecargarDatos) delete window.serviuRecargarDatos;
+    };
   }, []);
 
   // Guardar personas en Supabase
@@ -8939,6 +8963,28 @@ export default function App() {
       </aside>
 
       <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          {ultimaRecargaDatos && (
+            <span style={{ fontSize: 11, color: "#64748b" }}>
+              Datos actualizados: {ultimaRecargaDatos}
+            </span>
+          )}
+          <button
+            onClick={() => window.serviuRecargarDatos?.()}
+            disabled={recargandoDatos || cargando}
+            style={{
+              background: recargandoDatos ? "#94A3B8" : "#1e3a5f",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: recargandoDatos || cargando ? "not-allowed" : "pointer",
+            }}>
+            {recargandoDatos ? "Actualizando..." : "Actualizar datos"}
+          </button>
+        </div>
         {IS_DEMO_MODE && (
           <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", color: "#92400E", borderRadius: 10, padding: "10px 14px", marginBottom: 18, fontSize: 13, fontWeight: 800 }}>
             MODO DEMO: datos locales de muestra, sin solicitantes reales. Limite: {DEMO_MAX_SOLICITANTES} solicitantes.
