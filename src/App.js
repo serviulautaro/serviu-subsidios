@@ -6575,6 +6575,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
 // ─── VISTA SIN COMITÉ ─────────────────────────────────────────────────────────
 function SinComiteView({ personas, comites, solicitudes, programasCustom = [], onSavePersonas, onSaveSolicitudes, onDetail }) {
   const [search, setSearch] = useState("");
+  const [filtroSector, setFiltroSector] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
   const [comiteDestino, setComiteDestino] = useState("");
   const [showModalMigrar, setShowModalMigrar] = useState(false);
@@ -6587,11 +6588,42 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     !p.comiteId || p.comiteId === "" || p.comiteId === null
   );
 
-  const filtered = sinComite.filter(p =>
-    p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    (p.rut || "").toLowerCase().includes(search.toLowerCase()) ||
-    (p.comuna || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const normLocal = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => s.personaId === personaId && s.programaId === "habitabilidad");
+  const sectoresDesmarque = [...new Set(
+    sinComite
+      .filter(p => tieneSolicitudDesmarque(p.id))
+      .map(p => (p.sector || p.direccion || "").toString().trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, "es"));
+  const estadoDesmarquePersona = (p) => {
+    const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
+    const estado = estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
+    return estado;
+  };
+  const estadoSeguimiento = (p) => {
+    const estado = estadoDesmarquePersona(p);
+    const clave = normLocal(`${estado.key} ${estado.label} ${p.estado_desmarque || ""}`).toUpperCase();
+    if (clave.includes("DESMARCADO")) return "DESMARCADA";
+    if (clave.includes("INFORME EN SERVIU")) return "INFORME EN SERVIU";
+    return "";
+  };
+  const comitePersona = (p) => {
+    const comite = comites.find(c => c.id === p.comiteId);
+    return comite?.nombre || p.comite || "NO ESTÁ EN NINGÚN COMITÉ";
+  };
+  const seguimientoDesmarque = personas
+    .map(p => ({ persona: p, estado: estadoSeguimiento(p) }))
+    .filter(x => x.estado)
+    .sort((a, b) => a.persona.nombre.localeCompare(b.persona.nombre, "es"));
+
+  const filtered = sinComite.filter(p => {
+    const q = normLocal(search);
+    const texto = normLocal(`${p.nombre || ""} ${p.rut || ""} ${p.comuna || ""} ${p.sector || ""}`);
+    if (q && !texto.includes(q)) return false;
+    if (filtroSector && normLocal(p.sector || p.direccion) !== normLocal(filtroSector)) return false;
+    return true;
+  });
 
   const toggleSeleccionar = (id) => {
     setSeleccionados(prev =>
@@ -6675,14 +6707,37 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
         )}
       </div>
 
-      <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de" }}>
-        <input placeholder="Buscar por nombre, RUT o comuna..." value={search} onChange={e => setSearch(e.target.value)}
+      <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de", flexWrap: "wrap" }}>
+        <input placeholder="Buscar por nombre, RUT, comuna o sector..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
+        <select value={filtroSector} onChange={e => setFiltroSector(e.target.value)}
+          style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 230, background: "#fff" }}>
+          <option value="">Todos los sectores Desmarque</option>
+          {sectoresDesmarque.map(sector => <option key={sector} value={sector}>{sector}</option>)}
+        </select>
         {filtered.length > 0 && (
           <button onClick={seleccionarTodos}
             style={{ background: "none", border: "1px solid #ddd", borderRadius: 7, padding: "5px 12px", fontSize: 12, cursor: "pointer", color: "#555", fontWeight: 600 }}>
             {seleccionados.length === filtered.length ? "Deseleccionar todos" : "Seleccionar todos"}
           </button>
+        )}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", marginBottom: 18, border: "1px solid #e8e3de" }}>
+        <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 4 }}>Seguimiento Desmarque</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>Solicitantes desmarcados o con informe en SERVIU, indicando si están en comité.</div>
+        {seguimientoDesmarque.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#999", padding: "10px 0" }}>No hay solicitantes en estado DESMARCADA o INFORME EN SERVIU.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 7 }}>
+            {seguimientoDesmarque.map(({ persona: p, estado }) => (
+              <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 180px 1fr", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 9, background: estado === "DESMARCADA" ? "#E0F7FA" : "#ECFDF5", border: "1px solid " + (estado === "DESMARCADA" ? "#99F6E4" : "#BBF7D0") }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#1e3a5f" }}>{p.nombre}</div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: estado === "DESMARCADA" ? "#0E7490" : "#166534" }}>{estado}</div>
+                <div style={{ fontSize: 12, color: comitePersona(p).includes("NO ESTÁ") ? "#B91C1C" : "#374151", fontWeight: 700 }}>{comitePersona(p)}</div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -7377,7 +7432,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
   const [subtab, setSubtab] = useState("gestion");
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ nombre: "", descripcion: "", tipo: "", programaId: "" });
+  const [form, setForm] = useState({ id: "", nombre: "", descripcion: "", tipo: "", programaId: "" });
 
   const [filtroProg, setFiltroProg] = useState(filtroPrograma || "");
   const todosLosProgramas = combinarProgramas(programasCustom);
@@ -7401,10 +7456,24 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
   const guardar = () => {
     if (!form.programaId) { alert("Selecciona el programa del comité."); return; }
     if (!form.nombre.trim()) { alert("El nombre del comité es obligatorio."); return; }
-    const nuevo = { id: uid(), nombre: form.nombre.trim(), descripcion: form.descripcion.trim(), fechaCreacion: today(), programaId: form.programaId, tipo: form.tipo };
-    onSaveComites([...comites, nuevo]);
-    setForm({ nombre: "", descripcion: "", tipo: "", programaId: "" });
+    const datos = { id: form.id || uid(), nombre: form.nombre.trim(), descripcion: form.descripcion.trim(), fechaCreacion: form.fechaCreacion || today(), programaId: form.programaId, tipo: form.tipo };
+    const lista = form.id ? comites.map(c => c.id === form.id ? { ...c, ...datos } : c) : [...comites, datos];
+    onSaveComites(lista);
+    setForm({ id: "", nombre: "", descripcion: "", tipo: "", programaId: "" });
     setShowModal(false);
+  };
+
+  const editarComite = (e, c) => {
+    e.stopPropagation();
+    setForm({
+      id: c.id,
+      nombre: c.nombre || "",
+      descripcion: c.descripcion || "",
+      tipo: c.tipo || (c.programaId === "csp_urbano" ? "URBANO" : c.programaId === "csp_rural" ? "RURAL" : "OTRO"),
+      programaId: c.programaId || "",
+      fechaCreacion: c.fechaCreacion || today(),
+    });
+    setShowModal(true);
   };
 
   const eliminar = (e, id) => {
@@ -7546,6 +7615,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
                   <div style={{ background: statusBg(pctComite), color: statusColor(pctComite), borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>
                     {statusLabel(pctComite)}
                   </div>
+                  <button onClick={(e) => editarComite(e, c)} style={{ background: "#EFF6FF", color: "#1e3a5f", border: "1px solid #BFDBFE", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>Editar</button>
                   <button onClick={(e) => eliminar(e, c.id)} style={{ background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13 }}>X</button>
                 </div>
               </div>
@@ -7565,7 +7635,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
       )}
 
       {showModal && (
-        <Modal title="Crear nuevo comité" onClose={() => { setShowModal(false); setForm({ nombre: "", descripcion: "", tipo: "", programaId: "" }); }}>
+        <Modal title={form.id ? "Editar comité" : "Crear nuevo comité"} onClose={() => { setShowModal(false); setForm({ id: "", nombre: "", descripcion: "", tipo: "", programaId: "" }); }}>
           <div style={{ display: "grid", gap: 14 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Programa *</label>
@@ -7599,10 +7669,10 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
             </div>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
-            <button onClick={() => { setShowModal(false); setForm({ nombre: "", descripcion: "", tipo: "" }); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={() => { setShowModal(false); setForm({ id: "", nombre: "", descripcion: "", tipo: "", programaId: "" }); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
             <button onClick={guardar} disabled={!form.programaId || !form.nombre.trim()}
               style={{ padding: "9px 20px", borderRadius: 8, background: form.programaId && form.nombre.trim() ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: form.programaId && form.nombre.trim() ? "pointer" : "not-allowed" }}>
-              Crear comité
+              {form.id ? "Guardar comité" : "Crear comité"}
             </button>
           </div>
         </Modal>
@@ -8419,13 +8489,19 @@ export default function App() {
   const saveComites = async (lista) => {
     setComites(lista);
     // No borrar comités ausentes de la lista local: protege datos en producción multiusuario.
-    for (const c of lista) {
-      await supabase.from("comites").upsert({
-        id: c.id, nombre: c.nombre, descripcion: c.descripcion || null,
-        programa_id: c.programaId || null, fecha_creacion: c.fechaCreacion
-      });
+    try {
+      for (const c of lista) {
+        const { error } = await supabase.from("comites").upsert({
+          id: c.id, nombre: c.nombre, descripcion: c.descripcion || null,
+          programa_id: c.programaId || null, fecha_creacion: c.fechaCreacion
+        });
+        if (error) throw error;
+      }
+      await registrarAuditoria("guardar_comites", "comites", "", { cantidad: lista.length });
+    } catch (err) {
+      console.warn("[saveComites] No se pudo guardar comité:", err?.message || err);
+      alert("No se pudo guardar el comité en la nube. La pantalla seguirá funcionando; revise conexión o Supabase.");
     }
-    await registrarAuditoria("guardar_comites", "comites", "", { cantidad: lista.length });
   };
 
   const goDetail = (id) => { setFromView(view); setDetailId(id); setView("detalle"); };
