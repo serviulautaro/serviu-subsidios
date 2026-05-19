@@ -65,6 +65,33 @@ const textoEdad = (fechaNac) => {
   return edad !== null ? `${edad} años` : "";
 };
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const docNombreCanonico = (doc) => {
+  const n = docNombreNorm(doc).replace(/\s+/g, " ").trim();
+  if (!n) return "";
+  if (n.includes("antecedentes de la vivienda") || n.includes("certificado de la vivienda")) return "certificados_antecedentes_vivienda";
+  if (n.includes("cedula") && n.includes("identidad")) return "cedula_identidad";
+  return n;
+};
+const docTieneDatosGuardados = (doc = {}) => !!(
+  doc.entregado ||
+  doc.archivo ||
+  doc.storagePath ||
+  doc.archivoData ||
+  String(doc.valor || "").trim() ||
+  doc.opcionSeleccionada
+);
+const indicesDocumentosVisibles = (documentos = []) => {
+  const elegidos = new Map();
+  (documentos || []).forEach((doc, idx) => {
+    if (!doc || doc.interno) return;
+    const key = docNombreCanonico(doc) || "__doc_" + idx;
+    const previo = elegidos.get(key);
+    if (previo === undefined || (!docTieneDatosGuardados(documentos[previo]) && docTieneDatosGuardados(doc))) {
+      elegidos.set(key, idx);
+    }
+  });
+  return new Set(elegidos.values());
+};
 const DOC_PRIORIDAD_SOLICITANTE = "__prioridad_solicitante";
 const prioridadSolicitud = (sol = {}) => {
   const doc = (sol.documentos || []).find(d => d.nombre === DOC_PRIORIDAD_SOLICITANTE);
@@ -4233,7 +4260,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               </div>
             )}
             {solsEditando[sol.id] && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {sol.documentos.map((doc, i) => {
+              {(() => {
+                const visibles = indicesDocumentosVisibles(sol.documentos || []);
+                return (sol.documentos || []).map((doc, i) => {
+                if (!visibles.has(i)) return null;
                 if (doc.interno) return null;
                 if ((doc.nombre || "").toLowerCase().includes("credencial de discapacidad")) return null;
                 // ── PROGRAMA PERSONALIZADO: renderizado genérico ──────────────
@@ -5591,7 +5621,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     )}
                   </div>
                 );
-              }).filter(Boolean)}
+              }).filter(Boolean);
+              })()}
             </div>}
           </div>
         );
@@ -7109,6 +7140,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const [comiteDestinoMover, setComiteDestinoMover] = useState("");
   const [motivoMovimiento, setMotivoMovimiento] = useState("");
   const [moviendoPersona, setMoviendoPersona] = useState(false);
+  const [personaCondicional, setPersonaCondicional] = useState(null);
+  const [notaCondicional, setNotaCondicional] = useState("");
+  const [guardandoCondicional, setGuardandoCondicional] = useState(false);
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId };
   const [form, setForm] = useState(EMPTY);
 
@@ -7127,14 +7161,17 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     ...(comites || []),
   ].filter((c, idx, arr) => c.id !== comiteId && arr.findIndex(x => x.id === c.id) === idx);
 
-  const miembros = personas.filter(p => p.comiteId === comiteId);
-  const filtered = miembros.filter(p => {
-    const matchSearch = p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      p.rut.includes(search) ||
+  const ordenarSolicitantes = (lista = []) => [...lista].sort((a, b) =>
+    String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" })
+  );
+  const miembros = ordenarSolicitantes(personas.filter(p => p.comiteId === comiteId));
+  const filtered = ordenarSolicitantes(miembros.filter(p => {
+    const matchSearch = (p.nombre || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.rut || "").includes(search) ||
       (p.comuna || "").toLowerCase().includes(search.toLowerCase());
     const matchEstado = filtroEstado === "todos" || p.estado_desmarque === filtroEstado;
     return matchSearch && matchEstado;
-  });
+  }));
 
   const getSols = (id) => solicitudes.filter(s => s.personaId === id);
   const getDocPct = (id) => {
@@ -7249,6 +7286,58 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     alert("Solicitante movido correctamente. La razón del cambio quedó guardada en observaciones.");
   };
 
+  const lineasCondicionalidad = (persona = {}) => String(persona.observaciones || "")
+    .split(/\n+/)
+    .filter(linea => /\[CONDICIONAL (ACTIVA|CUMPLIDA)\]/i.test(linea));
+  const estadoCondicionalidad = (persona = {}) => {
+    const lineas = lineasCondicionalidad(persona);
+    const ultima = lineas[lineas.length - 1] || "";
+    return /\[CONDICIONAL ACTIVA\]/i.test(ultima) ? "condicional" : "aprobado";
+  };
+  const estaCondicional = (persona = {}) => estadoCondicionalidad(persona) === "condicional";
+  const ultimaLineaCondicionalidad = (persona = {}) => {
+    const lineas = lineasCondicionalidad(persona);
+    return lineas[lineas.length - 1] || "";
+  };
+  const abrirCondicionalidad = (e, persona) => {
+    e.stopPropagation();
+    setPersonaCondicional(persona);
+    setNotaCondicional("");
+  };
+  const guardarCondicionalidad = async (accion) => {
+    if (!personaCondicional) return;
+    const esMarcar = accion === "condicional";
+    const nota = notaCondicional.trim();
+    if (esMarcar && nota.length < 8) {
+      alert("Debe escribir una nota clara con la razón de la condicionalidad.");
+      return;
+    }
+    setGuardandoCondicional(true);
+    try {
+      const usuario = currentUser?.nombre || currentUser?.usuario || "Usuario no identificado";
+      const linea = esMarcar
+        ? `[${today()}] [CONDICIONAL ACTIVA] ${nota}. Usuario: ${usuario}`
+        : `[${today()}] [CONDICIONAL CUMPLIDA] Solicitud cumplida; solicitante aprobado. Usuario: ${usuario}`;
+      const observaciones = [personaCondicional.observaciones, linea].filter(Boolean).join("\n");
+      const { error } = await supabase.from("personas").update({ observaciones }).eq("id", personaCondicional.id);
+      if (error) throw error;
+      onSavePersonas(personas.map(p => p.id === personaCondicional.id ? { ...p, observaciones } : p));
+      await registrarAuditoria?.(esMarcar ? "solicitante_condicional" : "solicitante_aprobado", "personas", personaCondicional.id, {
+        solicitante: personaCondicional.nombre,
+        comite: comite?.nombre || "",
+        detalle: esMarcar ? nota : "Condicionalidad cumplida; solicitante aprobado",
+      });
+      setPersonaCondicional(null);
+      setNotaCondicional("");
+      alert(esMarcar ? "Solicitante marcado como condicional. La nota quedó guardada." : "Solicitante dejado como aprobado. La constancia quedó guardada.");
+    } catch (err) {
+      console.error("Error guardando condicionalidad", err);
+      alert("No se pudo guardar la condicionalidad. Revisa la conexión e intenta nuevamente.");
+    } finally {
+      setGuardandoCondicional(false);
+    }
+  };
+
   const completas = miembros.filter(p => {
     const sols = getSols(p.id);
     return sols.length > 0 && sols.every(s => pct(s.documentos) === 100);
@@ -7321,10 +7410,11 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             )
           );
           const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
+          const condicional = estaCondicional(p);
           return (
-            <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: desmarqueEnTramite ? "#FFF7ED" : "#fff", borderRadius: 12, padding: "16px 20px", border: desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+            <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: condicional ? "#FFFBEB" : desmarqueEnTramite ? "#FFF7ED" : "#fff", borderRadius: 12, padding: "16px 20px", border: condicional ? "2px solid #F59E0B" : desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 22, background: desmarqueEnTramite ? "#F97316" : "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: condicional ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{(p.nombre || "?")[0].toUpperCase()}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
@@ -7337,6 +7427,11 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                       ⚠ Desmarque en trámite
                     </div>
                   )}
+                  {condicional && (
+                    <div style={{ display: "inline-block", marginTop: 4, marginLeft: 4, background: "#F59E0B", color: "#78350F", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}>
+                      Condicional
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -7347,6 +7442,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                   </div>
                 )}
                 <div style={{ background: sols > 0 ? "#F5F3FF" : "#f5f5f5", color: sols > 0 ? "#7C3AED" : "#999", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 700 }}>{sols} solicitudes</div>
+                <button onClick={(e) => abrirCondicionalidad(e, p)} style={{ background: condicional ? "#FEF3C7" : "#F8FAFC", color: condicional ? "#92400E" : "#334155", border: "1px solid " + (condicional ? "#F59E0B" : "#CBD5E1"), borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                  {condicional ? "Ver condición" : "Condicional"}
+                </button>
                 <button onClick={(e) => abrirMover(e, p)} style={{ background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Mover</button>
               </div>
             </div>
@@ -7395,6 +7493,55 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             <button onClick={moverPersona} disabled={!comiteDestinoMover || motivoMovimiento.trim().length < 8 || moviendoPersona}
               style={{ padding: "9px 20px", borderRadius: 8, background: comiteDestinoMover && motivoMovimiento.trim().length >= 8 ? "#1D4ED8" : "#cbd5e1", color: "#fff", border: "none", fontSize: 14, fontWeight: 700, cursor: comiteDestinoMover && motivoMovimiento.trim().length >= 8 ? "pointer" : "not-allowed" }}>
               {moviendoPersona ? "Moviendo..." : "Mover y guardar nota"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {personaCondicional && (
+        <Modal title="Condicionalidad del solicitante" onClose={() => !guardandoCondicional && setPersonaCondicional(null)}>
+          <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: 10, padding: "12px 14px", marginBottom: 16, color: "#92400E", fontSize: 13, lineHeight: 1.5 }}>
+            Marcar como condicional exige una nota. Cuando se cumpla lo solicitado, puede dejarse como aprobado sin borrar la nota anterior.
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Solicitante</div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 9, padding: "10px 12px", fontSize: 14, fontWeight: 700 }}>
+              {personaCondicional.nombre} <span style={{ color: "#64748b", fontWeight: 500 }}>- {formatRut(personaCondicional.rut)}</span>
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Estado actual</div>
+            <div style={{ display: "inline-block", background: estaCondicional(personaCondicional) ? "#FEF3C7" : "#DCFCE7", color: estaCondicional(personaCondicional) ? "#92400E" : "#166534", borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 800 }}>
+              {estaCondicional(personaCondicional) ? "Condicional" : "Aprobado"}
+            </div>
+          </div>
+          {ultimaLineaCondicionalidad(personaCondicional) && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Última constancia</div>
+              <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 9, padding: "10px 12px", fontSize: 13, color: "#334155", lineHeight: 1.5 }}>
+                {ultimaLineaCondicionalidad(personaCondicional)}
+              </div>
+            </div>
+          )}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626", textTransform: "uppercase", marginBottom: 5 }}>Razón de la condicionalidad *</div>
+            <textarea value={notaCondicional} onChange={e => setNotaCondicional(e.target.value)}
+              placeholder="Ejemplo: falta regularizar antecedente, documento requiere corrección, debe completar observación técnica, etc."
+              rows={4}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid " + (notaCondicional.trim() ? "#F59E0B" : "#ddd"), fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={() => setPersonaCondicional(null)} disabled={guardandoCondicional}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            {estaCondicional(personaCondicional) && (
+              <button onClick={() => guardarCondicionalidad("aprobado")} disabled={guardandoCondicional}
+                style={{ padding: "9px 18px", borderRadius: 8, background: "#059669", color: "#fff", border: "none", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                Solicitud cumplida: aprobado
+              </button>
+            )}
+            <button onClick={() => guardarCondicionalidad("condicional")} disabled={notaCondicional.trim().length < 8 || guardandoCondicional}
+              style={{ padding: "9px 20px", borderRadius: 8, background: notaCondicional.trim().length >= 8 ? "#F59E0B" : "#cbd5e1", color: notaCondicional.trim().length >= 8 ? "#78350F" : "#fff", border: "none", fontSize: 14, fontWeight: 800, cursor: notaCondicional.trim().length >= 8 ? "pointer" : "not-allowed" }}>
+              {guardandoCondicional ? "Guardando..." : "Marcar condicional"}
             </button>
           </div>
         </Modal>
