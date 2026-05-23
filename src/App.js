@@ -743,30 +743,44 @@ ${_encabezado()}
 <p>- Archivo Vivienda</p>`);
 }
 
-function generarHtmlCarta({ numero, nombre, rut }) {
+function generarHtmlCarta({ numero, nombre, rut, remitente, destinatario }) {
+  const de = {
+    nombre: "MARCELO CIFUENTES VÁSQUEZ",
+    cargo: "ENCARGADO ENTIDAD PATROCINANTE",
+    institucion: "MUNICIPALIDAD DE LAUTARO",
+    iniciales: "MCV/mcv",
+    ...(remitente || {})
+  };
+  const a = {
+    nombre: "SEÑOR MARCO SEGUEL REYES",
+    cargo: "DIRECTOR DE SERVIU (S)",
+    institucion: "REGIÓN DE LA ARAUCANIA",
+    trato: "PRESENTE.",
+    ...(destinatario || {})
+  };
   return _wrap(`Carta SERVIU N° ${numero}`, `
 ${_encabezado()}
 <div style="text-align:right"><div style="display:inline-block;text-align:left"><p><b>CNº&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${numero}</b></p><p><b>MAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;Lo que indica</p><p><b>LAUTARO,</b>&nbsp;${_fechaHoy()}</p></div></div>
 <span class="sp"></span>
-<p><b>DE&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>MARCELO CIFUENTES VÁSQUEZ</b></p>
-<p class="ind">ENCARGADO ENTIDAD PATROCINANTE</p>
-<p class="ind">MUNICIPALIDAD DE LAUTARO.</p>
+<p><b>DE&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${de.nombre}</b></p>
+<p class="ind">${de.cargo}</p>
+<p class="ind">${de.institucion}</p>
 <span class="sp"></span>
-<p><b>A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>SEÑOR JOSÉ LUIS SEPÚLVEDA SOZA</b></p>
-<p class="ind">DIRECTOR DE SERVIU</p>
-<p class="ind">REGIÓN DE LA ARAUCANÍA</p>
-<p class="ind">PRESENTE.</p>
+<p><b>A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${a.nombre}</b></p>
+<p class="ind">${a.cargo}</p>
+<p class="ind">${a.institucion}</p>
+<p class="ind">${a.trato || "PRESENTE."}</p>
 <span class="spg"></span>
 <p class="ind">Junto con saludar cordialmente, me permito informar a Ud., el ingreso de una solicitud para quitar la marca de subsidio de vivienda registrado en el sistema a nombre de <b>${(nombre||'')}</b>, RUT: ${rut||''}.</p>
 <div class="firma">
   <p>Sin otro particular, saluda atentamente a Usted.,</p>
   <span class="spg"></span>
-  <p><b>MARCELO CIFUENTES VÁSQUEZ</b></p>
-  <p><b>ENCARGADO DE ENTIDAD PATROCINANTE</b></p>
-  <p><b>MUNICIPALIDAD DE LAUTARO</b></p>
+  <p><b>${de.nombre}</b></p>
+  <p><b>${de.cargo}</b></p>
+  <p><b>${de.institucion}</b></p>
 </div>
 <span class="sp"></span>
-<p>MCV/mcv</p>
+<p>${de.iniciales || ""}</p>
 <span class="sp"></span>
 <p><b>DISTRIBUCIÓN:</b></p>
 <p>- Destinatario</p>
@@ -2504,7 +2518,20 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     aTrato: "PRESENTE."
   };
   const [formMemo, setFormMemo] = useState(memoInicial);
-  const [formCarta, setFormCarta] = useState({ numero: "" });
+  const cartaInicial = {
+    numero: "",
+    deTipo: "marcelo",
+    deNombre: "MARCELO CIFUENTES VÁSQUEZ",
+    deCargo: "ENCARGADO ENTIDAD PATROCINANTE",
+    deInstitucion: "MUNICIPALIDAD DE LAUTARO",
+    deIniciales: "MCV/mcv",
+    aTipo: "marco",
+    aNombre: "SEÑOR MARCO SEGUEL REYES",
+    aCargo: "DIRECTOR DE SERVIU (S)",
+    aInstitucion: "REGIÓN DE LA ARAUCANIA",
+    aTrato: "PRESENTE."
+  };
+  const [formCarta, setFormCarta] = useState(cartaInicial);
   const [formSolicitud, setFormSolicitud] = useState({ subsidio: "", anioSubsidio: "" });
   const [filasInforme, setFilasInforme] = useState([{ id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }]);
   const [informeSubsidioTexto, setInformeSubsidioTexto] = useState("");
@@ -3335,9 +3362,21 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const generarCarta = async () => {
     const numero = formCarta.numero;
+    const remitente = {
+      nombre: formCarta.deNombre || "MARCELO CIFUENTES VÁSQUEZ",
+      cargo: formCarta.deCargo || "ENCARGADO ENTIDAD PATROCINANTE",
+      institucion: formCarta.deInstitucion || "MUNICIPALIDAD DE LAUTARO",
+      iniciales: formCarta.deIniciales || ""
+    };
+    const destinatario = {
+      nombre: formCarta.aNombre || "SEÑOR MARCO SEGUEL REYES",
+      cargo: formCarta.aCargo || "DIRECTOR DE SERVIU (S)",
+      institucion: formCarta.aInstitucion || "REGIÓN DE LA ARAUCANIA",
+      trato: formCarta.aTrato || "PRESENTE."
+    };
     setGenerando(true);
     try {
-      const html = generarHtmlCarta({ numero, nombre: persona.nombre, rut: persona.rut });
+      const html = generarHtmlCarta({ numero, nombre: persona.nombre, rut: persona.rut, remitente, destinatario });
       setHtmlPreview(html);
       const nombreArch = `CARTA_${numero.replace(/[^a-zA-Z0-9]/g, '_')}_${persona.nombre.split(' ')[0]}.html`;
       fetch(apiPath("/guardar-html/", carpeta), {
@@ -3351,7 +3390,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const fechaIso = new Date().toISOString().slice(0, 10);
       await _actualizarValorDoc("Carta SERVIU", numero + "|" + fechaIso);
       setShowModalCarta(false);
-      setFormCarta({ numero: "" });
+      setFormCarta(cartaInicial);
     } catch(e) { alert("Error generando carta: " + e.message); }
     setGenerando(false);
   };
@@ -5957,6 +5996,66 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               <input value={formCarta.numero} onChange={e => setFormCarta({...formCarta, numero: e.target.value})}
                 placeholder="Ej: 45/2026"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ background: "#F0F9FF", borderRadius: 8, padding: 12, border: "1px solid #BAE6FD" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#075985", marginBottom: 8 }}>DE</div>
+                <select
+                  value={formCarta.deTipo}
+                  onChange={e => {
+                    const esMarcelo = e.target.value === "marcelo";
+                    setFormCarta({
+                      ...formCarta,
+                      deTipo: e.target.value,
+                      deNombre: esMarcelo ? "MARCELO CIFUENTES VÁSQUEZ" : "",
+                      deCargo: esMarcelo ? "ENCARGADO ENTIDAD PATROCINANTE" : "",
+                      deInstitucion: esMarcelo ? "MUNICIPALIDAD DE LAUTARO" : "",
+                      deIniciales: esMarcelo ? "MCV/mcv" : ""
+                    });
+                  }}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #7DD3FC", fontSize: 13, marginBottom: 8 }}
+                >
+                  <option value="marcelo">Marcelo Cifuentes Vásquez</option>
+                  <option value="otro">Otro</option>
+                </select>
+                {formCarta.deTipo === "otro" && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <input value={formCarta.deNombre} onChange={e => setFormCarta({...formCarta, deNombre: e.target.value})} placeholder="Nombre remitente" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.deCargo} onChange={e => setFormCarta({...formCarta, deCargo: e.target.value})} placeholder="Cargo remitente" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.deInstitucion} onChange={e => setFormCarta({...formCarta, deInstitucion: e.target.value})} placeholder="Institución remitente" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.deIniciales} onChange={e => setFormCarta({...formCarta, deIniciales: e.target.value})} placeholder="Iniciales, ej: MCV/mcv" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                  </div>
+                )}
+              </div>
+              <div style={{ background: "#ECFEFF", borderRadius: 8, padding: 12, border: "1px solid #A5F3FC" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#0E7490", marginBottom: 8 }}>A</div>
+                <select
+                  value={formCarta.aTipo}
+                  onChange={e => {
+                    const esMarco = e.target.value === "marco";
+                    setFormCarta({
+                      ...formCarta,
+                      aTipo: e.target.value,
+                      aNombre: esMarco ? "SEÑOR MARCO SEGUEL REYES" : "",
+                      aCargo: esMarco ? "DIRECTOR DE SERVIU (S)" : "",
+                      aInstitucion: esMarco ? "REGIÓN DE LA ARAUCANIA" : "",
+                      aTrato: esMarco ? "PRESENTE." : ""
+                    });
+                  }}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #67E8F9", fontSize: 13, marginBottom: 8 }}
+                >
+                  <option value="marco">Señor Marco Seguel Reyes</option>
+                  <option value="otro">Otro</option>
+                </select>
+                {formCarta.aTipo === "otro" && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <input value={formCarta.aNombre} onChange={e => setFormCarta({...formCarta, aNombre: e.target.value})} placeholder="Nombre destinatario" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.aCargo} onChange={e => setFormCarta({...formCarta, aCargo: e.target.value})} placeholder="Cargo destinatario" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.aInstitucion} onChange={e => setFormCarta({...formCarta, aInstitucion: e.target.value})} placeholder="Institución / región" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.aTrato} onChange={e => setFormCarta({...formCarta, aTrato: e.target.value})} placeholder="PRESENTE." style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                  </div>
+                )}
+              </div>
             </div>
             <div style={{ background: "#E0F7FA", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#0891B2" }}>
               <div><strong>Nombre:</strong> {persona.nombre}</div>
