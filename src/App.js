@@ -787,6 +787,8 @@ ${_encabezado()}
 <p>- Archivo Vivienda</p>`);
 }
 
+const SOLICITUD_2026_PDF = "/plantillas/formulario_solicitud_habilitacion_inhabitabilidad_2026.pdf";
+
 function generarHtmlSolicitud({ nombre, rut, direccion, telefono, subsidio, anioSubsidio }) {
   const hoy = new Date();
   const f = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
@@ -800,7 +802,11 @@ function generarHtmlSolicitud({ nombre, rut, direccion, telefono, subsidio, anio
   const chk = (l) => `<tr><td style="width:36px;text-align:center">☐</td><td>${l}</td></tr>`;
   return _wrap('Formulario de Habilitación', `
 <p style="text-align:center;font-size:13pt;font-weight:bold;margin-bottom:14px">Formulario de Habilitación Vivienda Inhabitable/Siniestrada</p>
-<p style="margin-bottom:14px">Solicito habilitación para poder postular a un nuevo subsidio habitacional, en razón a la inhabitabilidad y/o siniestro sufrido en mi vivienda.</p>
+<div style="border:1px solid #cbd5e1;background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+  <p style="margin:0 0 8px 0"><b>Plantilla oficial utilizada:</b> Adj. Of. 4949_2141991_Formulario_Solicitud_Habilitacin_Inhabitabilidad.pdf</p>
+  <p style="margin:0">Abrir formulario oficial: <a href="${SOLICITUD_2026_PDF}" target="_blank" rel="noopener">Formulario Solicitud Habilitación Inhabitabilidad 2026</a></p>
+</div>
+<p style="margin-bottom:14px">Datos del solicitante para completar el formulario oficial SERVIU:</p>
 <table style="margin-bottom:16px"><tbody>
   ${fila('NOMBRE BENEFICIARIO', nombre||'')}
   ${fila('RUT',rut||'')}
@@ -819,6 +825,10 @@ function generarHtmlSolicitud({ nombre, rut, direccion, telefono, subsidio, anio
 <div style="margin-top:40px;display:flex;justify-content:space-between">
   <p>FIRMA: ___________________________</p>
   <p><b>Fecha:</b> ${f}</p>
+</div>
+<div style="page-break-before:always;margin-top:20px">
+  <p style="font-weight:bold;margin-bottom:10px">Vista del formulario oficial cargado en el sistema</p>
+  <iframe title="Formulario oficial SERVIU" src="${SOLICITUD_2026_PDF}" style="width:100%;height:900px;border:1px solid #cbd5e1;border-radius:8px"></iframe>
 </div>`);
 }
 
@@ -6089,6 +6099,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
             </div>
             <div style={{ background: "#ECFDF5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#059669" }}>
+              <div><strong>Plantilla oficial:</strong> Formulario Solicitud Habilitación Inhabitabilidad 2026</div>
+              <div><a href={SOLICITUD_2026_PDF} target="_blank" rel="noopener noreferrer" style={{ color: "#047857", fontWeight: 700 }}>Ver archivo oficial usado</a></div>
+              <hr style={{ border: 0, borderTop: "1px solid #BBF7D0", margin: "8px 0" }} />
               <div><strong>Nombre:</strong> {persona.nombre}</div>
               <div><strong>Cédula de identidad:</strong> {persona.rut}</div>
               <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
