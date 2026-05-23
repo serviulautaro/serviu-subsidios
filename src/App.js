@@ -9161,8 +9161,7 @@ export default function App() {
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "Segoe UI, sans-serif", background: "#F0EDE8" }}>
       <aside style={{ width: 240, background: "#1e3a5f", display: "flex", flexDirection: "column", flexShrink: 0 }}>
         <div style={{ padding: "28px 24px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#7BAFD4", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 6 }}>SERVIU</div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>Control de Subsidios</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", lineHeight: 1.25 }}>Sistema de Gestión de Subsidios Habitacionales</div>
         </div>
         <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "0 24px" }} />
         <nav style={{ padding: "16px 12px", flex: 1 }}>
