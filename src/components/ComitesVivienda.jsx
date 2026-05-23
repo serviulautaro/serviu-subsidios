@@ -44,32 +44,35 @@ const inp = {
 };
 
 const styles = {
-  container: { fontFamily: "system-ui, sans-serif", padding: "1.5rem", maxWidth: 960, margin: "0 auto" },
-  header: { marginBottom: "1rem", paddingBottom: "0.75rem", borderBottom: "1px solid #e5e7eb" },
-  title: { fontSize: 18, fontWeight: 600, color: "#111827", margin: 0 },
-  subtitle: { fontSize: 13, color: "#6b7280", marginTop: 4 },
-  metrics: { display: "flex", gap: 12, marginBottom: "1rem" },
-  metric: { flex: 1, background: "#f9fafb", borderRadius: 8, padding: "10px 14px", border: "1px solid #e5e7eb" },
+  container: { fontFamily: "system-ui, sans-serif", padding: "1.5rem", maxWidth: 1180, margin: "0 auto" },
+  header: { marginBottom: "1.25rem", padding: "20px 22px", border: "1px solid #dbeafe", borderRadius: 18, background: "linear-gradient(135deg,#eff6ff 0%,#ffffff 62%,#ecfdf5 100%)", boxShadow: "0 14px 32px rgba(15,23,42,0.06)" },
+  title: { fontSize: 24, fontWeight: 900, color: "#173b67", margin: 0, textTransform: "uppercase", letterSpacing: ".02em" },
+  subtitle: { fontSize: 13, color: "#475569", marginTop: 6 },
+  institution: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 16 },
+  institutionItem: { background: "#fff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "10px 12px", color: "#1e3a5f", fontSize: 12, fontWeight: 800, textTransform: "uppercase", textAlign: "center" },
+  metrics: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: "1rem" },
+  metric: { flex: 1, background: "#fff", borderRadius: 14, padding: "14px 16px", border: "1px solid #e5e7eb", boxShadow: "0 8px 20px rgba(15,23,42,0.04)" },
   metricLabel: { fontSize: 11, color: "#9ca3af", marginBottom: 2 },
   metricValue: { fontSize: 22, fontWeight: 600, color: "#111827" },
-  tabs: { display: "flex", gap: 6, marginBottom: "1rem" },
-  tab: (active) => ({ fontSize: 12, padding: "5px 14px", borderRadius: 6, cursor: "pointer", border: active ? "1px solid #374151" : "1px solid #d1d5db", background: active ? "#111827" : "transparent", color: active ? "#fff" : "#6b7280", fontWeight: active ? 600 : 400 }),
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: { fontSize: 11, fontWeight: 600, color: "#6b7280", padding: "8px 10px", borderBottom: "1px solid #e5e7eb", textAlign: "left", background: "#f9fafb" },
-  td: (selected) => ({ padding: "9px 10px", borderBottom: "1px solid #f3f4f6", verticalAlign: "top", background: selected ? "#eff6ff" : "transparent", cursor: "pointer" }),
-  sectionRow: { background: "#f9fafb" },
-  sectionLabel: { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#9ca3af", padding: "8px 10px" },
+  tabs: { display: "flex", gap: 8, marginBottom: "1rem", flexWrap: "wrap" },
+  tab: (active) => ({ fontSize: 12, padding: "8px 16px", borderRadius: 999, cursor: "pointer", border: active ? "1px solid #173b67" : "1px solid #d1d5db", background: active ? "#173b67" : "#fff", color: active ? "#fff" : "#475569", fontWeight: 800, boxShadow: active ? "0 8px 18px rgba(23,59,103,.18)" : "none" }),
+  tableWrap: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, overflow: "hidden", boxShadow: "0 12px 28px rgba(15,23,42,0.05)" },
+  table: { width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 13 },
+  th: { fontSize: 11, fontWeight: 900, color: "#475569", padding: "12px 12px", borderBottom: "1px solid #e5e7eb", textAlign: "left", background: "#f8fafc", textTransform: "uppercase", letterSpacing: ".04em" },
+  td: (selected, tipo) => ({ padding: "12px", borderBottom: "1px solid #eef2f7", verticalAlign: "top", background: selected ? "#dbeafe" : tipo === "Rural" ? "#f0fdf4" : "#eff6ff", cursor: "pointer" }),
+  sectionRow: { background: "#ffffff" },
+  sectionLabel: { fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em", color: "#173b67", padding: "10px 12px", background: "#e0f2fe", borderTop: "1px solid #bae6fd", borderBottom: "1px solid #bae6fd" },
   code: { fontSize: 11, fontWeight: 500, background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px", fontFamily: "monospace", color: "#374151" },
   tagRural: { display: "inline-block", fontSize: 11, padding: "2px 8px", borderRadius: 9999, background: "#d1fae5", color: "#065f46" },
   tagUrban: { display: "inline-block", fontSize: 11, padding: "2px 8px", borderRadius: 9999, background: "#dbeafe", color: "#1e40af" },
   tagPending: { display: "inline-block", fontSize: 11, padding: "2px 8px", borderRadius: 9999, background: "#fef3c7", color: "#92400e" },
   tagPj: { display: "inline-block", fontSize: 11, padding: "2px 8px", borderRadius: 9999, background: "#d1fae5", color: "#065f46" },
-  panel: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "1.25rem", marginBottom: "1rem" },
+  panel: { background: "#fff", border: "1px solid #bfdbfe", borderLeft: "6px solid #2563eb", borderRadius: 16, padding: "1.25rem", marginBottom: "1rem", boxShadow: "0 16px 36px rgba(15,23,42,0.08)" },
   panelHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
   panelTitle: { fontSize: 15, fontWeight: 600, color: "#111827", margin: 0 },
   infoRow: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "8px 0" },
   dirGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8, marginTop: 8 },
-  dirCard: { background: "#f9fafb", borderRadius: 8, padding: "8px 10px" },
+  dirCard: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 12px" },
   dirRole: { fontSize: 11, color: "#9ca3af", marginBottom: 2 },
   dirName: { fontSize: 12, fontWeight: 500, color: "#111827" },
   placeholder: { fontSize: 13, color: "#9ca3af", textAlign: "center", padding: "1.5rem" },
@@ -97,7 +100,7 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
     setComites(mergeConSupa(comitesSupa));
     setSelected(null);
     setEditing(null);
-  }, [comitesSupa.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [comitesSupa.length]);
 
   const filtered = comites.filter(c => tab === "todos" || c.tipo.toLowerCase() === tab);
 
@@ -155,12 +158,12 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
     const isSelected = selected === c.codigo;
     rows.push(
       <tr key={c.codigo} onClick={() => handleRow(c.codigo)} style={{cursor:"pointer"}}>
-        <td style={styles.td(isSelected)}><span style={styles.code}>{c.codigo}</span></td>
-        <td style={{...styles.td(isSelected), maxWidth:220}}>{c.nombre}</td>
-        <td style={{...styles.td(isSelected), textAlign:"center", fontWeight:600}}>{c.familias}</td>
-        <td style={styles.td(isSelected)}><span style={c.tipo==="Rural"?styles.tagRural:styles.tagUrban}>{c.tipo}</span></td>
-        <td style={{...styles.td(isSelected), fontSize:12}}>{c.constructora.startsWith("Falta")?<span style={styles.tagPending}>{c.constructora}</span>:<span style={{color:"#6b7280"}}>{c.constructora}</span>}</td>
-        <td style={{...styles.td(isSelected), fontSize:12}}>{c.profesional}</td>
+        <td style={styles.td(isSelected, c.tipo)}><span style={styles.code}>{c.codigo}</span></td>
+        <td style={{...styles.td(isSelected, c.tipo), maxWidth:260, fontWeight:800, color:"#0f172a"}}>{c.nombre}</td>
+        <td style={{...styles.td(isSelected, c.tipo), textAlign:"center", fontWeight:900, color:"#173b67"}}>{c.familias}</td>
+        <td style={styles.td(isSelected, c.tipo)}><span style={c.tipo==="Rural"?styles.tagRural:styles.tagUrban}>{c.tipo}</span></td>
+        <td style={{...styles.td(isSelected, c.tipo), fontSize:12}}>{c.constructora.startsWith("Falta")?<span style={styles.tagPending}>{c.constructora}</span>:<span style={{color:"#475569",fontWeight:700}}>{c.constructora}</span>}</td>
+        <td style={{...styles.td(isSelected, c.tipo), fontSize:12, fontWeight:700}}>{c.profesional}</td>
       </tr>
     );
   });
@@ -168,8 +171,13 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h2 style={styles.title}>Comités de vivienda — Pitrufquén 2025</h2>
-        <p style={styles.subtitle}>Haz clic en una fila para ver los datos completos del comité</p>
+        <h2 style={styles.title}>Municipalidad de Lautaro</h2>
+        <p style={styles.subtitle}>Unidad de Vivienda - Entidad Patrocinante. Selecciona un programa o tipo de comite para revisar sus datos completos.</p>
+        <div style={styles.institution}>
+          <div style={styles.institutionItem}>Municipalidad de Lautaro</div>
+          <div style={styles.institutionItem}>Unidad de Vivienda</div>
+          <div style={styles.institutionItem}>Entidad Patrocinante</div>
+        </div>
       </div>
       <div style={styles.metrics}>
         <div style={styles.metric}><div style={styles.metricLabel}>Total familias</div><div style={styles.metricValue}>{comites.reduce((s,c)=>s+c.familias,0)}</div></div>
@@ -261,10 +269,12 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
         </div>
       )}
 
+      <div style={styles.tableWrap}>
       <table style={styles.table}>
         <thead><tr><th style={styles.th}>Código</th><th style={styles.th}>Nombre del comité</th><th style={{...styles.th,textAlign:"center"}}>Familias</th><th style={styles.th}>Tipo</th><th style={styles.th}>Constructora</th><th style={styles.th}>Profesional a cargo</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
+      </div>
     </div>
   );
 }
