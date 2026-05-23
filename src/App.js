@@ -2570,17 +2570,74 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
   const misSols = solicitudes.filter(s => s.personaId === personaId);
   const esPrioritario = solicitantePrioritario(personaId, solicitudes);
+  const VISITAS_DOC_KEY = "__registro_visitas_oficina__";
+
+  const visitasDesdeSolicitudes = () => {
+    const visitasRecuperadas = [];
+    (misSols || []).forEach(s => {
+      (s.documentos || []).forEach(d => {
+        if (!(d.interno && d.tipo === VISITAS_DOC_KEY)) return;
+        try {
+          const arr = JSON.parse(d.valor || "[]");
+          if (Array.isArray(arr)) visitasRecuperadas.push(...arr);
+        } catch {}
+      });
+    });
+    return visitasRecuperadas;
+  };
+
+  const fusionarVisitas = (a = [], b = []) => {
+    const porId = new Map();
+    [...a, ...b].forEach(v => {
+      if (!v || !v.id) return;
+      porId.set(v.id, { ...porId.get(v.id), ...v });
+    });
+    return [...porId.values()].sort((x, y) => String(y.fecha || "").localeCompare(String(x.fecha || "")));
+  };
+
+  const respaldarVisitasEnSolicitud = async (lista) => {
+    const solDestino = misSols[0];
+    if (!solDestino) return false;
+    const limpias = fusionarVisitas(lista, []);
+    const documentos = [...(solDestino.documentos || [])];
+    const idx = documentos.findIndex(d => d.interno && d.tipo === VISITAS_DOC_KEY);
+    const registro = {
+      nombre: "Registro de visitas a oficina",
+      obligatorio: false,
+      entregado: limpias.length > 0,
+      interno: true,
+      tipo: VISITAS_DOC_KEY,
+      valor: JSON.stringify(limpias)
+    };
+    if (idx >= 0) documentos[idx] = { ...documentos[idx], ...registro };
+    else documentos.push(registro);
+    const actualizadas = solicitudes.map(s => s.id === solDestino.id ? { ...s, documentos } : s);
+    onSaveSolicitudes(actualizadas);
+    const { error } = await supabase.from("solicitudes").update({ documentos }).eq("id", solDestino.id);
+    if (error) {
+      console.warn("[visitas respaldo] error:", error.message);
+      return false;
+    }
+    return true;
+  };
 
   const cargarVisitas = async () => {
+    const respaldo = visitasDesdeSolicitudes();
     try {
       const { data, error } = await supabase.from("visitas").select("*").eq("persona_id", personaId).order("fecha", { ascending: false });
       if (error) {
         if (error.code === "PGRST205") console.warn("[visitas] Tabla 'visitas' no existe aún. Ejecuta supabase_migration.sql en el Dashboard.");
         else console.warn("[visitas] error:", error.message);
-        setVisitas([]); return;
+        setVisitas(prev => fusionarVisitas(prev, respaldo));
+        return;
       }
-      setVisitas(data || []);
-    } catch (err) { console.warn("[cargarVisitas] excepción:", err.message); setVisitas([]); }
+      const combinadas = fusionarVisitas(data || [], respaldo);
+      setVisitas(combinadas);
+      if (respaldo.length < combinadas.length) respaldarVisitasEnSolicitud(combinadas).catch(() => {});
+    } catch (err) {
+      console.warn("[cargarVisitas] excepción:", err.message);
+      setVisitas(prev => fusionarVisitas(prev, respaldo));
+    }
   };
 
   const agregarVisita = async (progDocs) => {
@@ -2603,10 +2660,33 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       docs_recibidos: recibidosLineas.join("\n"),
       profesional_recibio: formVisita.profesionalRecibio || (recibidosLineas.length ? profesionalActual : ""),
     };
+    let persistidaTabla = true;
     const { error: insErr } = await supabase.from("visitas").insert([nueva]);
-    if (insErr) { console.warn("[visitas insert] error:", insErr.message); }
+    if (insErr) {
+      console.warn("[visitas insert] error:", insErr.message);
+      const base = {
+        id: nueva.id,
+        persona_id: nueva.persona_id,
+        fecha: nueva.fecha,
+        profesional: nueva.profesional,
+        solicitud: nueva.solicitud,
+        compromiso: nueva.compromiso
+      };
+      const retry = await supabase.from("visitas").insert([base]);
+      if (retry.error) {
+        persistidaTabla = false;
+        console.warn("[visitas insert retry] error:", retry.error.message);
+      }
+    }
+    const listaFinal = fusionarVisitas([nueva], visitas);
+    const persistidaRespaldo = await respaldarVisitasEnSolicitud(listaFinal);
+    if (!persistidaTabla && !persistidaRespaldo) {
+      alert("No se pudo guardar la visita en Supabase. No se cerrará el formulario para evitar pérdida de datos.");
+      setGuardandoVisita(false);
+      return;
+    }
     await registrarAuditoria?.("registrar_visita", "visitas", nueva.id, { personaId, persona: persona?.nombre || "", fecha: nueva.fecha, profesional: nueva.profesional });
-    setVisitas(prev => [nueva, ...prev].sort((a, b) => b.fecha.localeCompare(a.fecha)));
+    setVisitas(listaFinal);
     setFormVisita({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "" });
     setShowFormVisita(false);
     setGuardandoVisita(false);
@@ -2631,7 +2711,9 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     if (!window.confirm("¿Eliminar esta visita?")) return;
     const { error } = await supabase.from("visitas").delete().eq("id", id);
     if (error) console.warn("[visitas delete] error:", error.message);
-    setVisitas(prev => prev.filter(v => v.id !== id));
+    const restantes = visitas.filter(v => v.id !== id);
+    await respaldarVisitasEnSolicitud(restantes);
+    setVisitas(restantes);
   };
 
   const imprimirVisita = (v) => {
