@@ -3011,20 +3011,33 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     e.target.value = "";
   };
 
+  const abrirArchivo = (nombre) => {
+    const archivoGuardado = archivosDatos[nombre];
+    const fileUrl = archivoGuardado?.dataUrl || apiPath("/files/", archivosRutas[nombre] || carpeta, nombre);
+    if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:text/html")) {
+      const partes = String(archivoGuardado.dataUrl).split(",");
+      const html = partes.length > 1 ? decodeURIComponent(partes.slice(1).join(",")) : "";
+      setHtmlPreview(html);
+      return;
+    }
+    window.open(fileUrl, "_blank", "noopener,noreferrer");
+  };
+
   const eliminarArchivo = async (nombre) => {
     const ok = window["confirm"]("Eliminar " + nombre + "?");
     if (!ok) return;
     const errores = [];
+    const avisos = [];
     const registrosSupa = [];
     try {
       const res = await fetch(apiPath("/archivos/", carpeta, nombre), { method: "DELETE" });
-      if (!res.ok) errores.push("servidor local");
+      if (!res.ok && res.status !== 404) avisos.push("servidor local");
       if (carpeta !== carpetaVieja) {
         const resViejo = await fetch(apiPath("/archivos/", carpetaVieja, nombre), { method: "DELETE" });
-        if (!resViejo.ok && resViejo.status !== 404) errores.push("carpeta anterior");
+        if (!resViejo.ok && resViejo.status !== 404) avisos.push("carpeta anterior");
       }
     } catch {
-      errores.push("servidor local");
+      avisos.push("servidor local");
     }
     try {
       const { data } = await supabase
@@ -3057,6 +3070,34 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch {
       errores.push("registro Supabase");
     }
+    try {
+      const actualizadas = solicitudes.map(s => {
+        if (s.personaId !== persona.id || !Array.isArray(s.documentos)) return s;
+        let cambio = false;
+        const documentos = s.documentos
+          .filter(d => {
+            const quitarRegistroInterno = d.interno && d.archivo === nombre;
+            if (quitarRegistroInterno) cambio = true;
+            return !quitarRegistroInterno;
+          })
+          .map(d => {
+            if (d.archivo !== nombre && d.archivoData !== nombre && d.storagePath !== nombre) return d;
+            cambio = true;
+            return { ...d, archivo: "", archivoData: "", archivoTipo: "", storagePath: "" };
+          });
+        return cambio ? { ...s, documentos } : s;
+      });
+      const afectadas = actualizadas.filter((s, idx) => s !== solicitudes[idx]);
+      if (afectadas.length) {
+        onSaveSolicitudes(actualizadas);
+        for (const s of afectadas) {
+          const { error } = await supabase.from("solicitudes").update({ documentos: s.documentos }).eq("id", s.id);
+          if (error) errores.push("solicitud: " + error.message);
+        }
+      }
+    } catch (err) {
+      errores.push("solicitud: " + (err.message || "no se pudo actualizar"));
+    }
     setArchivos(prev => prev.filter(a => a !== nombre));
     setArchivosDatos(prev => {
       const next = { ...prev };
@@ -3073,6 +3114,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (errores.length) {
       console.warn("[eliminarArchivo]", errores.join(" | "));
       alert("Se intentó eliminar el documento, pero hubo una respuesta incompleta: " + errores.join(", ") + ". Si sigue apareciendo, actualice la página e intente nuevamente.");
+    } else if (avisos.length) {
+      console.warn("[eliminarArchivo avisos]", avisos.join(" | "));
     }
   };
 
@@ -4161,7 +4204,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     {isMenuOpen && (
                       <div data-docmenu="1" style={{ position: "fixed", top: docMenu.y + 6, left: Math.min(docMenu.x, window.innerWidth - 200), zIndex: 9999, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.13)", minWidth: 180, overflow: "hidden" }}>
                         <div style={{ padding: "6px 0" }}>
-                          <button onClick={() => { window.open(fileUrl, "_blank"); setDocMenu(null); }}
+                          <button onClick={() => { abrirArchivo(arch); setDocMenu(null); }}
                             style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#1e3a5f", fontWeight: 500 }}>
                             👁 Ver documento
                           </button>
@@ -4186,7 +4229,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               document.body.appendChild(iframe);
                               iframe.onload = () => { try { iframe.contentWindow.print(); } catch { window.open(fileUrl, "_blank"); } setTimeout(() => document.body.removeChild(iframe), 8000); };
                             } else {
-                              window.open(fileUrl, "_blank");
+                              abrirArchivo(arch);
                             }
                             setDocMenu(null);
                           }}
