@@ -2630,6 +2630,26 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     setShowModalSolicitud(true);
   };
 
+  const guardarFechaVisitaDesmarque = async (sol, fecha) => {
+    const fechaAnterior = sol.fecha_visita || "";
+    const solActualizada = { ...sol, fecha_visita: fecha };
+    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : solActualizada);
+    onSaveSolicitudes(nuevasSols);
+
+    const { error } = await supabase
+      .from("solicitudes")
+      .update({ fecha_visita: fecha || null })
+      .eq("id", sol.id);
+
+    if (error) {
+      console.warn("[fecha visita] error:", error.message);
+      onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior }));
+      alert("No se pudo guardar la fecha de visita. No se modificó el registro.");
+      return false;
+    }
+    return true;
+  };
+
   const fusionarVisitas = (a = [], b = []) => {
     const porId = new Map();
     [...a, ...b].forEach(v => {
@@ -4590,8 +4610,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   onClick={e => e.stopPropagation()}
                   onChange={async e => {
                     const val = e.target.value;
-                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, fecha_visita: val });
-                    onSaveSolicitudes(nuevasSols);
+                    const guardada = await guardarFechaVisitaDesmarque(sol, val);
+                    if (!guardada) return;
                     if (val && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","INFORME EN DOM","INFORME EN SERVIU"].includes(persona.estado_desmarque)) {
                       const nuevoEstado = "VISITA HECHA FALTA INFORME";
                       if (nuevoEstado !== persona.estado_desmarque) {
@@ -9240,14 +9260,15 @@ export default function App() {
         (anterior.fecha_visita || "") !== (s.fecha_visita || "") ||
         JSON.stringify(anterior.documentos || []) !== JSON.stringify(s.documentos || []);
       if (!cambioBase) continue;
-      await supabase.from("solicitudes").upsert({
+      const payload = {
         id: s.id, persona_id: s.personaId, persona_nombre: s.personaNombre,
         programa_id: s.programaId, fecha: s.fecha, comite: s.comite || null,
         codigo_comite: s.codigoComite || null, tipo_comite: s.tipoComite || null,
         profesional_comite: s.profesionalComite || null,
-        documentos: s.documentos,
-        fecha_visita: s.fecha_visita || null
-      });
+        documentos: s.documentos
+      };
+      if (s.fecha_visita) payload.fecha_visita = s.fecha_visita;
+      await supabase.from("solicitudes").upsert(payload);
       const cambios = resumenCambiosDocumentos(anterior?.documentos, s.documentos);
       if (cambios.length) {
         await registrarAuditoria("guardar_solicitudes", "solicitudes", s.id, {
