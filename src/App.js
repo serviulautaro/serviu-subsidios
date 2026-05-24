@@ -253,7 +253,7 @@ const calcularEstadoDesmarque = (sol, estadoActual) => {
   const docs = sol.documentos || [];
   const tieneCarta = docs.some(d => d.nombre && d.nombre.includes("Carta SERVIU") && d.entregado && d.valor);
   const tieneMemo = docs.some(d => d.nombre && d.nombre.includes("Memo DOM") && d.entregado && d.valor);
-  const tieneVisita = !!(sol.fecha_visita && sol.fecha_visita.trim());
+  const tieneVisita = !!fechaVisitaSolicitud(sol);
   if (tieneCarta) return "INFORME EN SERVIU";
   if (tieneMemo) return "INFORME EN DOM";
   if (tieneVisita) return "VISITA HECHA FALTA INFORME";
@@ -261,10 +261,28 @@ const calcularEstadoDesmarque = (sol, estadoActual) => {
 };
 
 const DOC_CALIFICACION_DESMARQUE = "Calificacion para visita";
+const FECHA_VISITA_DESMARQUE_KEY = "__fecha_visita_desmarque__";
 const buscarDocDesmarque = (docs = [], patterns = []) => docs.find(d => {
   const n = docNombreNorm(d);
   return patterns.every(p => n.includes(p));
 });
+const docFechaVisitaDesmarque = (docs = []) => docs.find(d => d?.interno && d?.tipo === FECHA_VISITA_DESMARQUE_KEY);
+const fechaVisitaSolicitud = (sol = {}) => normalizarFechaInput(sol.fecha_visita || docFechaVisitaDesmarque(sol.documentos || [])?.valor || "");
+const documentosConFechaVisita = (docs = [], fecha = "") => {
+  const base = Array.isArray(docs) ? docs : [];
+  const idx = base.findIndex(d => d?.interno && d?.tipo === FECHA_VISITA_DESMARQUE_KEY);
+  const registro = {
+    nombre: "Fecha de visita desmarque",
+    obligatorio: false,
+    entregado: !!fecha,
+    interno: true,
+    tipo: FECHA_VISITA_DESMARQUE_KEY,
+    valor: fecha || ""
+  };
+  return idx >= 0
+    ? base.map((d, i) => i === idx ? { ...d, ...registro } : d)
+    : [...base, registro];
+};
 const docConVb = (doc) => !!doc?.entregado;
 const docCalificacionDesmarque = (docs = []) => docs.find(d => docNombreNorm(d).includes("calificacion para visita"));
 const leerCalificacionDesmarque = (sol) => {
@@ -288,7 +306,7 @@ const estadoLineaDesmarque = (sol = {}) => {
   });
   const docsCompletos = docConVb(cedula) && docConVb(tituloDominio);
   const calificacion = leerCalificacionDesmarque(sol);
-  const visitado = !!normalizarFechaInput(sol.fecha_visita || "");
+  const visitado = !!fechaVisitaSolicitud(sol);
   const memoDom = buscarDocDesmarque(docs, ["memo", "dom"]);
   const solicitudDom = docConVb(memoDom);
   const informeDom = buscarDocDesmarque(docs, ["informe", "dom"]);
@@ -2640,26 +2658,35 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   };
 
   const guardarFechaVisitaDesmarque = async (sol, fecha) => {
-    const fechaAnterior = sol.fecha_visita || "";
+    const fechaAnterior = fechaVisitaSolicitud(sol);
     if (!fecha && fechaAnterior && !window.confirm("¿Quitar la fecha de visita registrada?")) {
       onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior }));
       return false;
     }
-    const solActualizada = { ...sol, fecha_visita: fecha };
+    const documentos = documentosConFechaVisita(sol.documentos || [], fecha);
+    const solActualizada = { ...sol, fecha_visita: fecha, documentos };
     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : solActualizada);
     onSaveSolicitudes(nuevasSols);
 
-    const { error } = await supabase
+    const { error: docsError } = await supabase
       .from("solicitudes")
-      .update({ fecha_visita: fecha || null })
+      .update({ documentos })
       .eq("id", sol.id);
 
-    if (error) {
-      console.warn("[fecha visita] error:", error.message);
-      onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior }));
+    if (docsError) {
+      console.warn("[fecha visita documentos] error:", docsError.message);
+      const docsAnteriores = documentosConFechaVisita(sol.documentos || [], fechaAnterior);
+      onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior, documentos: docsAnteriores }));
       alert("No se pudo guardar la fecha de visita. No se modificó el registro.");
       return false;
     }
+
+    supabase
+      .from("solicitudes")
+      .update({ fecha_visita: fecha || null })
+      .eq("id", sol.id)
+      .then(({ error }) => { if (error) console.warn("[fecha visita columna] respaldo interno usado:", error.message); });
+
     return true;
   };
 
@@ -3396,7 +3423,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             : d
         );
         await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
-        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
+        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
       }
       await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
       onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
@@ -3428,7 +3455,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             : d
         );
         await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
-        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
+        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
       }
       await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones }).eq("id", persona.id);
       onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
@@ -3487,7 +3514,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!solDb) return;
     const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, valor } : d);
     await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
-    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
+    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docs }) || s.fecha_visita || "" } : s));
   };
 
   // Helper: activa el VB (entregado:true) para un doc de solicitud
@@ -3497,7 +3524,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!solDb) return;
     const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, entregado: true } : d);
     await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
-    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
+    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docs }) || s.fecha_visita || "" } : s));
   };
 
   const guardarCalificacionDesmarque = async (sol, estado) => {
@@ -3648,7 +3675,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const estadoVivienda = informeEstadoVivienda;
     const subsidioTexto  = informeSubsidioTexto;
     const sol = misSols[0];
-    const fechaVisita = sol ? fmtFecha(sol.fecha_visita || "") : "";
+    const fechaVisita = sol ? fmtFecha(fechaVisitaSolicitud(sol)) : "";
     setGenerandoInforme(true);
     try {
       const html = generarHtmlInformeJACC({
@@ -4200,7 +4227,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 dominio_terreno: persona.dominio_terreno||"",
                 anio_subsidio: persona.anio_subsidio||"",
                 observaciones: persona.observaciones||"",
-                fecha_visita: sol ? sol.fecha_visita||"" : "",
+                fecha_visita: sol ? fechaVisitaSolicitud(sol) : "",
                 numero_informe_dom: informe ? informe.valor||"" : "",
                 numero_memo_dom: memo ? memo.valor||"" : "",
                 numero_carta_serviu: carta ? carta.valor||"" : "",
@@ -4241,7 +4268,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 {campo("RSH", persona.puntajeRSH ? persona.puntajeRSH + "%" : (persona.puntaje_rsh ? persona.puntaje_rsh + "%" : ""))}
                 {campo("Dominio del Terreno", getVal("dominio_terreno","dominioTerreno"))}
                 {campo("Año de Subsidio", getVal("anio_subsidio","anioSubsidio"))}
-                {campo("Fecha Visita", sol && sol.fecha_visita ? fmtFecha(sol.fecha_visita) : "")}
+                {campo("Fecha Visita", sol && fechaVisitaSolicitud(sol) ? fmtFecha(fechaVisitaSolicitud(sol)) : "")}
                 {campo("N° Informe DOM", informe && informe.valor ? informe.valor : "")}
                 {campo("N° Memorando DOM y Fecha", memo && memo.valor ? memo.valor : "")}
                 {campo("N° Carta SERVIU y Fecha", carta && carta.valor ? carta.valor : "")}
@@ -4617,9 +4644,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             )}
             {/* Campo Fecha de Visita inline para Desmarque */}
             {sol.programaId === "habitabilidad" && (
-              <div style={{ marginBottom: 14, padding: "10px 14px", background: normalizarFechaInput(sol.fecha_visita) ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (normalizarFechaInput(sol.fecha_visita) ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ marginBottom: 14, padding: "10px 14px", background: fechaVisitaSolicitud(sol) ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (fechaVisitaSolicitud(sol) ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", whiteSpace: "nowrap" }}>📅 Fecha de Visita</div>
-                <input type="date" value={normalizarFechaInput(sol.fecha_visita)}
+                <input type="date" value={fechaVisitaSolicitud(sol)}
                   onClick={e => e.stopPropagation()}
                   onChange={async e => {
                     const val = e.target.value;
@@ -4633,8 +4660,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       }
                     }
                   }}
-                  style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (normalizarFechaInput(sol.fecha_visita) ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
-                {normalizarFechaInput(sol.fecha_visita)
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (fechaVisitaSolicitud(sol) ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
+                {fechaVisitaSolicitud(sol)
                   ? <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Visita registrada</span>
                   : <span style={{ fontSize: 11, color: "#B45309" }}>⚠ Sin fecha de visita — estado: No Visitado</span>}
               </div>
@@ -6329,7 +6356,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               <div><strong>Teléfono:</strong> {persona.telefono || "-"}</div>
               <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
               <div><strong>Coordenadas:</strong> {persona.coordenadas || "-"}</div>
-              <div><strong>Fecha de visita:</strong> {(() => { const s = misSols[0]; return s && s.fecha_visita ? s.fecha_visita : <span style={{ color: "#dc2626" }}>No registrada en la ficha</span>; })()}</div>
+              <div><strong>Fecha de visita:</strong> {(() => { const s = misSols[0]; const f = s ? fechaVisitaSolicitud(s) : ""; return f ? f : <span style={{ color: "#dc2626" }}>No registrada en la ficha</span>; })()}</div>
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Año y Tipo de Subsidio</div>
@@ -9120,6 +9147,7 @@ export default function App() {
             profesionalComite: sol.profesional_comite,
             documentos: aliviarDocumentosSolicitud(sol.documentos),
           };
+          mapped.fecha_visita = fechaVisitaSolicitud(mapped);
           // Migrar solicitudes CSP antiguas: agregar documentos que faltan según PROGRAMAS
           if (mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") {
             const prog = programasCarga.find(p => p.id === mapped.programaId);
@@ -9280,7 +9308,6 @@ export default function App() {
         profesional_comite: s.profesionalComite || null,
         documentos: s.documentos
       };
-      if (s.fecha_visita) payload.fecha_visita = s.fecha_visita;
       await supabase.from("solicitudes").upsert(payload);
       const cambios = resumenCambiosDocumentos(anterior?.documentos, s.documentos);
       if (cambios.length) {
