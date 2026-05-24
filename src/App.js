@@ -51,6 +51,15 @@ const todayISO = () => {
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
 };
+const normalizarFechaInput = (value) => {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const cl = v.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (cl) return `${cl[3]}-${String(cl[2]).padStart(2, "0")}-${String(cl[1]).padStart(2, "0")}`;
+  return "";
+};
 const formatPesosChilenos = (value) => {
   const digits = String(value || "").replace(/\D/g, "");
   return digits ? "$" + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
@@ -252,17 +261,11 @@ const calcularEstadoDesmarque = (sol, estadoActual) => {
 };
 
 const DOC_CALIFICACION_DESMARQUE = "Calificacion para visita";
-const docsDesmarqueObligatorios = (docs = []) => docs.filter(d => {
-  const n = docNombreNorm(d);
-  return n.includes("cedula") ||
-    n.includes("titulo") || n.includes("dominio") || n.includes("derecho real") || n.includes("usufructo") || n.includes("goce") ||
-    n.includes("avaluo") ||
-    (n.includes("correo") && n.includes("solicitante"));
-});
 const buscarDocDesmarque = (docs = [], patterns = []) => docs.find(d => {
   const n = docNombreNorm(d);
   return patterns.every(p => n.includes(p));
 });
+const docConVb = (doc) => !!doc?.entregado;
 const docCalificacionDesmarque = (docs = []) => docs.find(d => docNombreNorm(d).includes("calificacion para visita"));
 const leerCalificacionDesmarque = (sol) => {
   const raw = String(docCalificacionDesmarque(sol?.documentos || [])?.valor || "");
@@ -278,24 +281,30 @@ const detalleResultadoDoc = (doc) => {
 };
 const estadoLineaDesmarque = (sol = {}) => {
   const docs = sol.documentos || [];
-  const docsObligatorios = docsDesmarqueObligatorios(docs);
-  const docsCompletos = docsObligatorios.length > 0 && docsObligatorios.every(d => docCompletoEquivalente(d, docs));
+  const cedula = buscarDocDesmarque(docs, ["cedula"]);
+  const tituloDominio = docs.find(d => {
+    const n = docNombreNorm(d);
+    return n.includes("titulo") || n.includes("dominio") || n.includes("derecho real") || n.includes("usufructo") || n.includes("goce");
+  });
+  const docsCompletos = docConVb(cedula) && docConVb(tituloDominio);
   const calificacion = leerCalificacionDesmarque(sol);
-  const visitado = !!(sol.fecha_visita || "").trim();
+  const visitado = !!normalizarFechaInput(sol.fecha_visita || "");
   const memoDom = buscarDocDesmarque(docs, ["memo", "dom"]);
-  const solicitudDom = docCompletoEquivalente(memoDom, docs);
+  const solicitudDom = docConVb(memoDom);
   const informeDom = buscarDocDesmarque(docs, ["informe", "dom"]);
   const informeTexto = valorDocTexto(informeDom);
   const informeDetalle = detalleResultadoDoc(informeDom);
-  const informeAprobado = informeTexto.includes("APROBADO");
+  const informeIngresado = docConVb(informeDom);
+  const informeAprobado = informeIngresado && informeTexto.includes("APROBADO");
   const informeRechazadoApelable = informeTexto.includes("APELAR") || informeTexto.includes("APELABLE");
   const informeRechazado = informeTexto.includes("RECHAZADO") && !informeRechazadoApelable;
   const cartaServiu = buscarDocDesmarque(docs, ["carta", "serviu"]);
-  const ingresadoServiu = docCompletoEquivalente(cartaServiu, docs);
+  const ingresadoServiu = docConVb(cartaServiu);
   const respuestaServiu = buscarDocDesmarque(docs, ["respuesta", "serviu"]);
   const respuestaTexto = valorDocTexto(respuestaServiu);
   const respuestaDetalle = detalleResultadoDoc(respuestaServiu);
-  const desmarcado = respuestaTexto.includes("DESMARCADO") || respuestaTexto.includes("APROBADO");
+  const respuestaIngresada = docConVb(respuestaServiu);
+  const desmarcado = respuestaIngresada && (respuestaTexto.includes("DESMARCADO") || respuestaTexto.includes("APROBADO"));
   const serviuRechazadoApelable = respuestaTexto.includes("APELAR") || respuestaTexto.includes("APELABLE");
   const serviuRechazado = respuestaTexto.includes("RECHAZADO") && !serviuRechazadoApelable;
   let corte = "";
@@ -303,8 +312,8 @@ const estadoLineaDesmarque = (sol = {}) => {
   if (informeRechazado) corte = "RECHAZADO_DOM";
   if (serviuRechazado || serviuRechazadoApelable || desmarcado) corte = "FINAL";
   return {
-    docsCompletos, calificacion, visitado, solicitudDom, informeAprobado, informeRechazadoApelable,
-    informeRechazado, informeDetalle, ingresadoServiu, desmarcado, serviuRechazadoApelable, serviuRechazado, respuestaDetalle, corte,
+    docsCompletos, calificacion, visitado, solicitudDom, informeIngresado, informeAprobado, informeRechazadoApelable,
+    informeRechazado, informeDetalle, ingresadoServiu, respuestaIngresada, desmarcado, serviuRechazadoApelable, serviuRechazado, respuestaDetalle, corte,
   };
 };
 
@@ -316,9 +325,11 @@ const estadoActualLineaDesmarque = (sol = {}, fallback = "") => {
   if (st.docsCompletos && st.calificacion.estado === "CALIFICA") actual = { key: "LISTO_PARA_VISITA", label: "Listo para visita", bg: "#ECFDF5", color: "#047857" };
   if (st.visitado) actual = { key: "SOLICITANTE_VISITADO", label: "Solicitante visitado", bg: "#FFF3E0", color: "#C2693A" };
   if (st.solicitudDom) actual = { key: "SOLICITUD_EN_DOM", label: "Solicitud en DOM", bg: "#F5F3FF", color: "#7C3AED" };
+  if (st.informeIngresado) actual = { key: "INFORME_DOM", label: "Informe DOM ingresado", bg: "#ECFDF5", color: "#047857" };
   if (st.informeAprobado) actual = { key: "INFORME_DOM_APROBADO", label: "Informe DOM aprobado", bg: "#ECFDF5", color: "#047857" };
   if (st.informeRechazadoApelable) actual = { key: "INFORME_DOM_RECHAZADO_APELABLE", label: "Informe DOM rechazado apelable", bg: "#FFFBEB", color: "#B45309" };
   if (st.ingresadoServiu) actual = { key: "INFORME EN SERVIU", label: "Informe en SERVIU", bg: "#ECFDF5", color: "#3D5A23" };
+  if (st.respuestaIngresada) actual = { key: "RESPUESTA_SERVIU", label: "Respuesta SERVIU ingresada", bg: "#ECFDF5", color: "#047857" };
   if (st.calificacion.estado === "NO_CALIFICA") actual = { key: "NO CALIFICA", label: "No califica", bg: "#FEF2F2", color: "#B91C1C" };
   if (st.informeRechazado) actual = { key: "RECHAZADO DOM", label: "Rechazado DOM", bg: "#FEF2F2", color: "#B91C1C" };
   if (st.desmarcado) actual = { key: "DESMARCADO", label: "Desmarcado", bg: "#E0F7FA", color: "#0E7490" };
@@ -1013,27 +1024,26 @@ function LineaAvanceDesmarque({ sol }) {
   const [abiertos, setAbiertos] = useState({});
   const st = estadoLineaDesmarque(sol);
   const estadoActual = estadoActualLineaDesmarque(sol);
-  const paso = (label, estado, detalle = "") => ({ label, estado, detalle });
+  const paso = (numero, label, estado, detalle = "") => ({ numero, label, estado, detalle });
   const pasos = [
-    paso("Ingresa solicitante", "done", "Cédula de identidad inicial"),
-    paso("Documentos obligatorios", st.docsCompletos ? "done" : "pending", "Cédula color, dominio, avalúo y correo"),
+    paso(1, "Ingresa solicitante", "done", "Datos iniciales del solicitante"),
+    paso(2, "Documentos obligatorios", st.docsCompletos ? "done" : "pending", "VB cédula de identidad y título de dominio"),
   ];
 
   if (st.calificacion.estado === "NO_CALIFICA") {
-    pasos.push(paso("NO CALIFICA", "stop-red", st.calificacion.detalle));
+    pasos.push(paso(3, "NO CALIFICA", "stop-red", st.calificacion.detalle));
   } else {
-    pasos.push(paso("Califica para visita", st.calificacion.estado === "CALIFICA" ? "done" : "pending", "Revisión manual"));
-    pasos.push(paso("Listo para visita", st.docsCompletos && st.calificacion.estado === "CALIFICA" ? "done" : "pending"));
-    pasos.push(paso("Solicitante visitado", st.visitado ? "done" : "pending"));
-    pasos.push(paso("Solicitud en DOM", st.solicitudDom ? "done" : "pending", "Memo DOM y recibido"));
-    if (st.informeRechazado) pasos.push(paso("RECHAZADO DOM", "stop-red", st.informeDetalle));
-    else if (st.informeRechazadoApelable) pasos.push(paso("Informe DOM rechazado apelable", "warn", st.informeDetalle));
-    else pasos.push(paso("Informe DOM aprobado", st.informeAprobado ? "done" : "pending", st.informeDetalle));
-    pasos.push(paso("Ingresado a SERVIU", st.ingresadoServiu ? "done" : "pending", "Carta y comprobante"));
-    if (st.desmarcado) pasos.push(paso("DESMARCADO", "final-green", st.respuestaDetalle));
-    else if (st.serviuRechazadoApelable) pasos.push(paso("RECHAZADO APELABLE", "warn", st.respuestaDetalle));
-    else if (st.serviuRechazado) pasos.push(paso("DESMARQUE RECHAZADO", "stop-red", st.respuestaDetalle));
-    else pasos.push(paso("Respuesta SERVIU", "pending"));
+    pasos.push(paso(3, "Califica para visita", st.calificacion.estado === "CALIFICA" ? "done" : "pending", "Acción manual del usuario"));
+    pasos.push(paso(5, "Fecha de visita", st.visitado ? "done" : "pending"));
+    pasos.push(paso(6, "Memo recibido DOM", st.solicitudDom ? "done" : "pending", "Subir memo recibido"));
+    if (st.informeRechazado) pasos.push(paso(7, "RECHAZADO DOM", "stop-red", st.informeDetalle));
+    else if (st.informeRechazadoApelable) pasos.push(paso(7, "Informe DOM rechazado apelable", "warn", st.informeDetalle));
+    else pasos.push(paso(7, "Informe DOM", st.informeIngresado ? "done" : "pending", st.informeDetalle));
+    pasos.push(paso(8, "Ingresado a SERVIU", st.ingresadoServiu ? "done" : "pending"));
+    if (st.desmarcado) pasos.push(paso(9, "DESMARCADO", "final-green", st.respuestaDetalle));
+    else if (st.serviuRechazadoApelable) pasos.push(paso(9, "RECHAZADO APELABLE", "warn", st.respuestaDetalle));
+    else if (st.serviuRechazado) pasos.push(paso(9, "DESMARQUE RECHAZADO", "stop-red", st.respuestaDetalle));
+    else pasos.push(paso(9, "Respuesta SERVIU", st.respuestaIngresada ? "done" : "pending", st.respuestaDetalle));
   }
 
   const pasoActualIdx = pasos.reduce((ultimo, p, idx) => p.estado !== "pending" ? idx : ultimo, -1);
@@ -1060,9 +1070,8 @@ function LineaAvanceDesmarque({ sol }) {
         return <div key={idx} title={tieneDetalle ? "Pincha para ver/ocultar detalle" : p.label}
           onClick={() => tieneDetalle && setAbiertos(prev => ({ ...prev, [idx]: !prev[idx] }))}
           style={{ minWidth: 135, flex: "1 1 135px", border: (esActual ? "3px" : "1.5px") + " solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: esActual ? "7px 9px" : "8px 10px", cursor: tieneDetalle ? "pointer" : "default", boxShadow: esActual ? "0 0 0 3px rgba(30,58,95,0.10)" : "none" }}>
-          <div style={{ fontSize: 10, fontWeight: 800, color: s.color, opacity: .8 }}>PASO {idx + 1}</div>
+          <div style={{ fontSize: 10, fontWeight: 800, color: s.color, opacity: .8 }}>PASO {p.numero}</div>
           <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{p.label}</div>
-          {esActual && <div style={{ fontSize: 9, marginTop: 4, fontWeight: 900, color: s.color, letterSpacing: 0, textTransform: "uppercase" }}>Estado del solicitante</div>}
           {tieneDetalle && <div style={{ fontSize: 10, marginTop: 4, color: s.color, opacity: .85 }}>{abierto ? "Ocultar detalle" : "Ver detalle"}</div>}
           {tieneDetalle && abierto && <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: "rgba(255,255,255,0.72)", border: "1px solid " + s.border, fontSize: 11, lineHeight: 1.35, color: "#111827", whiteSpace: "pre-wrap" }}>{p.detalle}</div>}
         </div>;
@@ -2632,6 +2641,10 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
 
   const guardarFechaVisitaDesmarque = async (sol, fecha) => {
     const fechaAnterior = sol.fecha_visita || "";
+    if (!fecha && fechaAnterior && !window.confirm("¿Quitar la fecha de visita registrada?")) {
+      onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior }));
+      return false;
+    }
     const solActualizada = { ...sol, fecha_visita: fecha };
     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : solActualizada);
     onSaveSolicitudes(nuevasSols);
@@ -3383,7 +3396,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             : d
         );
         await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
-        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados } : s));
+        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
       }
       await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
       onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
@@ -3415,7 +3428,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             : d
         );
         await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
-        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados } : s));
+        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
       }
       await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones }).eq("id", persona.id);
       onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
@@ -3474,7 +3487,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!solDb) return;
     const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, valor } : d);
     await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
-    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs } : s));
+    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
   };
 
   // Helper: activa el VB (entregado:true) para un doc de solicitud
@@ -3484,7 +3497,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!solDb) return;
     const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, entregado: true } : d);
     await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
-    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs } : s));
+    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: solDb.fecha_visita || s.fecha_visita || "" } : s));
   };
 
   const guardarCalificacionDesmarque = async (sol, estado) => {
@@ -4604,9 +4617,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             )}
             {/* Campo Fecha de Visita inline para Desmarque */}
             {sol.programaId === "habitabilidad" && (
-              <div style={{ marginBottom: 14, padding: "10px 14px", background: sol.fecha_visita ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (sol.fecha_visita ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ marginBottom: 14, padding: "10px 14px", background: normalizarFechaInput(sol.fecha_visita) ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (normalizarFechaInput(sol.fecha_visita) ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", whiteSpace: "nowrap" }}>📅 Fecha de Visita</div>
-                <input type="date" value={sol.fecha_visita || ""}
+                <input type="date" value={normalizarFechaInput(sol.fecha_visita)}
                   onClick={e => e.stopPropagation()}
                   onChange={async e => {
                     const val = e.target.value;
@@ -4620,8 +4633,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       }
                     }
                   }}
-                  style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (sol.fecha_visita ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
-                {sol.fecha_visita
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (normalizarFechaInput(sol.fecha_visita) ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
+                {normalizarFechaInput(sol.fecha_visita)
                   ? <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Visita registrada</span>
                   : <span style={{ fontSize: 11, color: "#B45309" }}>⚠ Sin fecha de visita — estado: No Visitado</span>}
               </div>
