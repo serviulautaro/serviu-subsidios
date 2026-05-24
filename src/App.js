@@ -789,46 +789,84 @@ ${_encabezado()}
 
 const SOLICITUD_2026_PDF = "/plantillas/formulario_solicitud_habilitacion_inhabitabilidad_2026.pdf";
 
+function _html(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function anioSolo(v) {
+  if (!v) return '';
+  const m = String(v).match(/\b(19|20)\d{2}\b/);
+  return m ? m[0] : String(v);
+}
+
+function textoSubsidioSolicitud(persona = {}) {
+  const anio = anioSolo(persona.anio_subsidio || persona.anioSubsidio);
+  const existente = persona.subsidio_adjudicado || persona.subsidioAdjudicado || persona.subsidio || persona.programa_subsidio || "";
+  if (existente) return existente;
+  const tipo = String(persona.tipo_comite || persona.tipoComite || persona.tipo || "").toUpperCase();
+  if (tipo.includes("RURAL")) return `SUBSIDIOS RURALES TITULO I Llamado N°1${anio ? " Año " + anio : ""}`;
+  if (tipo.includes("URBANO")) return `SUBSIDIO HABITACIONAL URBANO${anio ? " Año " + anio : ""}`;
+  return anio ? `SUBSIDIO HABITACIONAL Año ${anio}` : "";
+}
+
 function generarHtmlSolicitud({ nombre, rut, direccion, telefono, subsidio, anioSubsidio }) {
   const hoy = new Date();
   const f = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
-  // Extraer solo el número de año (ej: "Año 1992" → "1992", "TITULO I Año 1992" → "1992")
-  const soloAnio = (() => {
-    if (!anioSubsidio) return '';
-    const m = String(anioSubsidio).match(/\b(19|20)\d{2}\b/);
-    return m ? m[0] : anioSubsidio;
-  })();
-  const fila = (l, v) => `<tr><td class="lbl" style="width:38%">${l}</td><td>${v||''}</td></tr>`;
+  const soloAnio = anioSolo(anioSubsidio);
+  const campo = (label, value, extra = '') => `
+    <div class="sol-row ${extra}">
+      <div class="sol-label">${label}</div>
+      <div class="sol-value">${_html(value)}</div>
+    </div>`;
   const chk = (l) => `<tr><td style="width:36px;text-align:center">☐</td><td>${l}</td></tr>`;
   return _wrap('Formulario de Habilitación', `
-<p style="text-align:center;font-size:13pt;font-weight:bold;margin-bottom:14px">Formulario de Habilitación Vivienda Inhabitable/Siniestrada</p>
-<div style="border:1px solid #cbd5e1;background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-  <p style="margin:0 0 8px 0"><b>Plantilla oficial utilizada:</b> Adj. Of. 4949_2141991_Formulario_Solicitud_Habilitacin_Inhabitabilidad.pdf</p>
-  <p style="margin:0">Abrir formulario oficial: <a href="${SOLICITUD_2026_PDF}" target="_blank" rel="noopener">Formulario Solicitud Habilitación Inhabitabilidad 2026</a></p>
-</div>
-<p style="margin-bottom:14px">Datos del solicitante para completar el formulario oficial SERVIU:</p>
-<table style="margin-bottom:16px"><tbody>
-  ${fila('NOMBRE BENEFICIARIO', nombre||'')}
-  ${fila('RUT',rut||'')}
-  ${fila('COMUNA','LAUTARO')}
-  ${fila('DIRECCIÓN', direccion||'')}
-  ${fila('TELÉFONO',telefono||'')}
-  ${fila('CORREO ELECTRÓNICO','Jcampos@munilautaro.cl')}
-  ${fila('SUBSIDIO ADJUDICADO',subsidio||'')}
-  ${fila('AÑO DEL SUBSIDIO',soloAnio)}
-</tbody></table>
-<table><thead><tr><th colspan="2" style="text-align:left">DOCUMENTOS A ADJUNTAR</th></tr></thead><tbody>
-  ${chk('Fotocopia de cédula de Identidad por ambos lados.')}
-  ${chk('DOCUMENTO DOM')}
-  ${chk('Registro de Propiedad otorgado por Conservador de Bienes Raíces.')}
-</tbody></table>
-<div style="margin-top:40px;display:flex;justify-content:space-between">
-  <p>FIRMA: ___________________________</p>
-  <p><b>Fecha:</b> ${f}</p>
-</div>
-<div style="page-break-before:always;margin-top:20px">
-  <p style="font-weight:bold;margin-bottom:10px">Vista del formulario oficial cargado en el sistema</p>
-  <iframe title="Formulario oficial SERVIU" src="${SOLICITUD_2026_PDF}" style="width:100%;height:900px;border:1px solid #cbd5e1;border-radius:8px"></iframe>
+<style>
+.sol-oficial{font-size:9pt;line-height:1.3}
+.sol-oficial .sol-titulo{text-align:center;font-size:13pt;font-weight:bold;margin:6px 0 18px}
+.sol-oficial .sol-nota{border:1px solid #cbd5e1;background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:16px}
+.sol-oficial .sol-parrafo{margin:0 0 14px;text-align:justify}
+.sol-grid{border:1.5px solid #222;margin-bottom:16px}
+.sol-row{display:grid;grid-template-columns:38% 62%;min-height:30px;border-bottom:1px solid #222}
+.sol-row:last-child{border-bottom:0}
+.sol-label{font-weight:bold;background:#d9eaf7;border-right:1px solid #222;padding:7px 8px}
+.sol-value{padding:7px 8px;white-space:pre-wrap;text-transform:uppercase}
+.sol-row.tall{min-height:44px}
+.sol-docs th{background:#1e3a5f;color:#fff;text-align:left}
+.sol-firma{margin-top:42px;display:flex;justify-content:space-between;gap:24px}
+.sol-link{color:#1d4ed8;text-decoration:none}
+@media print{.sol-oficial .sol-nota{display:none}.sol-oficial{page-break-after:always}}
+</style>
+<div class="sol-oficial">
+  <p class="sol-titulo">Formulario de Habilitación Vivienda Inhabitable/Siniestrada</p>
+  <div class="sol-nota">
+    <p style="margin:0 0 6px 0"><b>Plantilla oficial utilizada:</b> Adj. Of. 4949_2141991_Formulario_Solicitud_Habilitacin_Inhabitabilidad.pdf</p>
+    <p style="margin:0">Archivo oficial base: <a class="sol-link" href="${SOLICITUD_2026_PDF}" target="_blank" rel="noopener">Formulario Solicitud Habilitación Inhabitabilidad 2026</a></p>
+  </div>
+  <p class="sol-parrafo">Solicito habilitación para poder postular a un nuevo subsidio habitacional, en razón a la inhabitabilidad y/o siniestro sufrido en mi vivienda.</p>
+  <div class="sol-grid">
+    ${campo('NOMBRE BENEFICIARIO', nombre || '')}
+    ${campo('RUT', rut || '')}
+    ${campo('COMUNA', 'LAUTARO')}
+    ${campo('DIRECCIÓN', direccion || '', 'tall')}
+    ${campo('TELÉFONO', telefono || '')}
+    ${campo('CORREO ELECTRÓNICO', 'Jcampos@munilautaro.cl')}
+    ${campo('SUBSIDIO ADJUDICADO', subsidio || '', 'tall')}
+    ${campo('AÑO DEL SUBSIDIO', soloAnio)}
+  </div>
+  <table class="sol-docs"><thead><tr><th colspan="2">DOCUMENTOS A ADJUNTAR</th></tr></thead><tbody>
+    ${chk('Fotocopia de cédula de Identidad por ambos lados.')}
+    ${chk('DOCUMENTO DOM')}
+    ${chk('Registro de Propiedad otorgado por Conservador de Bienes Raíces.')}
+  </tbody></table>
+  <div class="sol-firma">
+    <p>FIRMA: ___________________________</p>
+    <p><b>Fecha:</b> ${f}</p>
+  </div>
 </div>`);
 }
 
@@ -2586,6 +2624,14 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     return visitasRecuperadas;
   };
 
+  const abrirModalSolicitud = () => {
+    setFormSolicitud({
+      subsidio: textoSubsidioSolicitud(persona),
+      anioSubsidio: anioSolo(persona?.anio_subsidio || persona?.anioSubsidio)
+    });
+    setShowModalSolicitud(true);
+  };
+
   const fusionarVisitas = (a = [], b = []) => {
     const porId = new Map();
     [...a, ...b].forEach(v => {
@@ -4192,7 +4238,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 <button onClick={() => { setInformeSubsidioTexto(persona.anio_subsidio || ""); setShowModalInformeJACC(true); }} style={{ background: "#166534", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📋 Generar Informe JACC</button>
                 <button onClick={() => setShowModalMemo(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Memo DOM</button>
                 <button onClick={() => setShowModalCarta(true)} style={{ background: "#0891B2", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Carta SERVIU</button>
-                <button onClick={() => { setFormSolicitud(prev => ({ ...prev, anioSubsidio: persona.anio_subsidio || "" })); setShowModalSolicitud(true); }} style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Solicitud</button>
+                <button onClick={abrirModalSolicitud} style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Solicitud</button>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#DC2626", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                   📎 Subir Informe DOM
                   <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
@@ -4294,7 +4340,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             <button onClick={() => {
                               if (esMemoDom)     setShowModalMemo(true);
                               if (esCartaServ)   setShowModalCarta(true);
-                              if (esSolicitud)   setShowModalSolicitud(true);
+                              if (esSolicitud)   abrirModalSolicitud();
                               if (esInformeJACC) setShowModalInformeJACC(true);
                               setDocMenu(null);
                             }}
