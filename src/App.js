@@ -164,7 +164,7 @@ const docCompletoEquivalente = (doc, docs = []) => {
 };
 const docsParaConteoSolicitud = (docs = []) => (docs || []).filter(d => {
   if (d.interno) return false;
-  if (d.obligatorio === false && !docTieneValor(d)) return false;
+  if (d.obligatorio === false) return false;
   return true;
 });
 const conteoDocumentosSolicitud = (docs = []) => {
@@ -3838,8 +3838,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
   };
 
-  const totalDocs = misSols.flatMap(s => s.documentos).filter(d => !d.interno);
-  const docsOk = totalDocs.filter(d => d.entregado).length;
+  const conteoDocsDetalle = misSols.reduce((acc, s) => {
+    const c = conteoDocumentosSolicitud(s.documentos || []);
+    return { completos: acc.completos + c.completos, total: acc.total + c.total };
+  }, { completos: 0, total: 0 });
 
   return (
     <div>
@@ -3887,7 +3889,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 28, textAlign: "center" }}>
             <div><div style={{ fontSize: 28, fontWeight: 800, color: "#1e3a5f" }}>{misSols.length}</div><div style={{ fontSize: 11, color: "#aaa" }}>PROGRAMAS</div></div>
-            <div><div style={{ fontSize: 28, fontWeight: 800, color: docsOk === totalDocs.length && totalDocs.length > 0 ? "#059669" : "#DC2626" }}>{docsOk}/{totalDocs.length}</div><div style={{ fontSize: 11, color: "#aaa" }}>DOCUMENTOS</div></div>
+            <div><div style={{ fontSize: 28, fontWeight: 800, color: conteoDocsDetalle.completos === conteoDocsDetalle.total && conteoDocsDetalle.total > 0 ? "#059669" : "#DC2626" }}>{conteoDocsDetalle.completos}/{conteoDocsDetalle.total}</div><div style={{ fontSize: 11, color: "#aaa" }}>DOCUMENTOS</div></div>
             <div><div style={{ fontSize: 28, fontWeight: 800, color: "#7C3AED" }}>{archivos.length}</div><div style={{ fontSize: 11, color: "#aaa" }}>ARCHIVOS</div></div>
           </div>
         </div>
@@ -7554,12 +7556,13 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
   });
 
   const completas = solicitudesBase.filter(s => pct(s.documentos || []) === 100).length;
-  const totalDocs = solicitudesBase.flatMap(s => s.documentos || []);
-  const docsEntregados = solicitudesBase.reduce((acc, s) => {
-    const docs = s.documentos || [];
-    return acc + docs.filter(d => docCompletoEquivalente(d, docs)).length;
-  }, 0);
-  const docsPendientes = totalDocs.length - docsEntregados;
+  const conteoDocsSolicitudes = solicitudesBase.reduce((acc, s) => {
+    const c = conteoDocumentosSolicitud(s.documentos || []);
+    return { completos: acc.completos + c.completos, total: acc.total + c.total };
+  }, { completos: 0, total: 0 });
+  const docsEntregados = conteoDocsSolicitudes.completos;
+  const docsTotal = conteoDocsSolicitudes.total;
+  const docsPendientes = docsTotal - docsEntregados;
 
   const seleccionarPersona = (persona) => {
     setPersonaSelId(persona.id);
@@ -7645,7 +7648,7 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
                   Cédula: {personaSeleccionada.rut || "—"} · Comité: {personaSeleccionada.comite || "Sin comité"}
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                  Solicitudes activas: {solicitudesBase.length} · Documentos: {docsEntregados}/{totalDocs.length} · Pendientes: {docsPendientes}
+                  Solicitudes activas: {solicitudesBase.length} · Documentos: {docsEntregados}/{docsTotal} · Pendientes: {docsPendientes}
                 </div>
               </div>
               {onDetail && (
