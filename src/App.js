@@ -162,18 +162,31 @@ const docCompletoEquivalente = (doc, docs = []) => {
   }
   return false;
 };
-const docsParaConteoSolicitud = (docs = []) => (docs || []).filter(d => {
+const esDocConteoHabitabilidad = (doc = {}) => {
+  if (doc.interno) return false;
+  const n = docNombreNorm(doc);
+  if (n.includes("memo") || n.includes("carta") || n.includes("informe dom") || n.includes("respuesta serviu")) return false;
+  if (n.includes("calificacion") || n.includes("fecha de visita")) return false;
+  return n.includes("cedula") ||
+    n.includes("titulo") || n.includes("dominio") || n.includes("derecho real") || n.includes("usufructo") || n.includes("goce") ||
+    n.includes("avaluo") ||
+    (n.includes("correo") && n.includes("solicitante"));
+};
+const docsParaConteoSolicitud = (docs = [], programaId = "") => {
+  if (programaId === "habitabilidad") return (docs || []).filter(esDocConteoHabitabilidad);
+  return (docs || []).filter(d => {
   if (d.interno) return false;
   if (d.obligatorio === false) return false;
   return true;
-});
-const conteoDocumentosSolicitud = (docs = []) => {
-  const visibles = docsParaConteoSolicitud(docs);
+  });
+};
+const conteoDocumentosSolicitud = (docs = [], programaId = "") => {
+  const visibles = docsParaConteoSolicitud(docs, programaId);
   const completos = visibles.filter(d => docCompletoEquivalente(d, visibles)).length;
   return { visibles, completos, total: visibles.length };
 };
-const pct = (docs = []) => {
-  const { completos, total } = conteoDocumentosSolicitud(docs);
+const pct = (docs = [], programaId = "") => {
+  const { completos, total } = conteoDocumentosSolicitud(docs, programaId);
   return total ? Math.round(completos / total * 100) : 0;
 };
 const statusColor = (p) => p === 100 ? "#059669" : p >= 50 ? "#D97706" : "#DC2626";
@@ -1243,7 +1256,7 @@ function ProgramaFigura({ programa, tipo = "", size = 56 }) {
 }
 
 function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav }) {
-  const completas = solicitudes.filter(s => pct(s.documentos) === 100).length;
+  const completas = solicitudes.filter(s => pct(s.documentos, s.programaId) === 100).length;
   const todosProgramas = combinarProgramas(programasCustom);
   return (
     <div>
@@ -1270,7 +1283,7 @@ function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav
           const comitesPrograma = comites.filter(c => c.programaId === p.id);
           const personasPrograma = personas.filter(per => comitesPrograma.some(c => c.id === per.comiteId));
           const sols = solicitudes.filter(s => s.programaId === p.id);
-          const comp = sols.filter(s => pct(s.documentos) === 100).length;
+          const comp = sols.filter(s => pct(s.documentos, s.programaId) === 100).length;
           return (
             <div key={p.id} onClick={() => onNav("comites_prog_" + p.id)} style={{ background: "#fff", borderRadius: 14, padding: "20px 22px", border: "1px solid #e8e3de", cursor: "pointer" }}>
               <div style={{ marginBottom: 10 }}><ProgramaFigura programa={p} size={48} /></div>
@@ -3839,7 +3852,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   const conteoDocsDetalle = misSols.reduce((acc, s) => {
-    const c = conteoDocumentosSolicitud(s.documentos || []);
+    const c = conteoDocumentosSolicitud(s.documentos || [], s.programaId);
     return { completos: acc.completos + c.completos, total: acc.total + c.total };
   }, { completos: 0, total: 0 });
 
@@ -4456,8 +4469,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
       {misSols.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
-        const p = pct(sol.documentos);
-        const conteoSol = conteoDocumentosSolicitud(sol.documentos);
+        const p = pct(sol.documentos, sol.programaId);
+        const conteoSol = conteoDocumentosSolicitud(sol.documentos, sol.programaId);
         const ok = conteoSol.completos;
         const progNombreNorm = (prog?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const esMave = sol.programaId === "mave_rural" || progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
@@ -6873,7 +6886,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
 
   const tarjeta = (prog) => {
     const sols = solicitudes.filter(s => s.programaId === prog.id);
-    const comp = sols.filter(s => pct(s.documentos) === 100).length;
+    const comp = sols.filter(s => pct(s.documentos, s.programaId) === 100).length;
     return (
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", overflow: "hidden" }}>
         <div style={{ background: prog.colorLight || "#F9FAFB", padding: "18px 24px", borderBottom: "3px solid " + (prog.color || "#6B7280"), display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -7548,16 +7561,16 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
 
   const filtered = solicitudesBase.filter(s => {
     const docs = s.documentos || [];
-    const p = pct(docs);
+    const p = pct(docs, s.programaId);
     if (filtProg !== "todos" && s.programaId !== filtProg) return false;
     if (filtEst === "completas" && p < 100) return false;
     if (filtEst === "incompletas" && p === 100) return false;
     return true;
   });
 
-  const completas = solicitudesBase.filter(s => pct(s.documentos || []) === 100).length;
+  const completas = solicitudesBase.filter(s => pct(s.documentos || [], s.programaId) === 100).length;
   const conteoDocsSolicitudes = solicitudesBase.reduce((acc, s) => {
-    const c = conteoDocumentosSolicitud(s.documentos || []);
+    const c = conteoDocumentosSolicitud(s.documentos || [], s.programaId);
     return { completos: acc.completos + c.completos, total: acc.total + c.total };
   }, { completos: 0, total: 0 });
   const docsEntregados = conteoDocsSolicitudes.completos;
@@ -7686,8 +7699,8 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
         {filtered.map(s => {
           const prog = todosProgramas.find(p => p.id === s.programaId);
           const docs = s.documentos || [];
-          const p = pct(docs);
-          const conteo = conteoDocumentosSolicitud(docs);
+          const p = pct(docs, s.programaId);
+          const conteo = conteoDocumentosSolicitud(docs, s.programaId);
           const ok = conteo.completos;
           return (
             <div key={s.id} style={{ background: "#fff", borderRadius: 12, padding: "16px 22px", border: "1px solid #e8e3de" }}>
@@ -7966,7 +7979,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
 
   const completas = miembros.filter(p => {
     const sols = getSols(p.id);
-    return sols.length > 0 && sols.every(s => pct(s.documentos) === 100);
+    return sols.length > 0 && sols.every(s => pct(s.documentos, s.programaId) === 100);
   }).length;
 
   return (
@@ -8365,11 +8378,11 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
         {filtered.map(c => {
           const miembros = personas.filter(p => pertenecePersonaComite(p, c));
           const totalSols = solicitudes.filter(s => miembros.some(m => m.id === s.personaId));
-          const completas = totalSols.filter(s => pct(s.documentos) === 100).length;
+          const completas = totalSols.filter(s => pct(s.documentos, s.programaId) === 100).length;
           const pctComite = miembros.length > 0
             ? Math.round(miembros.filter(p => {
               const sols = solicitudes.filter(s => s.personaId === p.id);
-              return sols.length > 0 && sols.every(s => pct(s.documentos) === 100);
+              return sols.length > 0 && sols.every(s => pct(s.documentos, s.programaId) === 100);
             }).length / miembros.length * 100)
             : 0;
 
