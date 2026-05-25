@@ -5124,10 +5124,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const antecRecepcionFecha = antecPartes[3] || "";
                 const antecM2 = antecPartes[4] || "";
                 const antecEsNA = esAntecedentesVivienda && antecNumero.trim() === "N/A";
-                const antecOpcion = antecEsNA ? "NA" : (antecNumero.trim() || antecAnio.trim() ? "SI" : "");
+                const antecSeleccionSi = esAntecedentesVivienda && antecNumero.trim() === "__SI__";
+                const antecNumeroVisible = antecSeleccionSi ? "" : antecNumero;
+                const antecOpcion = antecEsNA ? "NA" : (antecSeleccionSi || antecNumero.trim() || antecAnio.trim() ? "SI" : "");
                 const antecCompleto = esAmpliacion
                   ? !!(antecNumero.trim() && antecAnio.trim() && antecRecepcionNumero.trim() && antecRecepcionFecha.trim() && antecM2.trim())
-                  : antecEsNA || !!(antecNumero.trim() && antecAnio.trim());
+                  : antecEsNA || !!(antecNumeroVisible.trim() && antecAnio.trim());
 
                 // Documentos de trámite Desmarque: "numero|YYYY-MM-DD"
                 const esInformeDOM = !esCsp && doc.nombre && doc.nombre.includes("Informe DOM");
@@ -6013,7 +6015,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                     syncPersona({ antecedentesVivienda: "N/A" });
                                   } else {
                                     onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"", entregado:false})
+                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"__SI__|", entregado:false})
                                     }));
                                   }
                                 }}
@@ -6027,7 +6029,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             {antecEsNA && <div style={{ fontSize:10, color:"#059669", fontWeight:600 }}>✓ Marcado como N/A — VB activado sin archivo</div>}
                             {antecOpcion === "SI" && (
                           <div style={{ display: "grid", gap: 5 }}>
-                            <input type="text" placeholder="N° del certificado (ej: 25)" value={antecNumero}
+                            <input type="text" placeholder="N° del certificado (ej: 25)" value={antecNumeroVisible}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = e.target.value + "|" + antecAnio;
@@ -6037,14 +6039,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             <input type="date" value={normalizarFechaInput(antecAnio)}
                               onClick={e => e.stopPropagation()}
                               onChange={async e => {
-                                const newValor = antecNumero + "|" + e.target.value;
+                                const newValor = antecNumeroVisible + "|" + e.target.value;
                                 onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
-                                if (antecNumero.trim() && e.target.value.trim()) {
-                                  await syncPersona({ antecedentesVivienda: "Certificado N° " + antecNumero.trim() + " Fecha " + fmtFecha(e.target.value.trim()) });
+                                if (antecNumeroVisible.trim() && e.target.value.trim()) {
+                                  await syncPersona({ antecedentesVivienda: "Certificado N° " + antecNumeroVisible.trim() + " Fecha " + fmtFecha(e.target.value.trim()) });
                                 }
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: Certificado N° {antecNumero} Fecha {fmtFecha(antecAnio)}</div>}
+                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: Certificado N° {antecNumeroVisible} Fecha {fmtFecha(antecAnio)}</div>}
                             {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para marcar VB</div>}
                           </div>
                             )}
