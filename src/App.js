@@ -1810,6 +1810,34 @@ function calcularAhorro(rsh) {
   return "";
 }
 
+const valorDesdeDocsCsp = (solicitudes = [], matcher) => {
+  for (const sol of solicitudes || []) {
+    if (sol.programaId !== "csp_rural" && sol.programaId !== "csp_urbano") continue;
+    for (const doc of sol.documentos || []) {
+      const n = docNombreNorm(doc);
+      if (!matcher(n, doc)) continue;
+      const valor = String(doc.valor || "").trim();
+      if (valor) return valor;
+    }
+  }
+  return "";
+};
+
+const fechaNacimientoDesdeSolicitudes = (solicitudes = []) => {
+  const desdeCedula = valorDesdeDocsCsp(solicitudes, n => n.includes("cedula") && n.includes("identidad"));
+  const fechaCedula = normalizarFechaInput((desdeCedula.split("|")[1] || "").trim());
+  if (fechaCedula) return fechaCedula;
+  const directa = valorDesdeDocsCsp(solicitudes, n => n.includes("fecha") && n.includes("nacimiento"));
+  return normalizarFechaInput(directa);
+};
+
+const rshDesdeSolicitudes = (solicitudes = []) => {
+  const valor = valorDesdeDocsCsp(solicitudes, n =>
+    n.includes("registro social") || n.includes("rsh") || n.includes("rdh")
+  );
+  return (valor.split("|")[0] || "").trim();
+};
+
 function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   const [modo, setModo] = useState("ver");
   const [form, setForm] = useState({ ...persona });
@@ -1884,6 +1912,9 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
     <div style={{ ...sectionTitleStyle, marginTop: 10 }}>{titulo}</div>
   );
 
+  const fechaNacFicha = persona.fechaNacimiento || persona.fecha_nacimiento || fechaNacimientoDesdeSolicitudes(misSols);
+  const rshFicha = persona.puntajeRSH || persona.puntaje_rsh || rshDesdeSolicitudes(misSols);
+
   return (
     <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
       <div style={{ background: "#FFFBEB", borderBottom: "3px solid #D97706", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1905,18 +1936,18 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
-            {campo("Fecha de Nacimiento", fmtFecha(persona.fechaNacimiento))}
+            {campo("Fecha de Nacimiento", fmtFecha(fechaNacFicha))}
             {campo("Dirección", persona.direccion)}
             {campo("Coordenadas", persona.coordenadas)}
             {campo("Rol", persona.rol)}
             {campo("Teléfono", persona.telefono)}
             {campo("Correo electrónico", persona.email)}
-            {campo("RSH %", persona.puntajeRSH ? persona.puntajeRSH + "%" : "")}
+            {campo("RSH %", rshFicha ? String(rshFicha).replace("%", "") + "%" : "")}
             {campo("Comuna RSH", persona.comuna)}
             {campo("N° Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
-              const val = textoEdad(persona.fechaNacimiento) || persona.adultoMayor || "";
+              const val = textoEdad(fechaNacFicha) || persona.adultoMayor || "";
               return campo("Adulto Mayor", val);
             })()}
 
@@ -1947,7 +1978,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
             {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
             {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
-            {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(persona.puntajeRSH || persona.puntaje_rsh))}
+            {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(rshFicha))}
             {campo("Observaciones", persona.observaciones)}
           </div>
         )}
@@ -2209,6 +2240,9 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
     <div style={{ ...sectionTitleStyle, marginTop: 10 }}>{titulo}</div>
   );
 
+  const fechaNacFicha = persona.fechaNacimiento || persona.fecha_nacimiento || fechaNacimientoDesdeSolicitudes(misSols);
+  const rshFicha = persona.puntajeRSH || persona.puntaje_rsh || rshDesdeSolicitudes(misSols);
+
   return (
     <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
       <div style={{ background: "#ECFDF5", borderBottom: "3px solid #059669", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2230,18 +2264,18 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
             {campo("Nombre Postulante", persona.nombre)}
             {campo("Cédula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
-            {campo("Fecha de Nacimiento", fmtFecha(persona.fechaNacimiento))}
+            {campo("Fecha de Nacimiento", fmtFecha(fechaNacFicha))}
             {campo("Dirección", persona.direccion)}
             {campo("Coordenadas", persona.coordenadas)}
             {campo("Rol", persona.rol)}
             {campo("Teléfono", persona.telefono)}
             {campo("Correo electrónico", persona.email)}
-            {campo("RSH %", persona.puntajeRSH ? persona.puntajeRSH + "%" : "")}
+            {campo("RSH %", rshFicha ? String(rshFicha).replace("%", "") + "%" : "")}
             {campo("Comuna RSH", persona.comuna)}
             {campo("N° Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
-              const val = textoEdad(persona.fechaNacimiento) || persona.adultoMayor || "";
+              const val = textoEdad(fechaNacFicha) || persona.adultoMayor || "";
               return campo("Adulto Mayor", val);
             })()}
 
@@ -2271,7 +2305,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
             {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
             {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
-            {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(persona.puntajeRSH || persona.puntaje_rsh))}
+            {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(rshFicha))}
             {campo("Observaciones", persona.observaciones)}
           </div>
         )}
@@ -3050,7 +3084,22 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         const n = docNombreNorm(doc);
         const valor = limpiar(doc.valor);
         if (!valor) return;
-        if (n.includes("registro social")) {
+        if (n.includes("cedula") && n.includes("identidad")) {
+          const p = valor.split("|");
+          const fecha = normalizarFechaInput(p[1]);
+          const edad = calcularEdad(fecha);
+          agregar(updates, "rut", p[0]);
+          agregar(updates, "fechaNacimiento", fecha);
+          agregar(updates, "rutColores", p[2]);
+          if (edad !== null) agregar(updates, "adultoMayor", `${edad} años`);
+        }
+        if (n.includes("fecha") && n.includes("nacimiento")) {
+          const fecha = normalizarFechaInput(valor);
+          const edad = calcularEdad(fecha);
+          agregar(updates, "fechaNacimiento", fecha);
+          if (edad !== null) agregar(updates, "adultoMayor", `${edad} años`);
+        }
+        if (n.includes("registro social") || n.includes("rsh") || n.includes("rdh")) {
           const p = valor.split("|");
           const ahorro = calcularAhorro(p[0]);
           agregar(updates, "puntajeRSH", p[0]);
@@ -3099,9 +3148,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         }
       });
     });
-    const edad = calcularEdad(persona.fechaNacimiento);
+    const fechaParaEdad = updates.fechaNacimiento || persona.fechaNacimiento || persona.fecha_nacimiento || fechaNacimientoDesdeSolicitudes(solsCsp);
+    const edad = calcularEdad(fechaParaEdad);
     if (edad !== null) agregar(updates, "adultoMayor", `${edad} años`);
-    const ahorroActual = calcularAhorro(updates.puntajeRSH || persona.puntajeRSH || persona.puntaje_rsh);
+    const ahorroActual = calcularAhorro(updates.puntajeRSH || persona.puntajeRSH || persona.puntaje_rsh || rshDesdeSolicitudes(solsCsp));
     agregar(updates, "ahorroPostular", ahorroActual);
     if (Object.keys(updates).length > 0) syncPersona(updates);
   }, [personaId, solicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
