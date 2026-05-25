@@ -7199,6 +7199,14 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     const calificacion = leerCalificacionDesmarque(sol);
     return calificacion.estado === "CALIFICA" && !fechaVisitaSolicitud(sol);
   };
+  const lineasCondicionalidad = (persona = {}) => String(persona.observaciones || "")
+    .split(/\n+/)
+    .filter(linea => /\[CONDICIONAL (ACTIVA|CUMPLIDA)\]/i.test(linea));
+  const estaCondicional = (persona = {}) => {
+    const lineas = lineasCondicionalidad(persona);
+    const ultima = lineas[lineas.length - 1] || "";
+    return /\[CONDICIONAL ACTIVA\]/i.test(ultima);
+  };
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
     const estado = estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
@@ -7227,6 +7235,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b, "es"));
   const calificadosNoVisitados = sinComite.filter(esCalificadoNoVisitado);
+  const condicionalesNoVisitados = sinComite.filter(estaCondicional);
   const lugaresRuralesCalificados = [...new Set(
     calificadosNoVisitados
       .filter(p => normLocal(p.tipo_comite || p.tipoComite || p.tipo) === "rural")
@@ -7278,16 +7287,16 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     setTimeout(() => win.print(), 300);
   };
 
-  const baseListado = tabNoVisitados === "calificados" ? calificadosNoVisitados : sinComite;
+  const baseListado = tabNoVisitados === "listos" ? calificadosNoVisitados : tabNoVisitados === "condicionales" ? condicionalesNoVisitados : sinComite;
   const filtered = baseListado.filter(p => {
     const q = normLocal(search);
     const texto = normLocal(`${p.nombre || ""} ${p.rut || ""} ${p.comuna || ""} ${p.sector || ""}`);
     if (q && !texto.includes(q)) return false;
-    if (tabNoVisitados === "calificados") {
+    if (tabNoVisitados === "listos") {
       const tipo = normLocal(p.tipo_comite || p.tipoComite || p.tipo);
       if (filtroTipoCalificados && tipo !== normLocal(filtroTipoCalificados)) return false;
       if (filtroTipoCalificados === "RURAL" && filtroLugarRural && normLocal(p.sector || p.direccion || p.comuna) !== normLocal(filtroLugarRural)) return false;
-    } else if (filtroSector && normLocal(p.sector || p.direccion) !== normLocal(filtroSector)) return false;
+    } else if (tabNoVisitados === "general" && filtroSector && normLocal(p.sector || p.direccion) !== normLocal(filtroSector)) return false;
     return true;
   });
 
@@ -7383,7 +7392,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
             {sectoresDesmarque.map(sector => <option key={sector} value={sector}>{sector}</option>)}
           </select>
         )}
-        {tabNoVisitados === "calificados" && (
+        {tabNoVisitados === "listos" && (
           <>
             <select value={filtroTipoCalificados} onChange={e => { setFiltroTipoCalificados(e.target.value); setFiltroLugarRural(""); }}
               style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 150, background: "#fff" }}>
@@ -7411,9 +7420,10 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
       <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
         {[
           ["general", "No visitados / sin comité", sinComite.length],
-          ["calificados", "Calificados para visita", calificadosNoVisitados.length],
+          ["listos", "Listo para visitas", calificadosNoVisitados.length],
+          ["condicionales", "Condicionales", condicionalesNoVisitados.length],
         ].map(([key, label, count]) => (
-          <button key={key} onClick={() => { setTabNoVisitados(key); setSeleccionados([]); }}
+          <button key={key} onClick={() => { setTabNoVisitados(key); setSeleccionados([]); setFiltroSector(""); setFiltroTipoCalificados(""); setFiltroLugarRural(""); }}
             style={{ padding: "8px 14px", borderRadius: 9, border: "1.5px solid " + (tabNoVisitados === key ? "#059669" : "#d1d5db"), background: tabNoVisitados === key ? "#ECFDF5" : "#fff", color: tabNoVisitados === key ? "#047857" : "#374151", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
             {label} ({count})
           </button>
@@ -7459,6 +7469,9 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
         {filtered.map(p => {
           const sel = seleccionados.includes(p.id);
           const misSols = solicitudes.filter(s => s.personaId === p.id);
+          const solHabitabilidad = solicitudDesmarquePersona(p.id);
+          const estadoDesmarqueVisible = solHabitabilidad ? estadoActualLineaDesmarque(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "") : null;
+          const condicional = estaCondicional(p);
           return (
             <div key={p.id} style={{
               background: sel ? "#EFF6FF" : "#fff", borderRadius: 12, padding: "14px 18px",
@@ -7488,6 +7501,20 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
                       const prog = todosProgramas.find(pr => pr.id === s.programaId);
                       return prog ? prog.nombre.split(" ")[0] : s.programaId;
                     }).join(", ")}
+                  </div>
+                )}
+                {(estadoDesmarqueVisible || condicional) && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                    {estadoDesmarqueVisible && (
+                      <span style={{ background: estadoDesmarqueVisible.bg, color: estadoDesmarqueVisible.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}>
+                        {estadoDesmarqueVisible.label}
+                      </span>
+                    )}
+                    {condicional && (
+                      <span style={{ background: "#FEF3C7", color: "#92400E", borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}>
+                        Condicional
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -8092,6 +8119,10 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           const dp = getDocPct(p.id);
           const solsAll = getSols(p.id);
           const sols = solsAll.length;
+          const solHabitabilidad = solsAll.find(s => s.programaId === "habitabilidad");
+          const estadoDesmarqueVisible = solHabitabilidad
+            ? estadoActualLineaDesmarque(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "")
+            : null;
           const tieneHabitabilidad = solsAll.some(s => s.programaId === "habitabilidad");
           const tieneOtroPrograma = solsAll.some(s => s.programaId !== "habitabilidad");
           const respuestaAprobada = solsAll.some(s =>
@@ -8110,10 +8141,11 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
-                  {p.estado_desmarque && (() => {
-                    const est = ESTADO_DESMARQUE[p.estado_desmarque] || ESTADO_DESMARQUE["NO VISITADO"];
-                    return <span style={{ display:"inline-block", marginTop:4, background: est.bg, color: est.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>{est.label}</span>;
-                  })()}
+                  {estadoDesmarqueVisible && (
+                    <span style={{ display:"inline-block", marginTop:4, background: estadoDesmarqueVisible.bg, color: estadoDesmarqueVisible.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
+                      {estadoDesmarqueVisible.label}
+                    </span>
+                  )}
                   {desmarqueEnTramite && (
                     <div style={{ display: "inline-block", marginTop: 4, marginLeft: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
                       ⚠ Desmarque en trámite
