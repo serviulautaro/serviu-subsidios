@@ -9196,6 +9196,7 @@ export default function App() {
   const [cargando, setCargando] = useState(true);
   const [recargandoDatos, setRecargandoDatos] = useState(false);
   const [ultimaRecargaDatos, setUltimaRecargaDatos] = useState("");
+  const [errorCargaDatos, setErrorCargaDatos] = useState("");
   const [programasCustom, setProgramasCustom] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const lastActivityRef = useRef(Date.now());
@@ -9396,6 +9397,7 @@ export default function App() {
     const cargarDatos = async (silencioso = false) => {
       const secuencia = ++cargaDatosSeqRef.current;
       if (!silencioso) setCargando(true);
+      if (!silencioso) setErrorCargaDatos("");
       try {
         const [comitesRes, personasRes, solicitudesRes, programasRes] = await Promise.all([
           supabase.from("comites").select("*"),
@@ -9510,8 +9512,10 @@ export default function App() {
         setSolicitudes(solicitudesMapeadas);
         setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesMapeadas); }, 1500);
         setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
+        setErrorCargaDatos("");
       } catch (err) {
         console.error("Error cargando datos:", err);
+        setErrorCargaDatos(err?.message || "No se pudieron cargar los datos desde Supabase.");
       } finally {
         if (!silencioso) setCargando(false);
       }
@@ -9811,6 +9815,12 @@ export default function App() {
             {recargandoDatos ? "Actualizando..." : "Actualizar datos"}
           </button>
         </div>
+        {errorCargaDatos && (
+          <div style={{ marginBottom: 14, background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 700 }}>
+            No se pudieron cargar los datos desde Supabase. No se borró información; revise la conexión y presione “Actualizar datos”.
+            <div style={{ marginTop: 4, fontSize: 11, fontWeight: 500, color: "#B91C1C" }}>{errorCargaDatos}</div>
+          </div>
+        )}
         {IS_DEMO_MODE && (
           <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", color: "#92400E", borderRadius: 10, padding: "10px 14px", marginBottom: 18, fontSize: 13, fontWeight: 800 }}>
             MODO DEMO: datos locales de muestra, sin solicitantes reales. Limite: {DEMO_MAX_SOLICITANTES} solicitantes.
