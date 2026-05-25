@@ -1947,7 +1947,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
             {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
             {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
-            {campo("Ahorro para Postular (UF)", persona.ahorroPostular)}
+            {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(persona.puntajeRSH || persona.puntaje_rsh))}
             {campo("Observaciones", persona.observaciones)}
           </div>
         )}
@@ -2271,7 +2271,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
             {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
             {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
-            {campo("Ahorro para Postular (UF)", persona.ahorroPostular)}
+            {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(persona.puntajeRSH || persona.puntaje_rsh))}
             {campo("Observaciones", persona.observaciones)}
           </div>
         )}
@@ -3052,8 +3052,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (!valor) return;
         if (n.includes("registro social")) {
           const p = valor.split("|");
+          const ahorro = calcularAhorro(p[0]);
           agregar(updates, "puntajeRSH", p[0]);
           agregar(updates, "puntaje_rsh", p[0]);
+          agregar(updates, "ahorroPostular", ahorro);
           agregar(updates, "comuna", p[1] && p[1].startsWith("OTRA: ") ? p[1].replace(/^OTRA:\s*/, "") : p[1]);
           agregar(updates, "estadoCivil", p[2]);
           agregar(updates, "integrantesFamiliares", p[3]);
@@ -3097,6 +3099,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         }
       });
     });
+    const edad = calcularEdad(persona.fechaNacimiento);
+    if (edad !== null) agregar(updates, "adultoMayor", `${edad} años`);
+    const ahorroActual = calcularAhorro(updates.puntajeRSH || persona.puntajeRSH || persona.puntaje_rsh);
+    agregar(updates, "ahorroPostular", ahorroActual);
     if (Object.keys(updates).length > 0) syncPersona(updates);
   }, [personaId, solicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
 
