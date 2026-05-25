@@ -7151,9 +7151,6 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
 function SinComiteView({ personas, comites, solicitudes, programasCustom = [], onSavePersonas, onSaveSolicitudes, onDetail }) {
   const [search, setSearch] = useState("");
   const [filtroSector, setFiltroSector] = useState("");
-  const [tabNoVisitados, setTabNoVisitados] = useState("general");
-  const [filtroTipoCalificados, setFiltroTipoCalificados] = useState("");
-  const [filtroLugarRural, setFiltroLugarRural] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
   const [comiteDestino, setComiteDestino] = useState("");
   const [showModalMigrar, setShowModalMigrar] = useState(false);
@@ -7193,20 +7190,6 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   };
   const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => s.personaId === personaId && s.programaId === "habitabilidad");
   const solicitudDesmarquePersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
-  const esCalificadoNoVisitado = (p) => {
-    const sol = solicitudDesmarquePersona(p.id);
-    if (!sol) return false;
-    const calificacion = leerCalificacionDesmarque(sol);
-    return calificacion.estado === "CALIFICA" && !fechaVisitaSolicitud(sol);
-  };
-  const lineasCondicionalidad = (persona = {}) => String(persona.observaciones || "")
-    .split(/\n+/)
-    .filter(linea => /\[CONDICIONAL (ACTIVA|CUMPLIDA)\]/i.test(linea));
-  const estaCondicional = (persona = {}) => {
-    const lineas = lineasCondicionalidad(persona);
-    const ultima = lineas[lineas.length - 1] || "";
-    return /\[CONDICIONAL ACTIVA\]/i.test(ultima);
-  };
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
     const estado = estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
@@ -7232,14 +7215,6 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     sinComite
       .filter(p => tieneSolicitudDesmarque(p.id))
       .map(p => (p.sector || p.direccion || "").toString().trim())
-      .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b, "es"));
-  const calificadosNoVisitados = sinComite.filter(esCalificadoNoVisitado);
-  const condicionalesNoVisitados = sinComite.filter(estaCondicional);
-  const lugaresRuralesCalificados = [...new Set(
-    calificadosNoVisitados
-      .filter(p => normLocal(p.tipo_comite || p.tipoComite || p.tipo) === "rural")
-      .map(p => (p.sector || p.direccion || p.comuna || "").toString().trim())
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b, "es"));
   const seguimientoPorCedula = new Map();
@@ -7287,16 +7262,11 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     setTimeout(() => win.print(), 300);
   };
 
-  const baseListado = tabNoVisitados === "listos" ? calificadosNoVisitados : tabNoVisitados === "condicionales" ? condicionalesNoVisitados : sinComite;
-  const filtered = baseListado.filter(p => {
+  const filtered = sinComite.filter(p => {
     const q = normLocal(search);
     const texto = normLocal(`${p.nombre || ""} ${p.rut || ""} ${p.comuna || ""} ${p.sector || ""}`);
     if (q && !texto.includes(q)) return false;
-    if (tabNoVisitados === "listos") {
-      const tipo = normLocal(p.tipo_comite || p.tipoComite || p.tipo);
-      if (filtroTipoCalificados && tipo !== normLocal(filtroTipoCalificados)) return false;
-      if (filtroTipoCalificados === "RURAL" && filtroLugarRural && normLocal(p.sector || p.direccion || p.comuna) !== normLocal(filtroLugarRural)) return false;
-    } else if (tabNoVisitados === "general" && filtroSector && normLocal(p.sector || p.direccion) !== normLocal(filtroSector)) return false;
+    if (filtroSector && normLocal(p.sector || p.direccion) !== normLocal(filtroSector)) return false;
     return true;
   });
 
@@ -7385,49 +7355,17 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
       <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de", flexWrap: "wrap" }}>
         <input placeholder="Buscar por nombre, RUT, comuna o sector..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
-        {tabNoVisitados === "general" && (
-          <select value={filtroSector} onChange={e => setFiltroSector(e.target.value)}
-            style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 230, background: "#fff" }}>
-            <option value="">Todos los sectores Desmarque</option>
-            {sectoresDesmarque.map(sector => <option key={sector} value={sector}>{sector}</option>)}
-          </select>
-        )}
-        {tabNoVisitados === "listos" && (
-          <>
-            <select value={filtroTipoCalificados} onChange={e => { setFiltroTipoCalificados(e.target.value); setFiltroLugarRural(""); }}
-              style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 150, background: "#fff" }}>
-              <option value="">Urbano y rural</option>
-              <option value="URBANO">Urbano</option>
-              <option value="RURAL">Rural</option>
-            </select>
-            {filtroTipoCalificados === "RURAL" && (
-              <select value={filtroLugarRural} onChange={e => setFiltroLugarRural(e.target.value)}
-                style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 220, background: "#fff" }}>
-                <option value="">Todos los lugares rurales</option>
-                {lugaresRuralesCalificados.map(lugar => <option key={lugar} value={lugar}>{lugar}</option>)}
-              </select>
-            )}
-          </>
-        )}
+        <select value={filtroSector} onChange={e => setFiltroSector(e.target.value)}
+          style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 230, background: "#fff" }}>
+          <option value="">Todos los sectores Desmarque</option>
+          {sectoresDesmarque.map(sector => <option key={sector} value={sector}>{sector}</option>)}
+        </select>
         {filtered.length > 0 && (
           <button onClick={seleccionarTodos}
             style={{ background: "none", border: "1px solid #ddd", borderRadius: 7, padding: "5px 12px", fontSize: 12, cursor: "pointer", color: "#555", fontWeight: 600 }}>
             {seleccionados.length === filtered.length ? "Deseleccionar todos" : "Seleccionar todos"}
           </button>
         )}
-      </div>
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
-        {[
-          ["general", "No visitados / sin comité", sinComite.length],
-          ["listos", "Listo para visitas", calificadosNoVisitados.length],
-          ["condicionales", "Condicionales", condicionalesNoVisitados.length],
-        ].map(([key, label, count]) => (
-          <button key={key} onClick={() => { setTabNoVisitados(key); setSeleccionados([]); setFiltroSector(""); setFiltroTipoCalificados(""); setFiltroLugarRural(""); }}
-            style={{ padding: "8px 14px", borderRadius: 9, border: "1.5px solid " + (tabNoVisitados === key ? "#059669" : "#d1d5db"), background: tabNoVisitados === key ? "#ECFDF5" : "#fff", color: tabNoVisitados === key ? "#047857" : "#374151", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
-            {label} ({count})
-          </button>
-        ))}
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", marginBottom: 18, border: "1px solid #e8e3de" }}>
@@ -7471,7 +7409,6 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
           const misSols = solicitudes.filter(s => s.personaId === p.id);
           const solHabitabilidad = solicitudDesmarquePersona(p.id);
           const estadoDesmarqueVisible = solHabitabilidad ? estadoActualLineaDesmarque(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "") : null;
-          const condicional = estaCondicional(p);
           return (
             <div key={p.id} style={{
               background: sel ? "#EFF6FF" : "#fff", borderRadius: 12, padding: "14px 18px",
@@ -7503,18 +7440,11 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
                     }).join(", ")}
                   </div>
                 )}
-                {(estadoDesmarqueVisible || condicional) && (
+                {estadoDesmarqueVisible && (
                   <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                    {estadoDesmarqueVisible && (
-                      <span style={{ background: estadoDesmarqueVisible.bg, color: estadoDesmarqueVisible.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}>
-                        {estadoDesmarqueVisible.label}
-                      </span>
-                    )}
-                    {condicional && (
-                      <span style={{ background: "#FEF3C7", color: "#92400E", borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}>
-                        Condicional
-                      </span>
-                    )}
+                    <span style={{ background: estadoDesmarqueVisible.bg, color: estadoDesmarqueVisible.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}>
+                      {estadoDesmarqueVisible.label}
+                    </span>
                   </div>
                 )}
               </div>
@@ -7837,6 +7767,9 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
 function DetalleComite({ comiteId, comites, personas, solicitudes, programasCustom = [], onBack, onSavePersonas, onSaveSolicitudes, onDetail, currentUser, registrarAuditoria }) {
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [tabDesmarque, setTabDesmarque] = useState("todos");
+  const [filtroTipoListos, setFiltroTipoListos] = useState("");
+  const [filtroLugarRuralListos, setFiltroLugarRuralListos] = useState("");
   const [showModalPersona, setShowModalPersona] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [claveInput, setClaveInput] = useState("");
@@ -7854,6 +7787,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const comite = comites.find(c => c.id === comiteId);
   if (!comite) return null;
 
+  const esComiteDesmarque = comiteId === "comite_desmarque" || comite.programaId === "habitabilidad" || /DESMARQUE/i.test(comite.nombre || "");
   const todosProgramas = combinarProgramas(programasCustom);
   const comitesDestino = [
     { id: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
@@ -7878,13 +7812,57 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     if (idPersona && idsComite.includes(idPersona)) return true;
     return normComite(p.comite) && normComite(p.comite) === normComite(comite.nombre);
   };
+  const normFiltro = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const solicitudHabitabilidadPersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
+  const estadoDesmarquePersona = (p) => {
+    const sol = solicitudHabitabilidadPersona(p.id);
+    return estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
+  };
+  const lineasCondicionalidad = (persona = {}) => String(persona.observaciones || "")
+    .split(/\n+/)
+    .filter(linea => /\[CONDICIONAL (ACTIVA|CUMPLIDA)\]/i.test(linea));
+  const estadoCondicionalidad = (persona = {}) => {
+    const lineas = lineasCondicionalidad(persona);
+    const ultima = lineas[lineas.length - 1] || "";
+    return /\[CONDICIONAL ACTIVA\]/i.test(ultima) ? "condicional" : "aprobado";
+  };
+  const estaCondicional = (persona = {}) => estadoCondicionalidad(persona) === "condicional";
+  const esListoParaVisita = (p) => {
+    const sol = solicitudHabitabilidadPersona(p.id);
+    if (!sol) return false;
+    const calificacion = leerCalificacionDesmarque(sol);
+    return calificacion.estado === "CALIFICA" && !fechaVisitaSolicitud(sol);
+  };
   const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
-  const filtered = ordenarSolicitantes(miembros.filter(p => {
+  const noVisitadosDesmarque = miembros.filter(p => {
+    const estado = estadoDesmarquePersona(p);
+    return estado.key === "NO VISITADO" || estado.label === "No Visitado";
+  });
+  const listosParaVisita = miembros.filter(esListoParaVisita);
+  const condicionalesDesmarque = miembros.filter(estaCondicional);
+  const lugaresRuralesListos = [...new Set(
+    listosParaVisita
+      .filter(p => normFiltro(p.tipo_comite || p.tipoComite || p.tipo) === "rural")
+      .map(p => (p.sector || p.direccion || p.comuna || "").toString().trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, "es"));
+  const baseMiembros = esComiteDesmarque && tabDesmarque === "no_visitados"
+    ? noVisitadosDesmarque
+    : esComiteDesmarque && tabDesmarque === "listos"
+      ? listosParaVisita
+      : esComiteDesmarque && tabDesmarque === "condicionales"
+        ? condicionalesDesmarque
+        : miembros;
+  const filtered = ordenarSolicitantes(baseMiembros.filter(p => {
     const matchSearch = (p.nombre || "").toLowerCase().includes(search.toLowerCase()) ||
       (p.rut || "").includes(search) ||
       (p.comuna || "").toLowerCase().includes(search.toLowerCase());
-    const matchEstado = filtroEstado === "todos" || p.estado_desmarque === filtroEstado;
-    return matchSearch && matchEstado;
+    const estado = estadoDesmarquePersona(p);
+    const matchEstado = !esComiteDesmarque || filtroEstado === "todos" || estado.key === filtroEstado || p.estado_desmarque === filtroEstado;
+    const tipo = normFiltro(p.tipo_comite || p.tipoComite || p.tipo);
+    const matchTipoListos = !esComiteDesmarque || tabDesmarque !== "listos" || !filtroTipoListos || tipo === normFiltro(filtroTipoListos);
+    const matchLugarRural = !esComiteDesmarque || tabDesmarque !== "listos" || filtroTipoListos !== "RURAL" || !filtroLugarRuralListos || normFiltro(p.sector || p.direccion || p.comuna) === normFiltro(filtroLugarRuralListos);
+    return matchSearch && matchEstado && matchTipoListos && matchLugarRural;
   }));
 
   const getSols = (id) => solicitudes.filter(s => s.personaId === id);
@@ -8005,15 +7983,6 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     }
   };
 
-  const lineasCondicionalidad = (persona = {}) => String(persona.observaciones || "")
-    .split(/\n+/)
-    .filter(linea => /\[CONDICIONAL (ACTIVA|CUMPLIDA)\]/i.test(linea));
-  const estadoCondicionalidad = (persona = {}) => {
-    const lineas = lineasCondicionalidad(persona);
-    const ultima = lineas[lineas.length - 1] || "";
-    return /\[CONDICIONAL ACTIVA\]/i.test(ultima) ? "condicional" : "aprobado";
-  };
-  const estaCondicional = (persona = {}) => estadoCondicionalidad(persona) === "condicional";
   const ultimaLineaCondicionalidad = (persona = {}) => {
     const lineas = lineasCondicionalidad(persona);
     return lineas[lineas.length - 1] || "";
@@ -8089,16 +8058,54 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         <button onClick={() => setShowModalPersona(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo integrante</button>
       </div>
 
+      {esComiteDesmarque && (
+        <div style={{ background: "#fff", border: "1px solid #e8e3de", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {[
+              ["todos", "Todos", miembros.length],
+              ["no_visitados", "No visitados", noVisitadosDesmarque.length],
+              ["listos", "Listo para visitas", listosParaVisita.length],
+              ["condicionales", "Condicionales", condicionalesDesmarque.length],
+            ].map(([key, label, count]) => (
+              <button key={key} onClick={() => { setTabDesmarque(key); setFiltroEstado("todos"); setFiltroTipoListos(""); setFiltroLugarRuralListos(""); }}
+                style={{ padding: "8px 13px", borderRadius: 9, border: "1.5px solid " + (tabDesmarque === key ? "#059669" : "#d1d5db"), background: tabDesmarque === key ? "#ECFDF5" : "#fff", color: tabDesmarque === key ? "#047857" : "#374151", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
+                {label} ({count})
+              </button>
+            ))}
+          </div>
+          {tabDesmarque === "listos" && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              <select value={filtroTipoListos} onChange={e => { setFiltroTipoListos(e.target.value); setFiltroLugarRuralListos(""); }}
+                style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 150, background: "#fff" }}>
+                <option value="">Urbano y rural</option>
+                <option value="URBANO">Urbano</option>
+                <option value="RURAL">Rural</option>
+              </select>
+              {filtroTipoListos === "RURAL" && (
+                <select value={filtroLugarRuralListos} onChange={e => setFiltroLugarRuralListos(e.target.value)}
+                  style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 220, background: "#fff" }}>
+                  <option value="">Todos los lugares rurales</option>
+                  {lugaresRuralesListos.map(lugar => <option key={lugar} value={lugar}>{lugar}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filtros por estado si es comité desmarque */}
-      {comiteId === "comite_desmarque" && (
+      {esComiteDesmarque && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
           {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
-            <button key={k} onClick={() => setFiltroEstado(k)}
+            <button key={k} onClick={() => { setFiltroEstado(k); setTabDesmarque("todos"); setFiltroTipoListos(""); setFiltroLugarRuralListos(""); }}
               style={{ padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
                 border:"2px solid "+(filtroEstado===k?c:"#ddd"),
                 background:filtroEstado===k?c:"#fff",
                 color:filtroEstado===k?"#fff":"#555" }}>
-              {l} {k!=="todos" ? "("+miembros.filter(p=>p.estado_desmarque===k).length+")" : "("+miembros.length+")"}
+              {l} {k!=="todos" ? "("+miembros.filter(p => {
+                const estado = estadoDesmarquePersona(p);
+                return estado.key === k || p.estado_desmarque === k;
+              }).length+")" : "("+miembros.length+")"}
             </button>
           ))}
         </div>
