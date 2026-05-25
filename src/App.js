@@ -7915,6 +7915,41 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     win.document.close();
     setTimeout(() => win.print(), 300);
   };
+  const imprimirCondicionales = () => {
+    const lista = tabDesmarque === "condicionales" ? filtered : ordenarSolicitantes(condicionalesDesmarque);
+    if (!lista.length) {
+      alert("No hay solicitantes condicionales para imprimir.");
+      return;
+    }
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    const filas = lista.map(p => ({
+      nombre: p.nombre || "",
+      rut: formatRut(p.rut),
+      telefono: p.telefono || "",
+      estado: estaCondicional(p) ? "Condicional" : "Aprobado",
+      constancia: ultimaLineaCondicionalidad(p),
+    }));
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Condicionales</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#111827;margin:28px}
+        h1{font-size:20px;color:#1e3a5f;margin:0 0 4px}
+        .sub{font-size:12px;color:#6b7280;margin-bottom:16px}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        th,td{border:1px solid #d1d5db;padding:7px;text-align:left;vertical-align:top}
+        th{background:#fff7ed;color:#92400e}
+        .n{width:32px;text-align:center}
+      </style></head><body>
+      <h1>Solicitantes condicionales - DESMARQUE DE VIVIENDA</h1>
+      <div class="sub">Total: ${filas.length}</div>
+      <table><thead><tr><th class="n">N°</th><th>Solicitante</th><th>Cédula de identidad</th><th>Teléfono</th><th>Estado actual</th><th>Última constancia</th></tr></thead><tbody>
+      ${filas.map((f, idx) => `<tr><td class="n">${idx + 1}</td><td><b>${esc(f.nombre)}</b></td><td>${esc(f.rut)}</td><td>${esc(f.telefono)}</td><td>${esc(f.estado)}</td><td>${esc(f.constancia)}</td></tr>`).join("")}
+      </tbody></table></body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 300);
+  };
 
   const getSols = (id) => solicitudes.filter(s => s.personaId === id);
   const getDocPct = (id) => {
@@ -8142,6 +8177,14 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
               <button onClick={imprimirListosParaVisita}
                 style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 8, padding: "8px 13px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
                 Imprimir listos para visita
+              </button>
+            </div>
+          )}
+          {tabDesmarque === "condicionales" && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              <button onClick={imprimirCondicionales}
+                style={{ background: "#92400E", color: "#fff", border: "none", borderRadius: 8, padding: "8px 13px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+                Imprimir condicionales
               </button>
             </div>
           )}
