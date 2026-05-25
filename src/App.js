@@ -5116,7 +5116,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const infoAnio = infoPartes[1] || "";
                 const infoCompleto = !!(infoNumero.trim() && infoAnio.trim());
 
-                // Antecedentes de la vivienda: CSP urbano usa N/A o N°/año; Ampliación guarda permiso, recepción y m2.
+                // Antecedentes de la vivienda: CSP urbano usa N/A o N°/fecha; Ampliación guarda permiso, recepción y m2.
                 const antecPartes = esAntecedentesVivienda ? (doc.valor || "").split("|") : [];
                 const antecNumero = antecPartes[0] || "";
                 const antecAnio = antecPartes[1] || "";
@@ -5222,7 +5222,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   : esCertRuralidad && !certRuralCompleto ? "Ingresa N° y fecha del certificado primero"
                   : esAvaluo && !avaluoCompleto ? "Ingresa rol y valor de avalúo primero"
                   : esInfoPrevias && !infoCompleto ? "Ingresa N° y fecha del documento primero"
-                  : esAntecedentesVivienda && !antecCompleto ? (esAmpliacion ? "Ingresa permiso, recepción y m2 primero" : "Ingresa N° y año del documento primero")
+                  : esAntecedentesVivienda && !antecCompleto ? (esAmpliacion ? "Ingresa permiso, recepción y m2 primero" : "Ingresa N° y fecha del certificado primero")
                   : esCorreoSolicitante && !correoCompleto ? "Ingresa correo electrónico válido"
                   : esTelefonoContacto && !(doc.valor || "").trim() ? "Ingresa teléfono de contacto"
                   : esLuz && !nClienteLuz.trim() ? "Ingresa el N° de cliente de electricidad primero"
@@ -6027,25 +6027,25 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             {antecEsNA && <div style={{ fontSize:10, color:"#059669", fontWeight:600 }}>✓ Marcado como N/A — VB activado sin archivo</div>}
                             {antecOpcion === "SI" && (
                           <div style={{ display: "grid", gap: 5 }}>
-                            <input type="text" placeholder="N° del documento (ej: 25)" value={antecNumero}
+                            <input type="text" placeholder="N° del certificado (ej: 25)" value={antecNumero}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = e.target.value + "|" + antecAnio;
                                 onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            <input type="text" placeholder="Año (ej: 2026)" value={antecAnio}
+                            <input type="date" value={normalizarFechaInput(antecAnio)}
                               onClick={e => e.stopPropagation()}
                               onChange={async e => {
                                 const newValor = antecNumero + "|" + e.target.value;
                                 onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                                 if (antecNumero.trim() && e.target.value.trim()) {
-                                  await syncPersona({ antecedentesVivienda: antecNumero.trim() + "/" + e.target.value.trim() });
+                                  await syncPersona({ antecedentesVivienda: "Certificado N° " + antecNumero.trim() + " Fecha " + fmtFecha(e.target.value.trim()) });
                                 }
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {antecNumero}/{antecAnio}</div>}
-                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y año para marcar VB</div>}
+                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: Certificado N° {antecNumero} Fecha {fmtFecha(antecAnio)}</div>}
+                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para marcar VB</div>}
                           </div>
                             )}
                           </>
