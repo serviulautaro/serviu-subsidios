@@ -7828,8 +7828,20 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   };
   const estaCondicional = (persona = {}) => estadoCondicionalidad(persona) === "condicional";
   const esListoParaVisita = (p) => {
-    const estado = estadoDesmarquePersona(p);
-    return estado.key === "CALIFICA_PARA_VISITA" || estado.label === "Califica para visita";
+    const sol = solicitudHabitabilidadPersona(p.id);
+    if (!sol) return false;
+    const st = estadoLineaDesmarque(sol);
+    return st.calificacion.estado === "CALIFICA" &&
+      !st.visitado &&
+      !st.solicitudDom &&
+      !st.informeIngresado &&
+      !st.ingresadoServiu &&
+      !st.respuestaIngresada &&
+      !st.informeRechazadoApelable &&
+      !st.informeRechazado &&
+      !st.serviuRechazadoApelable &&
+      !st.serviuRechazado &&
+      !st.desmarcado;
   };
   const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
   const noVisitadosDesmarque = miembros.filter(p => {
