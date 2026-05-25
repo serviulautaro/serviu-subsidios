@@ -3025,8 +3025,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   useEffect(() => {
     if (!persona || !misSols.length) return;
-    const solsCspRural = misSols.filter(sol => sol.programaId === "csp_rural");
-    if (!solsCspRural.length) return;
+    const solsCsp = misSols.filter(sol => sol.programaId === "csp_rural" || sol.programaId === "csp_urbano");
+    if (!solsCsp.length) return;
     const limpiar = (v) => String(v ?? "").trim();
     const agregar = (updates, key, value) => {
       const val = limpiar(value);
@@ -3045,7 +3045,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return partes.join(" - ");
     };
     const updates = {};
-    solsCspRural.forEach(sol => {
+    solsCsp.forEach(sol => {
       (sol.documentos || []).forEach(doc => {
         const n = docNombreNorm(doc);
         const valor = limpiar(doc.valor);
