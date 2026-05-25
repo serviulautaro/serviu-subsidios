@@ -7828,22 +7828,21 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   };
   const estaCondicional = (persona = {}) => estadoCondicionalidad(persona) === "condicional";
   const esListoParaVisita = (p) => {
-    const sol = solicitudHabitabilidadPersona(p.id);
-    if (!sol) return false;
-    const calificacion = leerCalificacionDesmarque(sol);
-    return calificacion.estado === "CALIFICA" && !fechaVisitaSolicitud(sol);
+    const estado = estadoDesmarquePersona(p);
+    return estado.key === "CALIFICA_PARA_VISITA" || estado.label === "Califica para visita";
   };
   const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
   const noVisitadosDesmarque = miembros.filter(p => {
     const estado = estadoDesmarquePersona(p);
-    return estado.key === "NO VISITADO" || estado.label === "No Visitado";
+    const estadoGuardado = String(p.estado_desmarque || p.estadoDesmarque || "").toUpperCase();
+    return estado.key === "NO VISITADO" || estado.label === "No Visitado" || estadoGuardado === "NO VISITADO";
   });
   const listosParaVisita = miembros.filter(esListoParaVisita);
   const condicionalesDesmarque = miembros.filter(estaCondicional);
   const lugaresRuralesListos = [...new Set(
     listosParaVisita
       .filter(p => normFiltro(p.tipo_comite || p.tipoComite || p.tipo) === "rural")
-      .map(p => (p.sector || p.direccion || p.comuna || "").toString().trim())
+      .map(p => (p.sector || "").toString().trim())
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b, "es"));
   const baseMiembros = esComiteDesmarque && tabDesmarque === "no_visitados"
@@ -7861,7 +7860,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const matchEstado = !esComiteDesmarque || filtroEstado === "todos" || estado.key === filtroEstado || p.estado_desmarque === filtroEstado;
     const tipo = normFiltro(p.tipo_comite || p.tipoComite || p.tipo);
     const matchTipoListos = !esComiteDesmarque || tabDesmarque !== "listos" || !filtroTipoListos || tipo === normFiltro(filtroTipoListos);
-    const matchLugarRural = !esComiteDesmarque || tabDesmarque !== "listos" || filtroTipoListos !== "RURAL" || !filtroLugarRuralListos || normFiltro(p.sector || p.direccion || p.comuna) === normFiltro(filtroLugarRuralListos);
+    const matchLugarRural = !esComiteDesmarque || tabDesmarque !== "listos" || filtroTipoListos !== "RURAL" || !filtroLugarRuralListos || normFiltro(p.sector) === normFiltro(filtroLugarRuralListos);
     return matchSearch && matchEstado && matchTipoListos && matchLugarRural;
   }));
 
@@ -8096,7 +8095,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       {/* Filtros por estado si es comité desmarque */}
       {esComiteDesmarque && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-          {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
+          {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).filter(([k]) => k !== "NO VISITADO").map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
             <button key={k} onClick={() => { setFiltroEstado(k); setTabDesmarque("todos"); setFiltroTipoListos(""); setFiltroLugarRuralListos(""); }}
               style={{ padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
                 border:"2px solid "+(filtroEstado===k?c:"#ddd"),
