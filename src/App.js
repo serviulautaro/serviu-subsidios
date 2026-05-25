@@ -9392,6 +9392,21 @@ export default function App() {
     }
   };
 
+  const cargarSolicitudesPorPartes = async () => {
+    const pageSize = 100;
+    const todas = [];
+    for (let inicio = 0; ; inicio += pageSize) {
+      const { data, error } = await supabase
+        .from("solicitudes")
+        .select("*")
+        .range(inicio, inicio + pageSize - 1);
+      if (error) throw error;
+      todas.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+    return todas;
+  };
+
   // Cargar datos desde Supabase al iniciar
   useEffect(() => {
     const cargarDatos = async (silencioso = false) => {
@@ -9399,22 +9414,20 @@ export default function App() {
       if (!silencioso) setCargando(true);
       if (!silencioso) setErrorCargaDatos("");
       try {
-        const [comitesRes, personasRes, solicitudesRes, programasRes] = await Promise.all([
+        const [comitesRes, personasRes, programasRes] = await Promise.all([
           supabase.from("comites").select("*"),
           supabase.from("personas").select("*"),
-          supabase.from("solicitudes").select("*"),
           supabase.from("programas_custom").select("*"),
         ]);
-        const errores = [comitesRes, personasRes, solicitudesRes, programasRes]
+        const erroresBase = [comitesRes, personasRes, programasRes]
           .map(r => r.error?.message)
           .filter(Boolean);
-        if (errores.length) {
-          throw new Error("Recarga incompleta desde Supabase: " + errores.join(" | "));
+        if (erroresBase.length) {
+          throw new Error("Recarga incompleta desde Supabase: " + erroresBase.join(" | "));
         }
         if (secuencia !== cargaDatosSeqRef.current) return;
         const c = comitesRes.data || [];
         const p = personasRes.data || [];
-        const s = solicitudesRes.data || [];
         const pc = programasRes.data || [];
         const programasCustomCargados = (pc || []).map(x => ({
           ...x,
@@ -9481,6 +9494,15 @@ export default function App() {
           totalMetros:           x.totalmetros || "",
           modalidadPostulacion:  x.modalidadpostulacion || "",
         })));
+        let s = [];
+        try {
+          s = await cargarSolicitudesPorPartes();
+        } catch (solErr) {
+          console.error("Error cargando solicitudes:", solErr);
+          setErrorCargaDatos("Se cargaron solicitantes y comités, pero no se pudieron cargar las solicitudes/documentos. Presione Actualizar datos.");
+          return;
+        }
+        if (secuencia !== cargaDatosSeqRef.current) return;
         const solicitudesMapeadas = (s || []).map(sol => {
           const mapped = {
             ...sol,
