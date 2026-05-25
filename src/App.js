@@ -7883,12 +7883,14 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     }
     const esc = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     const tipoFiltro = filtroTipoListos || "Urbano y rural";
+    const esImpresionUrbana = filtroTipoListos === "URBANO";
     const sectorFiltro = filtroTipoListos === "RURAL" ? (filtroLugarRuralListos || "Todos los sectores rurales") : "";
     const filas = lista.map(p => ({
       nombre: p.nombre || "",
       rut: formatRut(p.rut),
       telefono: p.telefono || "",
       coordenadas: p.coordenadas || "",
+      direccion: p.direccion || "",
       sector: p.sector || "",
       subsidio: textoSubsidioSolicitud(p) || p.anio_subsidio || p.anioSubsidio || "",
     }));
@@ -7904,8 +7906,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       </style></head><body>
       <h1>Solicitantes listos para visita - DESMARQUE DE VIVIENDA</h1>
       <div class="sub">Filtro: ${esc(tipoFiltro)}${sectorFiltro ? " | Sector: " + esc(sectorFiltro) : ""} | Total: ${filas.length}</div>
-      <table><thead><tr><th class="n">N°</th><th>Solicitante</th><th>Teléfono</th><th>Coordenadas</th><th>Sector</th><th>Año de Subsidio</th></tr></thead><tbody>
-      ${filas.map((f, idx) => `<tr><td class="n">${idx + 1}</td><td><b>${esc(f.nombre)}</b><br>${esc(f.rut)}</td><td>${esc(f.telefono)}</td><td>${esc(f.coordenadas)}</td><td>${esc(f.sector)}</td><td>${esc(f.subsidio)}</td></tr>`).join("")}
+      <table><thead><tr><th class="n">N°</th><th>Solicitante</th><th>Teléfono</th><th>${esImpresionUrbana ? "Comunidad/Dirección" : "Coordenadas"}</th><th>Sector</th><th>Año de Subsidio</th></tr></thead><tbody>
+      ${filas.map((f, idx) => `<tr><td class="n">${idx + 1}</td><td><b>${esc(f.nombre)}</b><br>${esc(f.rut)}</td><td>${esc(f.telefono)}</td><td>${esc(esImpresionUrbana ? f.direccion : f.coordenadas)}</td><td>${esc(f.sector)}</td><td>${esc(f.subsidio)}</td></tr>`).join("")}
       </tbody></table></body></html>`;
     const win = window.open("", "_blank");
     if (!win) return;
