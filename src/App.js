@@ -2939,6 +2939,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       nClienteElectricidad:  "nclienteelectricidad",
       certRuralidad:         "certruralidad",
       avaluoFiscal:          "avaluofiscal",
+      rol_propiedad:         "rol_propiedad",
+      puntaje_rsh:           "puntaje_rsh",
+      anio_subsidio:         "anio_subsidio",
       informacionesPrevias:  "informacionesprevias",
       infPrevias:            "infprevias",
       antecedentesVivienda:  "antecedentesvivienda",
@@ -2965,7 +2968,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const { error } = await supabase.from("personas").update(dbFields).eq("id", persona.id);
       if (error) console.warn("[syncPersona] error al actualizar campo(s):", Object.keys(dbFields), error.message);
     } catch (err) { console.warn("[syncPersona] excepción:", err.message); }
-    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...fields } : p));
+    onSavePersonas(personas.map(p => {
+      if (p.id !== persona.id) return p;
+      const actualizado = { ...p, ...fields };
+      if (!Object.prototype.hasOwnProperty.call(fields, "observaciones") && p.observaciones) {
+        actualizado.observaciones = p.observaciones;
+      }
+      return actualizado;
+    }));
   };
 
   useEffect(() => {
@@ -3011,6 +3021,83 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         supabase.from("solicitudes").update({ documentos: s.documentos }).eq("id", s.id)
           .then(({ error }) => { if (error) console.warn("[correo solicitante]", error.message); });
       });
+  }, [personaId, solicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!persona || !misSols.length) return;
+    const solsCspRural = misSols.filter(sol => sol.programaId === "csp_rural");
+    if (!solsCspRural.length) return;
+    const limpiar = (v) => String(v ?? "").trim();
+    const agregar = (updates, key, value) => {
+      const val = limpiar(value);
+      if (!val) return;
+      const actual = limpiar(persona[key]);
+      if (actual !== val) updates[key] = val;
+    };
+    const resumenDominio = (tipo, desc, fjs, numero, anio) => {
+      const partes = [
+        tipo,
+        desc ? "Detalle: " + desc : "",
+        fjs ? "Fjs: " + fjs : "",
+        numero ? "N°: " + numero : "",
+        anio ? "Año: " + anio : "",
+      ].filter(Boolean);
+      return partes.join(" - ");
+    };
+    const updates = {};
+    solsCspRural.forEach(sol => {
+      (sol.documentos || []).forEach(doc => {
+        const n = docNombreNorm(doc);
+        const valor = limpiar(doc.valor);
+        if (!valor) return;
+        if (n.includes("registro social")) {
+          const p = valor.split("|");
+          agregar(updates, "puntajeRSH", p[0]);
+          agregar(updates, "puntaje_rsh", p[0]);
+          agregar(updates, "comuna", p[1] && p[1].startsWith("OTRA: ") ? p[1].replace(/^OTRA:\s*/, "") : p[1]);
+          agregar(updates, "estadoCivil", p[2]);
+          agregar(updates, "integrantesFamiliares", p[3]);
+          agregar(updates, "subsidioAnterior", p[4]);
+          agregar(updates, "discapacidad", p[5] === "N/A" ? "N/A" : (p[5] ? "S" : ""));
+          agregar(updates, "credencialDiscapacidad", p[5] === "N/A" ? "N/A" : p[5]);
+          agregar(updates, "movilidadReducida", p[6]);
+        }
+        if (n.includes("avaluo") || n.includes("avalúo")) {
+          const p = valor.split("|");
+          const rol = limpiar(p[0]);
+          const avaluo = formatPesosChilenos(p[1] || "");
+          agregar(updates, "rol", rol);
+          agregar(updates, "rol_propiedad", rol);
+          agregar(updates, "avaluoFiscal", avaluo);
+          agregar(updates, "coordenadas", p[2]);
+        }
+        if (n.includes("telefono")) agregar(updates, "telefono", valor);
+        if (n.includes("correo")) agregar(updates, "email", valor);
+        if (n.includes("certificado") && n.includes("ruralidad")) agregar(updates, "certRuralidad", valor.replace("|", " - "));
+        if (n.includes("dominio") || n.includes("derecho real") || n.includes("usufructo") || n.includes("goce")) {
+          const p = valor.split("|");
+          const dominio = resumenDominio(p[0], p[1], p[2], p[3], p[4]);
+          agregar(updates, "dominiopropiedad", dominio);
+          agregar(updates, "dominio_terreno", p[0]);
+        }
+        if (n.includes("cuenta") && n.includes("ahorro")) {
+          const p = valor.split("|");
+          agregar(updates, "cuentaAhorro", p[0]);
+          agregar(updates, "banco", p[1]);
+        }
+        if (n.includes("boleta") && n.includes("luz")) {
+          const p = valor.split("|");
+          agregar(updates, "proveedorElectrico", p[0]);
+          agregar(updates, "nClienteElectricidad", p[1]);
+        }
+        if (n.includes("agua") || n.includes("apr") || n.includes("arranque")) {
+          const p = valor.split("|");
+          agregar(updates, "sistemaAgua", p[0]);
+          agregar(updates, "nServicioAgua", p[1]);
+        }
+      });
+    });
+    if (Object.keys(updates).length > 0) syncPersona(updates);
   }, [personaId, solicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!persona) return null;
@@ -5803,7 +5890,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               const rol = armarRolAvaluo(e.target.value, avaluoRolSegundo);
                               const newValor = rol + "|" + avaluoValor + "|" + avaluoCoordenadas;
                               onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
-                              if (rol) await syncPersona({ rol });
+                              if (rol) await syncPersona({ rol, rol_propiedad: rol });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoRolPrimero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                           <input type="text" placeholder="Segundo rol" value={avaluoRolSegundo}
@@ -5812,7 +5899,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               const rol = armarRolAvaluo(avaluoRolPrimero, e.target.value);
                               const newValor = rol + "|" + avaluoValor + "|" + avaluoCoordenadas;
                               onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
-                              if (rol) await syncPersona({ rol });
+                              if (rol) await syncPersona({ rol, rol_propiedad: rol });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoRolSegundo.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         </div>
