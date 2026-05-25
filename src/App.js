@@ -70,9 +70,10 @@ const mostrarSiNo = (value) => {
   if (txt === "N" || txt === "NO") return "No";
   return value || "";
 };
-const textoEdad = (fechaNac) => {
+const textoAdultoMayor = (fechaNac) => {
   const edad = calcularEdad(fechaNac);
-  return edad !== null ? `${edad} años` : "";
+  if (edad === null) return "";
+  return `${edad >= 60 ? "SI" : "NO"}/ ${edad} años`;
 };
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const docNombreCanonico = (doc) => {
@@ -1851,9 +1852,8 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
 
   const guardar = () => {
     setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Rural?", fn: async () => {
-      const edadCalc = calcularEdad(form.fechaNacimiento);
       const formFinal = protegerDatosFicha(form, persona, {
-        adultoMayor: edadCalc !== null ? `${edadCalc} años` : form.adultoMayor,
+        adultoMayor: textoAdultoMayor(form.fechaNacimiento) || form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
@@ -1866,8 +1866,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   };
 
   const handleFechaNac = (val) => {
-    const edad = calcularEdad(val);
-    const adulto = edad !== null ? `${edad} años` : (form.adultoMayor || "");
+    const adulto = textoAdultoMayor(val) || form.adultoMayor || "";
     setForm(f => ({ ...f, fechaNacimiento: val, adultoMayor: adulto }));
   };
 
@@ -1947,7 +1946,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
             {campo("N° Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
-              const val = textoEdad(fechaNacFicha) || persona.adultoMayor || "";
+              const val = textoAdultoMayor(fechaNacFicha) || persona.adultoMayor || "";
               return campo("Adulto Mayor", val);
             })()}
 
@@ -2018,10 +2017,10 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Adulto Mayor</label>
               {(() => {
                 const e = calcularEdad(form.fechaNacimiento);
-                const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : null;
+                const val = textoAdultoMayor(form.fechaNacimiento);
                 return val ? (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: e >= 60 ? "#FFFBEB" : "#f9fafb", border: "1.5px solid " + (e >= 60 ? "#D97706" : "#e5e7eb"), fontSize: 13, fontWeight: 700, color: e >= 60 ? "#D97706" : "#6b7280" }}>
-                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>({e} años — calculado automáticamente)</span>
+                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>(calculado automáticamente)</span>
                   </div>
                 ) : (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#9ca3af" }}>
@@ -2179,9 +2178,8 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
 
   const guardar = () => {
     setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Urbana?", fn: async () => {
-      const edadCalc = calcularEdad(form.fechaNacimiento);
       const formFinal = protegerDatosFicha(form, persona, {
-        adultoMayor: edadCalc !== null ? `${edadCalc} años` : form.adultoMayor,
+        adultoMayor: textoAdultoMayor(form.fechaNacimiento) || form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
@@ -2194,8 +2192,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   };
 
   const handleFechaNac = (val) => {
-    const edad = calcularEdad(val);
-    const adulto = edad !== null ? `${edad} años` : (form.adultoMayor || "");
+    const adulto = textoAdultoMayor(val) || form.adultoMayor || "";
     setForm(f => ({ ...f, fechaNacimiento: val, adultoMayor: adulto }));
   };
 
@@ -2275,7 +2272,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
             {campo("N° Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
-              const val = textoEdad(fechaNacFicha) || persona.adultoMayor || "";
+              const val = textoAdultoMayor(fechaNacFicha) || persona.adultoMayor || "";
               return campo("Adulto Mayor", val);
             })()}
 
@@ -2345,10 +2342,10 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Adulto Mayor</label>
               {(() => {
                 const e = calcularEdad(form.fechaNacimiento);
-                const val = e !== null ? (e >= 60 ? "ADULTO MAYOR" : "NO") : null;
+                const val = textoAdultoMayor(form.fechaNacimiento);
                 return val ? (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: e >= 60 ? "#ECFDF5" : "#f9fafb", border: "1.5px solid " + (e >= 60 ? "#059669" : "#e5e7eb"), fontSize: 13, fontWeight: 700, color: e >= 60 ? "#059669" : "#6b7280" }}>
-                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>({e} años — calculado automáticamente)</span>
+                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>(calculado automáticamente)</span>
                   </div>
                 ) : (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#9ca3af" }}>
@@ -3087,17 +3084,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (n.includes("cedula") && n.includes("identidad")) {
           const p = valor.split("|");
           const fecha = normalizarFechaInput(p[1]);
-          const edad = calcularEdad(fecha);
           agregar(updates, "rut", p[0]);
           agregar(updates, "fechaNacimiento", fecha);
           agregar(updates, "rutColores", p[2]);
-          if (edad !== null) agregar(updates, "adultoMayor", `${edad} años`);
+          agregar(updates, "adultoMayor", textoAdultoMayor(fecha));
         }
         if (n.includes("fecha") && n.includes("nacimiento")) {
           const fecha = normalizarFechaInput(valor);
-          const edad = calcularEdad(fecha);
           agregar(updates, "fechaNacimiento", fecha);
-          if (edad !== null) agregar(updates, "adultoMayor", `${edad} años`);
+          agregar(updates, "adultoMayor", textoAdultoMayor(fecha));
         }
         if (n.includes("registro social") || n.includes("rsh") || n.includes("rdh")) {
           const p = valor.split("|");
@@ -3149,8 +3144,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       });
     });
     const fechaParaEdad = updates.fechaNacimiento || persona.fechaNacimiento || persona.fecha_nacimiento || fechaNacimientoDesdeSolicitudes(solsCsp);
-    const edad = calcularEdad(fechaParaEdad);
-    if (edad !== null) agregar(updates, "adultoMayor", `${edad} años`);
+    agregar(updates, "adultoMayor", textoAdultoMayor(fechaParaEdad));
     const ahorroActual = calcularAhorro(updates.puntajeRSH || persona.puntajeRSH || persona.puntaje_rsh || rshDesdeSolicitudes(solsCsp));
     agregar(updates, "ahorroPostular", ahorroActual);
     if (Object.keys(updates).length > 0) syncPersona(updates);
@@ -4655,8 +4649,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         if (p[1] && p[1].length === 10) {
                           db.fecha_nacimiento = p[1];
                           lc.fechaNacimiento = p[1];
-                          const edad = calcularEdad(p[1]);
-                          if (edad !== null) db.adultomayor = lc.adultoMayor = `${edad} años`;
+                          const adulto = textoAdultoMayor(p[1]);
+                          if (adulto) db.adultomayor = lc.adultoMayor = adulto;
                         }
                         if (p[2]) { db.rutcolores = p[2].trim(); lc.rutColores = p[2].trim(); }
                       }
@@ -4667,8 +4661,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       // Fecha de nacimiento sola
                       if (n.includes("fecha de nacimiento") && v.length === 10) {
                         db.fecha_nacimiento = v; lc.fechaNacimiento = v;
-                        const edad = calcularEdad(v);
-                        if (edad !== null) db.adultomayor = lc.adultoMayor = `${edad} años`;
+                        const adulto = textoAdultoMayor(v);
+                        if (adulto) db.adultomayor = lc.adultoMayor = adulto;
                       }
                       // RSH → puntaje, comuna, estado civil, integrantes, subsidio
                       if (n.includes("registro social") || n.includes("rsh")) {
@@ -5505,8 +5499,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       const guardarFecha = async (fechaCompleta) => {
                         setDocValor(sol.id, i, fechaCompleta);
                         if (fechaCompleta) {
-                          const edad = calcularEdad(fechaCompleta);
-                          const am = edad!==null ? `${edad} años` : "";
+                          const am = textoAdultoMayor(fechaCompleta);
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
                           onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
                         }
@@ -5825,8 +5818,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         const newValor = rutFinal + "|" + fechaCompleta + "|" + tipoRut2;
                         onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : { ...d2, valor: newValor, entregado: !!(rutOk && fechaCompleta.length===10) }) }));
                         if (fechaCompleta.length===10) {
-                          const edad = calcularEdad(fechaCompleta);
-                          const am = edad!==null ? `${edad} años` : "";
+                          const am = textoAdultoMayor(fechaCompleta);
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
                           onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
                         }
