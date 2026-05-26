@@ -9478,6 +9478,26 @@ export default function App() {
     };
   };
 
+  const cargarBaseRespaldoEstatico = async () => {
+    const res = await conTiempoMaximo(
+      fetch("/respaldo_base.json", { cache: "no-store" }),
+      5000,
+      "Tiempo agotado cargando respaldo local."
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || (!json.personas?.length && !json.comites?.length)) {
+      throw new Error("No se pudo cargar respaldo local.");
+    }
+    return {
+      comites: json.comites || [],
+      personas: json.personas || [],
+      programasCustom: json.programasCustom || [],
+      solicitudes: json.solicitudes || [],
+      desdeRespaldo: true,
+      fuente: json.fuente || "respaldo local",
+    };
+  };
+
   const mapearPersonaDb = (x = {}) => ({
     ...x,
     // Mapeos snake_case -> camelCase (campos existentes)
@@ -9642,17 +9662,31 @@ export default function App() {
       if (!silencioso) setErrorCargaDatos("");
       try {
         let base;
+        let usandoRespaldo = false;
         try {
           base = await cargarBaseServidor();
         } catch (renderErr) {
           console.warn("[bootstrap render]", renderErr.message);
-          base = await cargarBaseSupabaseDirecto();
+          try {
+            base = await cargarBaseSupabaseDirecto();
+          } catch (supabaseErr) {
+            console.warn("[bootstrap supabase]", supabaseErr.message);
+            base = await cargarBaseRespaldoEstatico();
+            usandoRespaldo = true;
+          }
         }
         if (secuencia !== cargaDatosSeqRef.current) return;
         const programasCarga = aplicarDatosBase(base);
         setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
-        setErrorCargaDatos("");
+        setErrorCargaDatos(usandoRespaldo
+          ? `Supabase no responde. Se muestran datos desde ${base.fuente}; no se borró información. Presione Actualizar datos para reconectar.`
+          : "");
         if (!silencioso) setCargando(false);
+
+        if (usandoRespaldo && (base.solicitudes || []).length) {
+          setSolicitudes((base.solicitudes || []).map(sol => mapearSolicitudDb(sol, programasCarga)));
+          return;
+        }
 
         cargarSolicitudesPorPartes()
           .then(s => {
