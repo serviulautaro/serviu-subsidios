@@ -9221,6 +9221,7 @@ export default function App() {
   const [recargandoDatos, setRecargandoDatos] = useState(false);
   const [ultimaRecargaDatos, setUltimaRecargaDatos] = useState("");
   const [errorCargaDatos, setErrorCargaDatos] = useState("");
+  const [datosBaseListos, setDatosBaseListos] = useState(false);
   const [programasCustom, setProgramasCustom] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const lastActivityRef = useRef(Date.now());
@@ -9459,6 +9460,89 @@ export default function App() {
     };
   };
 
+  const mapearPersonaDb = (x = {}) => ({
+    ...x,
+    // Mapeos snake_case -> camelCase (campos existentes)
+    comiteId:             x.comite_id,
+    fechaNacimiento:      x.fecha_nacimiento,
+    puntajeRSH:           x.puntaje_rsh,
+    integrantesFamiliares:x.integrantes_familiares,
+    fechaIngreso:         x.fecha_ingreso,
+    tipo_comite:          x.tipo_comite || x.tipo || "",
+    rol_propiedad:        x.rol_propiedad || "",
+    dominio_terreno:      x.dominio_terreno || "",
+    anio_subsidio:        x.anio_subsidio || "",
+    sector:               x.sector || "",
+    coordenadas:          x.coordenadas || "",
+    numero_recepcion:     x.numero_recepcion || "",
+    fecha_recepcion:      x.fecha_recepcion || "",
+    estado_desmarque:     x.estado_desmarque || "",
+    observaciones:        x.observaciones || "",
+    // Mapeos lowercase DB -> camelCase app (campos de fichas técnicas)
+    dominiopropiedad:      x.dominiopropiedad || "",
+    nFJS:                  x.nfjs || "",
+    sistemaAgua:           x.sistemaagua || "",
+    nServicioAgua:         x.nservicioagua || "",
+    proveedorElectrico:    x.proveedorelectrico || "",
+    nClienteElectricidad:  x.nclienteelectricidad || "",
+    certRuralidad:         x.certruralidad || "",
+    avaluoFiscal:          x.avaluofiscal || "",
+    informacionesPrevias:  x.informacionesprevias || "",
+    infPrevias:            x.infprevias || x.informacionesprevias || "",
+    antecedentesVivienda:  x.antecedentesvivienda || "",
+    discapacidad:          x.discapacidad || "",
+    movilidadReducida:     x.movilidadreducida || "",
+    credencialDiscapacidad:x.credencialdiscapacidad || "",
+    cuentaAhorro:          x.cuentaahorro || "",
+    banco:                 x.banco || "",
+    rutColores:            x.rutcolores || "",
+    subsidioAnterior:      x.subsidio_anterior || "",
+    estadoCivil:           x.estadocivil || "",
+    ahorroPostular:        x.ahorropostular || "",
+    adultoMayor:           x.adultomayor || "",
+    cargo_comite:          x.cargo_comite || "",
+    numero_lista:          x.numero_lista || "",
+    rol:                   x.rol || "",
+    permisoEdificacion:    x.permisoedificacion || "",
+    recepcionDefinitiva:   x.recepciondefinitiva || "",
+    constructoraSeleccionada: x.constructoraseleccionada || "",
+    metrosOriginal:        x.metrosoriginal || "",
+    metrosAmpl:            x.metrosampl || "",
+    metrosNoRegul:         x.metrosnoregul || "",
+    totalMetros:           x.totalmetros || "",
+    modalidadPostulacion:  x.modalidadpostulacion || "",
+  });
+
+  const aplicarDatosBase = (base = {}, guardarCache = true) => {
+    const c = base.comites || [];
+    const p = base.personas || [];
+    const pc = base.programasCustom || [];
+    if (!p.length && !c.length) return combinarProgramas(programasCustom);
+    const programasCustomCargados = (pc || []).map(x => ({
+      ...x,
+      colorLight: x.colorlight || "#F9FAFB",
+      documentos: Array.isArray(x.documentos) ? x.documentos : [],
+      esCustom: true,
+    }));
+    setProgramasCustom(programasCustomCargados);
+    setComites((c || []).map(x => ({
+      ...x,
+      programaId: x.programa_id,
+      fechaCreacion: x.fecha_creacion,
+    })));
+    setPersonas((p || []).map(mapearPersonaDb));
+    setDatosBaseListos(true);
+    if (guardarCache) {
+      DB.set("serviu_cache_base", {
+        comites: c,
+        personas: p,
+        programasCustom: pc,
+        actualizado: new Date().toISOString(),
+      });
+    }
+    return combinarProgramas(programasCustomCargados);
+  };
+
   const cargarSolicitudesPorPartes = async () => {
     try {
       const res = await conTiempoMaximo(
@@ -9493,7 +9577,15 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) {
       setCargando(false);
+      setDatosBaseListos(false);
       return undefined;
+    }
+    const cacheBase = DB.get("serviu_cache_base");
+    if (cacheBase && ((cacheBase.personas || []).length || (cacheBase.comites || []).length)) {
+      aplicarDatosBase(cacheBase, false);
+      setUltimaRecargaDatos("respaldo local");
+    } else {
+      setDatosBaseListos(false);
     }
     const cargarDatos = async (silencioso = false) => {
       const secuencia = ++cargaDatosSeqRef.current;
@@ -9508,74 +9600,7 @@ export default function App() {
           base = await cargarBaseSupabaseDirecto();
         }
         if (secuencia !== cargaDatosSeqRef.current) return;
-        const c = base.comites || [];
-        const p = base.personas || [];
-        const pc = base.programasCustom || [];
-        const programasCustomCargados = (pc || []).map(x => ({
-          ...x,
-          colorLight: x.colorlight || "#F9FAFB",
-          documentos: Array.isArray(x.documentos) ? x.documentos : [],
-          esCustom: true,
-        }));
-        const programasCarga = combinarProgramas(programasCustomCargados);
-        setProgramasCustom(programasCustomCargados);
-        setComites((c || []).map(x => ({
-          ...x,
-          programaId: x.programa_id,
-          fechaCreacion: x.fecha_creacion,
-        })));
-        setPersonas((p || []).map(x => ({
-          ...x,
-          // Mapeos snake_case → camelCase (campos existentes)
-          comiteId:             x.comite_id,
-          fechaNacimiento:      x.fecha_nacimiento,
-          puntajeRSH:           x.puntaje_rsh,
-          integrantesFamiliares:x.integrantes_familiares,
-          fechaIngreso:         x.fecha_ingreso,
-          tipo_comite:          x.tipo_comite || x.tipo || "",
-          rol_propiedad:        x.rol_propiedad || "",
-          dominio_terreno:      x.dominio_terreno || "",
-          anio_subsidio:        x.anio_subsidio || "",
-          sector:               x.sector || "",
-          coordenadas:          x.coordenadas || "",
-          numero_recepcion:     x.numero_recepcion || "",
-          fecha_recepcion:      x.fecha_recepcion || "",
-          estado_desmarque:     x.estado_desmarque || "",
-          observaciones:        x.observaciones || "",
-          // Mapeos lowercase DB → camelCase app (campos de fichas técnicas)
-          dominiopropiedad:      x.dominiopropiedad || "",
-          nFJS:                  x.nfjs || "",
-          sistemaAgua:           x.sistemaagua || "",
-          nServicioAgua:         x.nservicioagua || "",
-          proveedorElectrico:    x.proveedorelectrico || "",
-          nClienteElectricidad:  x.nclienteelectricidad || "",
-          certRuralidad:         x.certruralidad || "",
-          avaluoFiscal:          x.avaluofiscal || "",
-          informacionesPrevias:  x.informacionesprevias || "",
-          infPrevias:            x.infprevias || x.informacionesprevias || "",
-          antecedentesVivienda:  x.antecedentesvivienda || "",
-          discapacidad:          x.discapacidad || "",
-          movilidadReducida:     x.movilidadreducida || "",
-          credencialDiscapacidad:x.credencialdiscapacidad || "",
-          cuentaAhorro:          x.cuentaahorro || "",
-          banco:                 x.banco || "",
-          rutColores:            x.rutcolores || "",
-          subsidioAnterior:      x.subsidio_anterior || "",
-          estadoCivil:           x.estadocivil || "",
-          ahorroPostular:        x.ahorropostular || "",
-          adultoMayor:           x.adultomayor || "",
-          cargo_comite:          x.cargo_comite || "",
-          numero_lista:          x.numero_lista || "",
-          rol:                   x.rol || "",
-          permisoEdificacion:    x.permisoedificacion || "",
-          recepcionDefinitiva:   x.recepciondefinitiva || "",
-          constructoraSeleccionada: x.constructoraseleccionada || "",
-          metrosOriginal:        x.metrosoriginal || "",
-          metrosAmpl:            x.metrosampl || "",
-          metrosNoRegul:         x.metrosnoregul || "",
-          totalMetros:           x.totalmetros || "",
-          modalidadPostulacion:  x.modalidadpostulacion || "",
-        })));
+        const programasCarga = aplicarDatosBase(base);
         setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
         setErrorCargaDatos("");
         if (!silencioso) setCargando(false);
@@ -9933,12 +9958,20 @@ export default function App() {
             MODO DEMO: datos locales de muestra, sin solicitantes reales. Limite: {DEMO_MAX_SOLICITANTES} solicitantes.
           </div>
         )}
-        {view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} programasCustom={programasCustom} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
-        {view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onNav={nav} />}
-        {view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
-        {view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
-        {view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
-        {view === "programas" && <ProgramasView solicitudes={solicitudes} programasCustom={programasCustom} onAddPrograma={async (prog) => {
+        {!datosBaseListos && view !== "admin" && (
+          <div style={{ background: "#fff", border: "1px solid #BFDBFE", borderRadius: 14, padding: 26, color: "#1e3a5f", fontWeight: 800 }}>
+            Cargando datos reales del sistema...
+            <div style={{ marginTop: 8, color: "#64748b", fontSize: 13, fontWeight: 500 }}>
+              No se muestran ceros mientras la base no responda. Presione Actualizar datos si tarda demasiado.
+            </div>
+          </div>
+        )}
+        {datosBaseListos && view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} programasCustom={programasCustom} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
+        {datosBaseListos && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onNav={nav} />}
+        {datosBaseListos && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
+        {datosBaseListos && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
+        {datosBaseListos && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {datosBaseListos && view === "programas" && <ProgramasView solicitudes={solicitudes} programasCustom={programasCustom} onAddPrograma={async (prog) => {
           const { data, error } = await supabase.from("programas_custom").insert([{
             id: uid(), nombre: prog.nombre, descripcion: prog.descripcion,
             color: prog.color, colorlight: prog.colorLight, icon: prog.icon, documentos: prog.documentos
@@ -9980,10 +10013,10 @@ export default function App() {
           });
           await registrarAuditoria("actualizar_programa", "programas_custom", prog.id, { nombre: prog.nombre });
         }} />}
-        {view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} programasCustom={programasCustom} onDetail={goDetail} />}
-        {view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
-        {view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} programasCustom={programasCustom} />}
-        {view === "auditoria" && esAdmin && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
+        {datosBaseListos && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} programasCustom={programasCustom} onDetail={goDetail} />}
+        {datosBaseListos && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {datosBaseListos && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} programasCustom={programasCustom} />}
+        {datosBaseListos && view === "auditoria" && esAdmin && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
         {view === "admin" && esAdmin && <AdminUsuariosView currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
       </main>
     </div>
