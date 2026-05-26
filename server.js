@@ -26,6 +26,7 @@ const SUPABASE_KEY = 'sb_publishable_SSAA2undzTyVsgCjMgbXBw_Bu9D_lvt';
 const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
 let cacheBootstrap = null;
 let cacheSolicitudes = null;
+const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita';
 
 const timeout = (promise, ms, message) => Promise.race([
   promise,
@@ -37,7 +38,7 @@ async function cargarSolicitudesServidor() {
   const todas = [];
   for (let inicio = 0; ; inicio += pageSize) {
     const { data, error } = await timeout(
-      supabaseServer.from('solicitudes').select('*').range(inicio, inicio + pageSize - 1),
+      supabaseServer.from('solicitudes').select(SOLICITUDES_SELECT_BASE).range(inicio, inicio + pageSize - 1),
       10000,
       'Tiempo agotado cargando solicitudes'
     );

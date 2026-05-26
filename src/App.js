@@ -196,6 +196,7 @@ const statusBg = (p) => p === 100 ? "#ECFDF5" : p >= 50 ? "#FFFBEB" : "#FEF2F2";
 const API = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
   ? window.location.origin
   : "http://localhost:3001";
+const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita";
 const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
 const apiPath = (prefix, routePath = "", fileName = "") =>
@@ -1257,8 +1258,25 @@ function ProgramaFigura({ programa, tipo = "", size = 56 }) {
 }
 
 function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav }) {
+  const sinDatosBase = personas.length === 0 && comites.length === 0 && solicitudes.length === 0;
   const completas = solicitudes.filter(s => pct(s.documentos, s.programaId) === 100).length;
   const todosProgramas = combinarProgramas(programasCustom);
+  if (sinDatosBase) {
+    return (
+      <div>
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Panel principal</div>
+          <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>Resumen del sistema de subsidios habitacionales</div>
+        </div>
+        <div style={{ background: "#fff", border: "1px solid #BFDBFE", borderRadius: 14, padding: 28, color: "#1e3a5f" }}>
+          <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>Cargando datos reales del sistema</div>
+          <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6 }}>
+            No se muestran contadores en cero mientras la base de datos no responda. Presione “Actualizar datos” si tarda demasiado.
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div>
       <div style={{ marginBottom: 28 }}>
@@ -9543,6 +9561,37 @@ export default function App() {
     return combinarProgramas(programasCustomCargados);
   };
 
+  const mapearSolicitudDb = (sol = {}, programasCarga = combinarProgramas(programasCustom)) => {
+    const documentosCargados = Array.isArray(sol.documentos);
+    const mapped = {
+      ...sol,
+      personaId: sol.persona_id,
+      personaNombre: sol.persona_nombre,
+      programaId: sol.programa_id,
+      codigoComite: sol.codigo_comite,
+      tipoComite: sol.tipo_comite,
+      profesionalComite: sol.profesional_comite,
+      documentos: documentosCargados ? aliviarDocumentosSolicitud(sol.documentos) : [],
+      documentosCargados,
+    };
+    mapped.fecha_visita = fechaVisitaSolicitud(mapped);
+    // Migrar solicitudes CSP antiguas solo cuando sus documentos completos ya fueron cargados.
+    if ((mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") && documentosCargados) {
+      const prog = programasCarga.find(p => p.id === mapped.programaId);
+      if (prog && mapped.documentos) {
+        const nombresExistentes = new Set(mapped.documentos.map(d => d.nombre));
+        const faltantes = prog.documentos.filter(d => !nombresExistentes.has(d.nombre));
+        if (faltantes.length > 0) {
+          mapped.documentos = [
+            ...mapped.documentos,
+            ...faltantes.map(d => ({ nombre: d.nombre, obligatorio: d.obligatorio, entregado: false, tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null }))
+          ];
+        }
+      }
+    }
+    return mapped;
+  };
+
   const cargarSolicitudesPorPartes = async () => {
     try {
       const res = await conTiempoMaximo(
@@ -9561,10 +9610,10 @@ export default function App() {
       const { data, error } = await conTiempoMaximo(
         supabase
           .from("solicitudes")
-          .select("*")
+          .select(SOLICITUDES_SELECT_BASE)
           .range(inicio, inicio + pageSize - 1),
         6000,
-        "Tiempo agotado cargando solicitudes/documentos."
+        "Tiempo agotado cargando solicitudes."
       );
       if (error) throw error;
       todas.push(...(data || []));
@@ -9608,34 +9657,7 @@ export default function App() {
         cargarSolicitudesPorPartes()
           .then(s => {
             if (secuencia !== cargaDatosSeqRef.current) return;
-            const solicitudesMapeadas = (s || []).map(sol => {
-              const mapped = {
-                ...sol,
-                personaId: sol.persona_id,
-                personaNombre: sol.persona_nombre,
-                programaId: sol.programa_id,
-                codigoComite: sol.codigo_comite,
-                tipoComite: sol.tipo_comite,
-                profesionalComite: sol.profesional_comite,
-                documentos: aliviarDocumentosSolicitud(sol.documentos),
-              };
-              mapped.fecha_visita = fechaVisitaSolicitud(mapped);
-              // Migrar solicitudes CSP antiguas: agregar documentos que faltan según PROGRAMAS
-              if (mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") {
-                const prog = programasCarga.find(p => p.id === mapped.programaId);
-                if (prog && mapped.documentos) {
-                  const nombresExistentes = new Set(mapped.documentos.map(d => d.nombre));
-                  const faltantes = prog.documentos.filter(d => !nombresExistentes.has(d.nombre));
-                  if (faltantes.length > 0) {
-                    mapped.documentos = [
-                      ...mapped.documentos,
-                      ...faltantes.map(d => ({ nombre: d.nombre, obligatorio: d.obligatorio, entregado: false, tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null }))
-                    ];
-                  }
-                }
-              }
-              return mapped;
-            });
+            const solicitudesMapeadas = (s || []).map(sol => mapearSolicitudDb(sol, programasCarga));
             setSolicitudes(solicitudesMapeadas);
             setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesMapeadas); }, 1500);
             setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
@@ -9768,6 +9790,7 @@ export default function App() {
     const anterioresPorId = new Map(solicitudes.map(s => [s.id, s]));
     for (const s of lista) {
       const anterior = anterioresPorId.get(s.id);
+      const documentosCargados = s.documentosCargados !== false || (s.documentos || []).length > 0 || !anterior;
       const cambioBase = !anterior ||
         anterior.personaId !== s.personaId ||
         anterior.personaNombre !== s.personaNombre ||
@@ -9778,17 +9801,17 @@ export default function App() {
         (anterior.tipoComite || "") !== (s.tipoComite || "") ||
         (anterior.profesionalComite || "") !== (s.profesionalComite || "") ||
         (anterior.fecha_visita || "") !== (s.fecha_visita || "") ||
-        JSON.stringify(anterior.documentos || []) !== JSON.stringify(s.documentos || []);
+        (documentosCargados && JSON.stringify(anterior.documentos || []) !== JSON.stringify(s.documentos || []));
       if (!cambioBase) continue;
       const payload = {
         id: s.id, persona_id: s.personaId, persona_nombre: s.personaNombre,
         programa_id: s.programaId, fecha: s.fecha, comite: s.comite || null,
         codigo_comite: s.codigoComite || null, tipo_comite: s.tipoComite || null,
-        profesional_comite: s.profesionalComite || null,
-        documentos: s.documentos
+        profesional_comite: s.profesionalComite || null
       };
+      if (documentosCargados) payload.documentos = s.documentos;
       await supabase.from("solicitudes").upsert(payload);
-      const cambios = resumenCambiosDocumentos(anterior?.documentos, s.documentos);
+      const cambios = documentosCargados ? resumenCambiosDocumentos(anterior?.documentos, s.documentos) : [];
       if (cambios.length) {
         await registrarAuditoria("guardar_solicitudes", "solicitudes", s.id, {
           solicitante: nombrePersonaAuditoria(s),
@@ -9820,7 +9843,35 @@ export default function App() {
     }
   };
 
-  const goDetail = (id) => { setFromView(view); setDetailId(id); setView("detalle"); };
+  const cargarSolicitudesPersona = async (personaId) => {
+    if (!personaId) return;
+    try {
+      const { data, error } = await conTiempoMaximo(
+        supabase.from("solicitudes").select("*").eq("persona_id", personaId),
+        12000,
+        "Tiempo agotado cargando documentos del solicitante."
+      );
+      if (error) throw error;
+      const programasCarga = combinarProgramas(programasCustom);
+      const solicitudesCompletas = (data || []).map(sol => mapearSolicitudDb(sol, programasCarga));
+      setSolicitudes(prev => {
+        const porId = new Map((prev || []).map(sol => [sol.id, sol]));
+        solicitudesCompletas.forEach(sol => {
+          porId.set(sol.id, { ...(porId.get(sol.id) || {}), ...sol, documentosCargados: true });
+        });
+        return Array.from(porId.values());
+      });
+    } catch (err) {
+      console.warn("[detalle solicitante] No se pudieron cargar documentos completos:", err?.message || err);
+    }
+  };
+
+  const goDetail = (id) => {
+    setFromView(view);
+    setDetailId(id);
+    setView("detalle");
+    cargarSolicitudesPersona(id);
+  };
   const nav = (v) => {
     if (v.startsWith("comites_prog_")) {
       setFiltroPrograma(v.replace("comites_prog_", ""));
