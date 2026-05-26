@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 const { execFileSync } = require('child_process');
+const { createClient } = require('@supabase/supabase-js');
 // (documentos generados en HTML — sin dependencia docx)
 
 const app = express();
@@ -19,6 +20,33 @@ if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir);
 
 // Inicializar base de datos
 const db = new Database(path.join(__dirname, 'serviu.db'));
+
+const SUPABASE_URL = 'https://qirjfgjesjzikouehmib.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_SSAA2undzTyVsgCjMgbXBw_Bu9D_lvt';
+const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
+let cacheBootstrap = null;
+let cacheSolicitudes = null;
+
+const timeout = (promise, ms, message) => Promise.race([
+  promise,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+]);
+
+async function cargarSolicitudesServidor() {
+  const pageSize = 100;
+  const todas = [];
+  for (let inicio = 0; ; inicio += pageSize) {
+    const { data, error } = await timeout(
+      supabaseServer.from('solicitudes').select('*').range(inicio, inicio + pageSize - 1),
+      10000,
+      'Tiempo agotado cargando solicitudes'
+    );
+    if (error) throw error;
+    todas.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return todas;
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS datos (
@@ -42,6 +70,39 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_archivos_carpeta ON archivos(carpeta);
 `);
+
+app.get('/api/bootstrap', async (req, res) => {
+  try {
+    const [comitesRes, personasRes, programasRes] = await timeout(Promise.all([
+      supabaseServer.from('comites').select('*'),
+      supabaseServer.from('personas').select('*'),
+      supabaseServer.from('programas_custom').select('*')
+    ]), 10000, 'Tiempo agotado cargando datos base');
+    const errores = [comitesRes, personasRes, programasRes].map(r => r.error && r.error.message).filter(Boolean);
+    if (errores.length) throw new Error(errores.join(' | '));
+    cacheBootstrap = {
+      comites: comitesRes.data || [],
+      personas: personasRes.data || [],
+      programasCustom: programasRes.data || [],
+      actualizado: new Date().toISOString()
+    };
+    res.json({ ok: true, ...cacheBootstrap });
+  } catch (e) {
+    if (cacheBootstrap) return res.json({ ok: true, cache: true, ...cacheBootstrap });
+    res.status(504).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/solicitudes', async (req, res) => {
+  try {
+    const solicitudes = await cargarSolicitudesServidor();
+    cacheSolicitudes = { solicitudes, actualizado: new Date().toISOString() };
+    res.json({ ok: true, ...cacheSolicitudes });
+  } catch (e) {
+    if (cacheSolicitudes) return res.json({ ok: true, cache: true, ...cacheSolicitudes });
+    res.status(504).json({ ok: false, error: e.message });
+  }
+});
 
 // API DATOS
 app.get('/datos/:clave', (req, res) => {

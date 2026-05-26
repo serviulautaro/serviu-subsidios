@@ -9421,7 +9421,56 @@ export default function App() {
     new Promise((_, reject) => window.setTimeout(() => reject(new Error(mensaje)), ms))
   ]);
 
+  const cargarBaseServidor = async () => {
+    const res = await conTiempoMaximo(
+      fetch(API + "/api/bootstrap", { cache: "no-store" }),
+      8000,
+      "Tiempo agotado cargando datos base desde Render."
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.ok === false) throw new Error(json.error || "No se pudo cargar datos base desde Render.");
+    return {
+      comites: json.comites || [],
+      personas: json.personas || [],
+      programasCustom: json.programasCustom || [],
+    };
+  };
+
+  const cargarBaseSupabaseDirecto = async () => {
+    const [comitesRes, personasRes, programasRes] = await conTiempoMaximo(
+      Promise.all([
+        supabase.from("comites").select("*"),
+        supabase.from("personas").select("*"),
+        supabase.from("programas_custom").select("*"),
+      ]),
+      6000,
+      "Tiempo agotado cargando solicitantes y comités desde Supabase."
+    );
+    const erroresBase = [comitesRes, personasRes, programasRes]
+      .map(r => r.error?.message)
+      .filter(Boolean);
+    if (erroresBase.length) {
+      throw new Error("Recarga incompleta desde Supabase: " + erroresBase.join(" | "));
+    }
+    return {
+      comites: comitesRes.data || [],
+      personas: personasRes.data || [],
+      programasCustom: programasRes.data || [],
+    };
+  };
+
   const cargarSolicitudesPorPartes = async () => {
+    try {
+      const res = await conTiempoMaximo(
+        fetch(API + "/api/solicitudes", { cache: "no-store" }),
+        10000,
+        "Tiempo agotado cargando solicitudes desde Render."
+      );
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok !== false) return json.solicitudes || [];
+    } catch (err) {
+      console.warn("[solicitudes render]", err.message);
+    }
     const pageSize = 100;
     const todas = [];
     for (let inicio = 0; ; inicio += pageSize) {
@@ -9451,25 +9500,17 @@ export default function App() {
       if (!silencioso) setCargando(false);
       if (!silencioso) setErrorCargaDatos("");
       try {
-        const [comitesRes, personasRes, programasRes] = await conTiempoMaximo(
-          Promise.all([
-            supabase.from("comites").select("*"),
-            supabase.from("personas").select("*"),
-            supabase.from("programas_custom").select("*"),
-          ]),
-          6000,
-          "Tiempo agotado cargando solicitantes y comités desde Supabase."
-        );
-        const erroresBase = [comitesRes, personasRes, programasRes]
-          .map(r => r.error?.message)
-          .filter(Boolean);
-        if (erroresBase.length) {
-          throw new Error("Recarga incompleta desde Supabase: " + erroresBase.join(" | "));
+        let base;
+        try {
+          base = await cargarBaseServidor();
+        } catch (renderErr) {
+          console.warn("[bootstrap render]", renderErr.message);
+          base = await cargarBaseSupabaseDirecto();
         }
         if (secuencia !== cargaDatosSeqRef.current) return;
-        const c = comitesRes.data || [];
-        const p = personasRes.data || [];
-        const pc = programasRes.data || [];
+        const c = base.comites || [];
+        const p = base.personas || [];
+        const pc = base.programasCustom || [];
         const programasCustomCargados = (pc || []).map(x => ({
           ...x,
           colorLight: x.colorlight || "#F9FAFB",
