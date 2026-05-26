@@ -9433,6 +9433,10 @@ export default function App() {
 
   // Cargar datos desde Supabase al iniciar
   useEffect(() => {
+    if (!currentUser) {
+      setCargando(false);
+      return undefined;
+    }
     const cargarDatos = async (silencioso = false) => {
       const secuencia = ++cargaDatosSeqRef.current;
       if (!silencioso) setCargando(true);
@@ -9518,47 +9522,50 @@ export default function App() {
           totalMetros:           x.totalmetros || "",
           modalidadPostulacion:  x.modalidadpostulacion || "",
         })));
-        let s = [];
-        try {
-          s = await cargarSolicitudesPorPartes();
-        } catch (solErr) {
-          console.error("Error cargando solicitudes:", solErr);
-          setErrorCargaDatos("Se cargaron solicitantes y comités, pero no se pudieron cargar las solicitudes/documentos. Presione Actualizar datos.");
-          return;
-        }
-        if (secuencia !== cargaDatosSeqRef.current) return;
-        const solicitudesMapeadas = (s || []).map(sol => {
-          const mapped = {
-            ...sol,
-            personaId: sol.persona_id,
-            personaNombre: sol.persona_nombre,
-            programaId: sol.programa_id,
-            codigoComite: sol.codigo_comite,
-            tipoComite: sol.tipo_comite,
-            profesionalComite: sol.profesional_comite,
-            documentos: aliviarDocumentosSolicitud(sol.documentos),
-          };
-          mapped.fecha_visita = fechaVisitaSolicitud(mapped);
-          // Migrar solicitudes CSP antiguas: agregar documentos que faltan según PROGRAMAS
-          if (mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") {
-            const prog = programasCarga.find(p => p.id === mapped.programaId);
-            if (prog && mapped.documentos) {
-              const nombresExistentes = new Set(mapped.documentos.map(d => d.nombre));
-              const faltantes = prog.documentos.filter(d => !nombresExistentes.has(d.nombre));
-              if (faltantes.length > 0) {
-                mapped.documentos = [
-                  ...mapped.documentos,
-                  ...faltantes.map(d => ({ nombre: d.nombre, obligatorio: d.obligatorio, entregado: false, tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null }))
-                ];
-              }
-            }
-          }
-          return mapped;
-        });
-        setSolicitudes(solicitudesMapeadas);
-        setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesMapeadas); }, 1500);
         setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
         setErrorCargaDatos("");
+        if (!silencioso) setCargando(false);
+
+        cargarSolicitudesPorPartes()
+          .then(s => {
+            if (secuencia !== cargaDatosSeqRef.current) return;
+            const solicitudesMapeadas = (s || []).map(sol => {
+              const mapped = {
+                ...sol,
+                personaId: sol.persona_id,
+                personaNombre: sol.persona_nombre,
+                programaId: sol.programa_id,
+                codigoComite: sol.codigo_comite,
+                tipoComite: sol.tipo_comite,
+                profesionalComite: sol.profesional_comite,
+                documentos: aliviarDocumentosSolicitud(sol.documentos),
+              };
+              mapped.fecha_visita = fechaVisitaSolicitud(mapped);
+              // Migrar solicitudes CSP antiguas: agregar documentos que faltan según PROGRAMAS
+              if (mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") {
+                const prog = programasCarga.find(p => p.id === mapped.programaId);
+                if (prog && mapped.documentos) {
+                  const nombresExistentes = new Set(mapped.documentos.map(d => d.nombre));
+                  const faltantes = prog.documentos.filter(d => !nombresExistentes.has(d.nombre));
+                  if (faltantes.length > 0) {
+                    mapped.documentos = [
+                      ...mapped.documentos,
+                      ...faltantes.map(d => ({ nombre: d.nombre, obligatorio: d.obligatorio, entregado: false, tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null }))
+                    ];
+                  }
+                }
+              }
+              return mapped;
+            });
+            setSolicitudes(solicitudesMapeadas);
+            setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesMapeadas); }, 1500);
+            setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
+            setErrorCargaDatos("");
+          })
+          .catch(solErr => {
+            console.error("Error cargando solicitudes:", solErr);
+            setErrorCargaDatos("Se cargaron solicitantes y comités, pero no se pudieron cargar las solicitudes/documentos. Presione Actualizar datos.");
+          });
       } catch (err) {
         console.error("Error cargando datos:", err);
         setErrorCargaDatos(err?.message || "No se pudieron cargar los datos desde Supabase.");
@@ -9593,7 +9600,7 @@ export default function App() {
       window.removeEventListener("focus", recargarSiVisible);
       if (window.serviuRecargarDatos) delete window.serviuRecargarDatos;
     };
-  }, []);
+  }, [currentUser?.id]);
 
   // Guardar personas en Supabase
   const savePersonas = async (lista) => {
