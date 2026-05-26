@@ -3737,8 +3737,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nombre: nombreArch, html })
       }).catch(() => {});
-      const ok = await _registrarArchivoSupa(nombreArch, carpeta);
-      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await _registrarArchivoSupa(nombreArch, carpeta);
       await guardarArchivoPersistente(nombreArch, htmlToDataUrl(html), "text/html", carpeta);
       // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el escaneado)
       const fechaIso = new Date().toISOString().slice(0, 10);
@@ -3746,7 +3745,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       setShowModalMemo(false);
       setFormMemo(memoInicial);
     } catch(e) { alert("Error generando memo: " + e.message); }
-    setGenerando(false);
+    finally { setGenerando(false); }
   };
 
   const generarCarta = async () => {
@@ -3772,8 +3771,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nombre: nombreArch, html })
       }).catch(() => {});
-      const ok = await _registrarArchivoSupa(nombreArch, carpeta);
-      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await _registrarArchivoSupa(nombreArch, carpeta);
       await guardarArchivoPersistente(nombreArch, htmlToDataUrl(html), "text/html", carpeta);
       // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el comprobante)
       const fechaIso = new Date().toISOString().slice(0, 10);
@@ -3781,7 +3779,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       setShowModalCarta(false);
       setFormCarta(cartaInicial);
     } catch(e) { alert("Error generando carta: " + e.message); }
-    setGenerando(false);
+    finally { setGenerando(false); }
   };
 
   const generarSolicitud = async () => {
@@ -3794,13 +3792,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const pdfDataUrl = await generarPdfSolicitudOficial(datosSolicitud);
       setHtmlPreview(`<iframe title="Solicitud oficial completada" src="${pdfDataUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
       const nombreArch = `SOLICITUD_${persona.nombre.split(' ')[0]}_${new Date().toISOString().slice(0,10)}.pdf`;
-      const ok = await _registrarArchivoSupa(nombreArch, carpeta);
-      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await _registrarArchivoSupa(nombreArch, carpeta);
       await guardarArchivoPersistente(nombreArch, pdfDataUrl, "application/pdf", carpeta);
       setShowModalSolicitud(false);
       setFormSolicitud({ subsidio: "", anioSubsidio: "" });
     } catch(e) { alert("Error generando solicitud: " + e.message); }
-    setGenerando(false);
+    finally { setGenerando(false); }
   };
 
   const handleImagenFilaJACC = (filaId, file) => {
@@ -3842,15 +3839,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nombre: nombreArchivo, html })
       }).catch(() => {});
-      const ok = await _registrarArchivoSupa(nombreArchivo, carpeta);
-      if (!ok) throw new Error("No se pudo registrar el documento en Supabase. Verifica que la tabla 'archivos_solicitante' existe.");
+      await _registrarArchivoSupa(nombreArchivo, carpeta);
       await guardarArchivoPersistente(nombreArchivo, htmlToDataUrl(html), "text/html", carpeta);
       setShowModalInformeJACC(false);
       setFilasInforme([{ id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }]);
       setInformeSubsidioTexto("");
       setInformeEstadoVivienda("");
     } catch(e) { alert("Error generando informe: " + e.message); }
-    setGenerandoInforme(false);
+    finally { setGenerandoInforme(false); }
   };
 
   const guardarResultadoComprobante = async () => {
