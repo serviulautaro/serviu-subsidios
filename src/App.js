@@ -9660,6 +9660,21 @@ export default function App() {
       const secuencia = ++cargaDatosSeqRef.current;
       if (!silencioso) setCargando(false);
       if (!silencioso) setErrorCargaDatos("");
+      let respaldoActivo = false;
+      if (!silencioso && !datosBaseListos) {
+        try {
+          const respaldo = await cargarBaseRespaldoEstatico();
+          if (secuencia === cargaDatosSeqRef.current) {
+            const programasRespaldo = aplicarDatosBase(respaldo, false);
+            setSolicitudes((respaldo.solicitudes || []).map(sol => mapearSolicitudDb(sol, programasRespaldo)));
+            setUltimaRecargaDatos("respaldo emergencia");
+            setErrorCargaDatos(`Supabase está demorando. Se muestran datos desde ${respaldo.fuente}; no se borró información. El sistema intentará reconectar.`);
+            respaldoActivo = true;
+          }
+        } catch (respaldoErr) {
+          console.warn("[respaldo inicial]", respaldoErr.message);
+        }
+      }
       try {
         let base;
         let usandoRespaldo = false;
@@ -9703,7 +9718,11 @@ export default function App() {
           });
       } catch (err) {
         console.error("Error cargando datos:", err);
-        setErrorCargaDatos(err?.message || "No se pudieron cargar los datos desde Supabase.");
+        if (respaldoActivo) {
+          setErrorCargaDatos("Supabase no responde. Se mantiene el respaldo de emergencia; no se borró información. Presione Actualizar datos para reconectar.");
+        } else {
+          setErrorCargaDatos(err?.message || "No se pudieron cargar los datos desde Supabase.");
+        }
       } finally {
         if (!silencioso) setCargando(false);
       }
