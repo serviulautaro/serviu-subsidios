@@ -9416,14 +9416,23 @@ export default function App() {
     }
   };
 
+  const conTiempoMaximo = (promesa, ms, mensaje) => Promise.race([
+    promesa,
+    new Promise((_, reject) => window.setTimeout(() => reject(new Error(mensaje)), ms))
+  ]);
+
   const cargarSolicitudesPorPartes = async () => {
     const pageSize = 100;
     const todas = [];
     for (let inicio = 0; ; inicio += pageSize) {
-      const { data, error } = await supabase
-        .from("solicitudes")
-        .select("*")
-        .range(inicio, inicio + pageSize - 1);
+      const { data, error } = await conTiempoMaximo(
+        supabase
+          .from("solicitudes")
+          .select("*")
+          .range(inicio, inicio + pageSize - 1),
+        6000,
+        "Tiempo agotado cargando solicitudes/documentos."
+      );
       if (error) throw error;
       todas.push(...(data || []));
       if (!data || data.length < pageSize) break;
@@ -9442,11 +9451,15 @@ export default function App() {
       if (!silencioso) setCargando(true);
       if (!silencioso) setErrorCargaDatos("");
       try {
-        const [comitesRes, personasRes, programasRes] = await Promise.all([
-          supabase.from("comites").select("*"),
-          supabase.from("personas").select("*"),
-          supabase.from("programas_custom").select("*"),
-        ]);
+        const [comitesRes, personasRes, programasRes] = await conTiempoMaximo(
+          Promise.all([
+            supabase.from("comites").select("*"),
+            supabase.from("personas").select("*"),
+            supabase.from("programas_custom").select("*"),
+          ]),
+          6000,
+          "Tiempo agotado cargando solicitantes y comités desde Supabase."
+        );
         const erroresBase = [comitesRes, personasRes, programasRes]
           .map(r => r.error?.message)
           .filter(Boolean);
