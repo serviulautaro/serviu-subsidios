@@ -9217,7 +9217,7 @@ export default function App() {
   const [comiteDetailId, setComiteDetailId] = useState(null);
   const [fromView, setFromView] = useState("personas");
   const [filtroPrograma, setFiltroPrograma] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(false);
   const [recargandoDatos, setRecargandoDatos] = useState(false);
   const [ultimaRecargaDatos, setUltimaRecargaDatos] = useState("");
   const [errorCargaDatos, setErrorCargaDatos] = useState("");
@@ -9448,7 +9448,7 @@ export default function App() {
     }
     const cargarDatos = async (silencioso = false) => {
       const secuencia = ++cargaDatosSeqRef.current;
-      if (!silencioso) setCargando(true);
+      if (!silencioso) setCargando(false);
       if (!silencioso) setErrorCargaDatos("");
       try {
         const [comitesRes, personasRes, programasRes] = await conTiempoMaximo(
@@ -9892,19 +9892,12 @@ export default function App() {
             MODO DEMO: datos locales de muestra, sin solicitantes reales. Limite: {DEMO_MAX_SOLICITANTES} solicitantes.
           </div>
         )}
-        {cargando && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 16 }}>
-            <div style={{ width: 48, height: 48, border: "4px solid #e8e3de", borderTop: "4px solid #1e3a5f", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-            <div style={{ fontSize: 16, color: "#888" }}>Cargando datos...</div>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          </div>
-        )}
-        {!cargando && view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} programasCustom={programasCustom} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
-        {!cargando && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onNav={nav} />}
-        {!cargando && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
-        {!cargando && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
-        {!cargando && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
-        {!cargando && view === "programas" && <ProgramasView solicitudes={solicitudes} programasCustom={programasCustom} onAddPrograma={async (prog) => {
+        {view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} programasCustom={programasCustom} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
+        {view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onNav={nav} />}
+        {view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
+        {view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
+        {view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {view === "programas" && <ProgramasView solicitudes={solicitudes} programasCustom={programasCustom} onAddPrograma={async (prog) => {
           const { data, error } = await supabase.from("programas_custom").insert([{
             id: uid(), nombre: prog.nombre, descripcion: prog.descripcion,
             color: prog.color, colorlight: prog.colorLight, icon: prog.icon, documentos: prog.documentos
@@ -9946,11 +9939,11 @@ export default function App() {
           });
           await registrarAuditoria("actualizar_programa", "programas_custom", prog.id, { nombre: prog.nombre });
         }} />}
-        {!cargando && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} programasCustom={programasCustom} onDetail={goDetail} />}
-        {!cargando && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
-        {!cargando && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} programasCustom={programasCustom} />}
-        {!cargando && view === "auditoria" && esAdmin && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
-        {!cargando && view === "admin" && esAdmin && <AdminUsuariosView currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} programasCustom={programasCustom} onDetail={goDetail} />}
+        {view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} programasCustom={programasCustom} />}
+        {view === "auditoria" && esAdmin && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
+        {view === "admin" && esAdmin && <AdminUsuariosView currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
       </main>
     </div>
   );
