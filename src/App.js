@@ -3057,6 +3057,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     let cambio = false;
     const actualizadas = solicitudes.map(s => {
       if (s.personaId !== personaId) return s;
+      if (!Array.isArray(s.documentos) || s.documentos.length < 2) return s;
       const docs = asegurarCorreoSolicitante(s.documentos);
       if (docs === s.documentos) return s;
       cambio = true;
