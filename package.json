@@ -28,6 +28,7 @@
     "build": "react-scripts build",
     "build:demo": "node scripts/demo_env.js build",
     "verificar": "node scripts/verificar_sistema.js",
+    "recuperar:documentos": "node scripts/recuperar_delta_supabase_render.js",
     "migrar:documentos": "node scripts/migrar_documentos_storage.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
