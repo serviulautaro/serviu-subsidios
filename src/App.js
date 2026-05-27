@@ -3351,7 +3351,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       tamano_bytes: file.size || 0
     });
     const archivoUrl = storagePathFinal ? storagePublicUrl(storagePathFinal) : dataUrl;
-    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl: archivoUrl, mimeType: file.type, carpeta: carp } }));
+    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl: archivoUrl, mimeType: file.type, carpeta: carp, storagePath: storagePathFinal, storageBucket: STORAGE_BUCKET } }));
     setArchivos(prev => prev.includes(nombreSubido) ? prev : [nombreSubido, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombreSubido]: carp }));
     await guardarArchivoPersistente(nombreSubido, dataUrl, file.type, carp, storagePathFinal);
@@ -3405,7 +3405,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } else {
       (supaFiles || []).forEach(sf => {
         if (!rutasMap[sf.nombre]) rutasMap[sf.nombre] = sf.carpeta || carpeta;
-        if (sf.storage_path) datosMap[sf.nombre] = { dataUrl: storagePublicUrl(sf.storage_path, sf.storage_bucket), mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta };
+        if (sf.storage_path) datosMap[sf.nombre] = { dataUrl: storagePublicUrl(sf.storage_path, sf.storage_bucket), mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta, storagePath: sf.storage_path, storageBucket: sf.storage_bucket || STORAGE_BUCKET };
       });
       supaNames = (supaFiles || []).map(sf => sf.nombre);
     }
@@ -3416,7 +3416,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       .flatMap(s => s.documentos || [])
       .filter(d => d.archivo && (d.archivoData || d.storagePath));
     docsConArchivo.forEach(d => {
-      datosMap[d.archivo] = { dataUrl: d.storagePath ? storagePublicUrl(d.storagePath) : d.archivoData, mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta };
+      datosMap[d.archivo] = { dataUrl: d.storagePath ? storagePublicUrl(d.storagePath) : d.archivoData, mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "", storageBucket: STORAGE_BUCKET };
       if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
     });
 
@@ -3488,6 +3488,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const localUrl = apiPath("/files/", rutaLocal, nombre);
     if (await urlSirveDocumento(localUrl)) return localUrl;
     if (await urlSirveDocumento(respaldoUrl)) return respaldoUrl;
+    if (respaldoUrl && !String(respaldoUrl).startsWith(API + "/files/")) return respaldoUrl;
     return "";
   };
 
@@ -3497,6 +3498,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!fileUrl) {
       alert("No se pudo abrir el documento. El archivo no está disponible en la carpeta ni en respaldo.");
       return;
+    }
+    if (archivoGuardado?.storagePath) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(archivoGuardado.storageBucket || STORAGE_BUCKET)
+          .download(archivoGuardado.storagePath);
+        if (!error && data) {
+          const dataUrl = await fileToDataUrl(data);
+          setHtmlPreview(null);
+          setFilePreview({ url: dataUrl, title: nombre });
+          return;
+        }
+      } catch {}
     }
     if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:")) {
       const dataUrl = String(archivoGuardado.dataUrl);
