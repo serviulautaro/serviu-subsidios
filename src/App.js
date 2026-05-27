@@ -3439,13 +3439,27 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     e.target.value = "";
   };
 
-  const abrirArchivo = (nombre) => {
+  const urlDocumentoDisponible = async (nombre) => {
     const archivoGuardado = archivosDatos[nombre];
     const respaldoUrl = archivoGuardado?.dataUrl || "";
     const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
-    const fileUrl = String(respaldoUrl).startsWith("data:")
-      ? respaldoUrl
-      : apiPath("/files/", rutaLocal, nombre);
+    if (String(respaldoUrl).startsWith("data:")) return respaldoUrl;
+    const localUrl = apiPath("/files/", rutaLocal, nombre);
+    try {
+      const res = await fetch(localUrl, { method: "HEAD", cache: "no-store" });
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && !contentType.includes("text/html")) return localUrl;
+    } catch {}
+    return respaldoUrl || "";
+  };
+
+  const abrirArchivo = async (nombre) => {
+    const archivoGuardado = archivosDatos[nombre];
+    const fileUrl = await urlDocumentoDisponible(nombre);
+    if (!fileUrl) {
+      alert("No se pudo abrir el documento. El archivo no está disponible en la carpeta ni en respaldo.");
+      return;
+    }
     if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:")) {
       const dataUrl = String(archivoGuardado.dataUrl);
       if (dataUrl.startsWith("data:text/html")) {
@@ -3464,16 +3478,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         .catch(() => window.open(fileUrl, "_blank", "noopener,noreferrer"));
       return;
     }
-    window.open(fileUrl, "_blank", "noopener,noreferrer");
+    setHtmlPreview(`<iframe title="${nombre}" src="${fileUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
   };
 
-  const imprimirArchivo = (nombre) => {
+  const imprimirArchivo = async (nombre) => {
     const archivoGuardado = archivosDatos[nombre];
-    const respaldoUrl = archivoGuardado?.dataUrl || "";
-    const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
-    const fileUrl = String(respaldoUrl).startsWith("data:")
-      ? respaldoUrl
-      : apiPath("/files/", rutaLocal, nombre);
+    const fileUrl = await urlDocumentoDisponible(nombre);
+    if (!fileUrl) {
+      alert("No se pudo imprimir el documento. El archivo no está disponible en la carpeta ni en respaldo.");
+      return;
+    }
     const abrirParaImprimir = (url) => {
       const iframe = document.createElement("iframe");
       iframe.style.position = "fixed";

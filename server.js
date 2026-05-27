@@ -569,6 +569,10 @@ app.delete('/archivos/{*path}', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+app.use('/files', (req, res) => {
+  res.status(404).json({ error: 'Archivo no encontrado en la carpeta de documentos.' });
+});
+
 // ─── RENOMBRAR CARPETA ────────────────────────────────────────────────────────
 app.post('/renombrar-carpeta', (req, res) => {
   try {
