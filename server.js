@@ -165,6 +165,7 @@ async function pgInsert(table, rows = [], { upsert = false } = {}) {
 
 async function pgUpdate(table, filtros = [], valuesObj = {}) {
   validarTabla(table);
+  if (!filtros.length) throw new Error('Update sin filtros bloqueado.');
   const keys = Object.keys(valuesObj || {});
   if (!keys.length) return [];
   const values = [];
