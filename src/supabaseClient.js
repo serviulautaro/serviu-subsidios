@@ -4,13 +4,12 @@ import { demoSupabase } from './demoSupabaseClient';
 const SUPABASE_URL = 'https://qirjfgjesjzikouehmib.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_SSAA2undzTyVsgCjMgbXBw_Bu9D_lvt';
 
-export const IS_DEMO_MODE = process.env.REACT_APP_DEMO_MODE === 'true';
-
 const realSupabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const API = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
   ? window.location.origin
   : "http://localhost:3001";
 const USE_API_DB = process.env.REACT_APP_USE_API_DB !== "false";
+export const IS_DEMO_MODE = process.env.REACT_APP_DEMO_MODE === 'true' && !USE_API_DB;
 
 class ApiQuery {
   constructor(table) {
