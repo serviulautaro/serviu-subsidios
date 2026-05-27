@@ -3402,13 +3402,53 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const abrirArchivo = (nombre) => {
     const archivoGuardado = archivosDatos[nombre];
     const fileUrl = archivoGuardado?.dataUrl || apiPath("/files/", archivosRutas[nombre] || carpeta, nombre);
+    if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:")) {
+      const dataUrl = String(archivoGuardado.dataUrl);
+      if (dataUrl.startsWith("data:text/html")) {
+        const partes = dataUrl.split(",");
+        const html = partes.length > 1 ? decodeURIComponent(partes.slice(1).join(",")) : "";
+        setHtmlPreview(html);
+        return;
+      }
+      setHtmlPreview(`<iframe title="${nombre}" src="${dataUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
+      return;
+    }
+    if (String(fileUrl).toLowerCase().endsWith(".html")) {
+      fetch(fileUrl, { cache: "no-store" })
+        .then(r => r.ok ? r.text() : Promise.reject(new Error("No se pudo abrir el documento.")))
+        .then(html => setHtmlPreview(html))
+        .catch(() => window.open(fileUrl, "_blank", "noopener,noreferrer"));
+      return;
+    }
+    window.open(fileUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const imprimirArchivo = (nombre) => {
+    const archivoGuardado = archivosDatos[nombre];
+    const fileUrl = archivoGuardado?.dataUrl || apiPath("/files/", archivosRutas[nombre] || carpeta, nombre);
+    const abrirParaImprimir = (url) => {
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "1px";
+      iframe.style.height = "1px";
+      iframe.style.opacity = "0";
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        try { iframe.contentWindow.print(); }
+        catch { window.open(url, "_blank", "noopener,noreferrer"); }
+        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 8000);
+      };
+    };
     if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:text/html")) {
       const partes = String(archivoGuardado.dataUrl).split(",");
       const html = partes.length > 1 ? decodeURIComponent(partes.slice(1).join(",")) : "";
       setHtmlPreview(html);
       return;
     }
-    window.open(fileUrl, "_blank", "noopener,noreferrer");
+    abrirParaImprimir(fileUrl);
   };
 
   const eliminarArchivo = async (nombre) => {
@@ -3416,7 +3456,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!ok) return;
     const errores = [];
     const avisos = [];
-    const registrosSupa = [];
     try {
       const res = await fetch(apiPath("/archivos/", carpeta, nombre), { method: "DELETE" });
       if (!res.ok && res.status !== 404) avisos.push("servidor local");
@@ -3427,31 +3466,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch {
       avisos.push("servidor local");
     }
-    try {
-      const { data } = await supabase
-        .from("archivos_solicitante")
-        .select("storage_bucket, storage_path")
-        .eq("persona_id", persona.id)
-        .eq("nombre", nombre);
-      (data || []).forEach(r => registrosSupa.push(r));
-    } catch {
-      errores.push("consulta Supabase");
-    }
-    try {
-      const porBucket = registrosSupa.reduce((acc, r) => {
-        if (!r.storage_path) return acc;
-        const bucket = r.storage_bucket || STORAGE_BUCKET;
-        acc[bucket] = acc[bucket] || [];
-        acc[bucket].push(r.storage_path);
-        return acc;
-      }, {});
-      for (const [bucket, paths] of Object.entries(porBucket)) {
-        const { error } = await supabase.storage.from(bucket).remove(paths);
-        if (error) errores.push("Storage: " + error.message);
-      }
-    } catch (err) {
-      errores.push("Storage: " + (err.message || "no se pudo borrar"));
-    }
+    // No se elimina el objeto de Storage: se quita del listado visible y queda como respaldo recuperable.
     try {
       const { error } = await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
       if (error) errores.push("registro Supabase: " + error.message);
@@ -3498,7 +3513,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return next;
     });
     setDocMenu(null);
-    try { await cargarArchivos(); } catch {}
     if (errores.length) {
       console.warn("[eliminarArchivo]", errores.join(" | "));
       alert("Se intentó eliminar el documento, pero hubo una respuesta incompleta: " + errores.join(", ") + ". Si sigue apareciendo, actualice la página e intente nuevamente.");
@@ -4599,8 +4613,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           <div style={{ position: "relative" }} onClick={e => { if (!e.target.closest("[data-docmenu]")) setDocMenu(null); }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
               {archivos.map(arch => {
-                const archivoGuardado = archivosDatos[arch];
-                const fileUrl = archivoGuardado?.dataUrl || apiPath("/files/", archivosRutas[arch] || carpeta, arch);
                 const esGenerado = arch.startsWith("MEMO_") || arch.startsWith("CARTA_") || arch.startsWith("SOLICITUD_") || arch.startsWith("INFORME_JACC_");
                 const esMemoDom      = arch.startsWith("MEMO_");
                 const esCartaServ    = arch.startsWith("CARTA_");
@@ -4636,16 +4648,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             </button>
                           )}
                           <button onClick={() => {
-                            const isPdf = arch.toLowerCase().endsWith(".pdf");
-                            if (isPdf) {
-                              const iframe = document.createElement("iframe");
-                              iframe.style.display = "none";
-                              iframe.src = fileUrl;
-                              document.body.appendChild(iframe);
-                              iframe.onload = () => { try { iframe.contentWindow.print(); } catch { window.open(fileUrl, "_blank"); } setTimeout(() => document.body.removeChild(iframe), 8000); };
-                            } else {
-                              abrirArchivo(arch);
-                            }
+                            imprimirArchivo(arch);
                             setDocMenu(null);
                           }}
                             style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#B45309", fontWeight: 500 }}>

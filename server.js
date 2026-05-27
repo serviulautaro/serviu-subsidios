@@ -493,7 +493,7 @@ function archivarArchivoLocal(filePath, carpetaRel, archivo) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const carpetaPapelera = safeDocsPath('_papelera_serviu', stamp, carpetaRel);
   fs.mkdirSync(carpetaPapelera, { recursive: true });
-  const destino = path.join(carpetaPapelera, archivo);
+  const destino = path.join(carpetaPapelera, path.basename(archivo));
   fs.renameSync(filePath, destino);
   return destino;
 }
