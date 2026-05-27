@@ -638,6 +638,37 @@ const buscarComitePersona = (comites = [], persona = {}) => {
   } : encontrado;
 };
 
+const normComiteComparar = (v) => (v || "").toString().toLowerCase().trim()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+const referenciasComite = (comiteRef = {}) => {
+  const base = comitesBaseCompletos();
+  const refs = [comiteRef.id, comiteRef.codigo].filter(Boolean).map(String);
+  const nombreNorm = normComiteComparar(comiteRef.nombre);
+  const fijo = base.find(c =>
+    refs.includes(String(c.id)) ||
+    refs.includes(String(c.codigo)) ||
+    (nombreNorm && normComiteComparar(c.nombre) === nombreNorm)
+  );
+  if (fijo) refs.push(fijo.id, fijo.codigo);
+  return [...new Set(refs.filter(Boolean).map(String))];
+};
+const personaPerteneceAComite = (persona = {}, comiteRef = {}, solicitudes = []) => {
+  const refs = referenciasComite(comiteRef);
+  const personaIdComite = String(persona.comiteId || persona.comite_id || "");
+  if (personaIdComite && refs.includes(personaIdComite)) return true;
+  const nombreComite = normComiteComparar(comiteRef.nombre);
+  const nombrePersona = normComiteComparar(persona.comite);
+  if (nombreComite && nombrePersona && nombreComite === nombrePersona) return true;
+  return (solicitudes || []).some(s => {
+    if ((s.personaId || s.persona_id) !== persona.id) return false;
+    const codigo = String(s.codigoComite || s.codigo_comite || "");
+    if (codigo && refs.includes(codigo)) return true;
+    const nombreSol = normComiteComparar(s.comite);
+    return nombreComite && nombreSol && nombreSol === nombreComite;
+  });
+};
+
 function inferirCargo(personaNombre, comiteId, comites = []) {
   if (!personaNombre || !comiteId) return "Socio";
   const comite = buscarComitePersona(comites, { comiteId, comite: comiteId });
@@ -8012,7 +8043,11 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId };
   const [form, setForm] = useState(EMPTY);
 
-  const comite = comites.find(c => c.id === comiteId);
+  const comite = comites.find(c =>
+    c.id === comiteId ||
+    c.codigo === comiteId ||
+    normComiteComparar(c.nombre) === normComiteComparar(comiteId)
+  ) || comitesBaseCompletos().find(c => c.id === comiteId || c.codigo === comiteId);
   if (!comite) return null;
 
   const esComiteDesmarque = comiteId === "comite_desmarque" || comite.programaId === "habitabilidad" || /DESMARQUE/i.test(comite.nombre || "");
@@ -8031,14 +8066,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const ordenarSolicitantes = (lista = []) => [...lista].sort((a, b) =>
     String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" })
   );
-  const normComite = (v) => (v || "").toString().toLowerCase().trim()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
   const perteneceAlComiteActual = (p) => {
-    const idsComite = [comite.id, comite.codigo, comiteId].filter(Boolean).map(String);
-    const idPersona = String(p.comiteId || "");
-    if (idPersona && idsComite.includes(idPersona)) return true;
-    return normComite(p.comite) && normComite(p.comite) === normComite(comite.nombre);
+    return personaPerteneceAComite(p, { ...comite, id: comite.id || comiteId }, solicitudes);
   };
   const normFiltro = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const solicitudHabitabilidadPersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
@@ -8692,14 +8721,8 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
     if (ok) onSaveComites(comites.filter(c => c.id !== id));
   };
 
-  const normComite = (v) => (v || "").toString().toLowerCase().trim()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
   const pertenecePersonaComite = (persona, comiteRef = {}) => {
-    const ids = [comiteRef.id, comiteRef.codigo].filter(Boolean).map(String);
-    const personaId = String(persona.comiteId || "");
-    if (personaId && ids.includes(personaId)) return true;
-    return normComite(persona.comite) && normComite(comiteRef.nombre) && normComite(persona.comite) === normComite(comiteRef.nombre);
+    return personaPerteneceAComite(persona, comiteRef, solicitudes);
   };
 
   const tarjetaProgramaComite = (p) => {
