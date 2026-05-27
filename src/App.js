@@ -307,6 +307,17 @@ const leerCalificacionDesmarque = (sol) => {
   return { estado: estado || "", detalle: detalle.join("|") || "" };
 };
 const valorDocTexto = (doc) => String(doc?.valor || "").toUpperCase();
+const AVANCE_DESMARQUE_MANUAL_KEY = "__avance_desmarque_manual__";
+const leerAvanceManualDesmarque = (docs = []) => {
+  const doc = (docs || []).find(d => d?.interno && d?.tipo === AVANCE_DESMARQUE_MANUAL_KEY);
+  if (!doc?.valor) return {};
+  try {
+    const parsed = JSON.parse(doc.valor);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
 const detalleResultadoDoc = (doc) => {
   const raw = String(doc?.valor || "");
   if (!raw.trim()) return "";
@@ -1054,12 +1065,12 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-function LineaAvanceDesmarque({ sol }) {
+function LineaAvanceDesmarque({ sol, onTogglePaso }) {
   const [abiertos, setAbiertos] = useState({});
   const st = estadoLineaDesmarque(sol);
-  const estadoActual = estadoActualLineaDesmarque(sol);
+  const avanceManual = leerAvanceManualDesmarque(sol?.documentos || []);
   const paso = (numero, label, estado, detalle = "") => ({ numero, label, estado, detalle });
-  const pasos = [
+  let pasos = [
     paso(1, "Ingresa solicitante", "done", "Datos iniciales del solicitante"),
     paso(2, "Documentos obligatorios", st.docsCompletos ? "done" : "pending", "VB cédula de identidad y título de dominio"),
   ];
@@ -1080,8 +1091,6 @@ function LineaAvanceDesmarque({ sol }) {
     else pasos.push(paso(9, "Respuesta SERVIU", st.respuestaIngresada ? "done" : "pending", st.respuestaDetalle));
   }
 
-  const pasoActualIdx = pasos.reduce((ultimo, p, idx) => p.estado !== "pending" ? idx : ultimo, -1);
-
   const styles = {
     done: { bg: "#ECFDF5", border: "#10B981", color: "#047857" },
     pending: { bg: "#F9FAFB", border: "#D1D5DB", color: "#6B7280" },
@@ -1089,6 +1098,26 @@ function LineaAvanceDesmarque({ sol }) {
     "stop-red": { bg: "#FEF2F2", border: "#DC2626", color: "#B91C1C" },
     "final-green": { bg: "#E0F7FA", border: "#0891B2", color: "#0E7490" },
   };
+  function stylesForEstado(estado) {
+    return styles[estado] || styles.pending;
+  }
+
+  pasos = pasos.map(p => {
+    if (avanceManual[p.numero] === undefined) return p;
+    if (p.estado === "stop-red" || p.estado === "warn" || p.estado === "final-green") return p;
+    return { ...p, estado: avanceManual[p.numero] ? "done" : "pending", manual: true };
+  });
+
+  const pasoActualIdx = pasos.reduce((ultimo, p, idx) => p.estado !== "pending" ? idx : ultimo, -1);
+  const pasoActual = pasoActualIdx >= 0 ? pasos[pasoActualIdx] : null;
+  const tieneAjusteManual = Object.keys(avanceManual).length > 0;
+  const estadoActual = tieneAjusteManual && pasoActual
+    ? {
+        label: pasoActual.label,
+        bg: stylesForEstado(pasoActual.estado).bg,
+        color: stylesForEstado(pasoActual.estado).color,
+      }
+    : estadoActualLineaDesmarque(sol);
 
   return <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: "1px solid #dbeafe", background: "#f8fbff" }}>
     <div style={{ fontSize: 12, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Línea de avance Desmarque de Vivienda</div>
@@ -1101,12 +1130,15 @@ function LineaAvanceDesmarque({ sol }) {
         const tieneDetalle = !!(p.detalle || "").trim();
         const abierto = !!abiertos[idx];
         const esActual = idx === pasoActualIdx;
-        return <div key={idx} title={tieneDetalle ? "Pincha para ver/ocultar detalle" : p.label}
-          onClick={() => tieneDetalle && setAbiertos(prev => ({ ...prev, [idx]: !prev[idx] }))}
-          style={{ minWidth: 135, flex: "1 1 135px", border: (esActual ? "3px" : "1.5px") + " solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: esActual ? "7px 9px" : "8px 10px", cursor: tieneDetalle ? "pointer" : "default", boxShadow: esActual ? "0 0 0 3px rgba(30,58,95,0.10)" : "none" }}>
+        const editable = !!onTogglePaso && !["stop-red", "warn", "final-green"].includes(p.estado);
+        const marcado = p.estado !== "pending";
+        return <div key={idx} title={editable ? "Pincha el cuadro para marcar o desmarcar avance" : (tieneDetalle ? "Pincha para ver/ocultar detalle" : p.label)}
+          onClick={() => editable && onTogglePaso(p.numero, !marcado)}
+          style={{ minWidth: 135, flex: "1 1 135px", border: (esActual ? "3px" : "1.5px") + " solid " + s.border, background: s.bg, color: s.color, borderRadius: 8, padding: esActual ? "7px 9px" : "8px 10px", cursor: editable ? "pointer" : (tieneDetalle ? "pointer" : "default"), boxShadow: esActual ? "0 0 0 3px rgba(30,58,95,0.10)" : "none" }}>
           <div style={{ fontSize: 10, fontWeight: 800, color: s.color, opacity: .8 }}>PASO {p.numero}</div>
           <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{p.label}</div>
-          {tieneDetalle && <div style={{ fontSize: 10, marginTop: 4, color: s.color, opacity: .85 }}>{abierto ? "Ocultar detalle" : "Ver detalle"}</div>}
+          {editable && <div style={{ fontSize: 10, marginTop: 4, color: s.color, opacity: .9 }}>{marcado ? "Marcado" : "Pendiente"}{p.manual ? " manual" : ""}</div>}
+          {tieneDetalle && <button type="button" onClick={e => { e.stopPropagation(); setAbiertos(prev => ({ ...prev, [idx]: !prev[idx] })); }} style={{ marginTop: 5, padding: 0, border: 0, background: "transparent", color: s.color, fontSize: 10, fontWeight: 800, cursor: "pointer" }}>{abierto ? "Ocultar detalle" : "Ver detalle"}</button>}
           {tieneDetalle && abierto && <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: "rgba(255,255,255,0.72)", border: "1px solid " + s.border, fontSize: 11, lineHeight: 1.35, color: "#111827", whiteSpace: "pre-wrap" }}>{p.detalle}</div>}
         </div>;
       })}
@@ -3697,6 +3729,38 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docs }) || s.fecha_visita || "" } : s));
   };
 
+  const guardarAvanceManualDesmarque = async (sol, numeroPaso, marcado) => {
+    if (!sol) return;
+    const documentosActuales = Array.isArray(sol.documentos) ? sol.documentos : [];
+    const avance = { ...leerAvanceManualDesmarque(documentosActuales), [numeroPaso]: !!marcado };
+    const registro = {
+      nombre: "Ajuste manual linea de avance",
+      obligatorio: false,
+      entregado: true,
+      interno: true,
+      tipo: AVANCE_DESMARQUE_MANUAL_KEY,
+      valor: JSON.stringify(avance),
+    };
+    const existe = documentosActuales.some(d => d?.interno && d?.tipo === AVANCE_DESMARQUE_MANUAL_KEY);
+    const documentos = existe
+      ? documentosActuales.map(d => d?.interno && d?.tipo === AVANCE_DESMARQUE_MANUAL_KEY ? { ...d, ...registro } : d)
+      : [...documentosActuales, registro];
+    const solActualizada = { ...sol, documentos };
+    onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? solActualizada : s));
+    const { error } = await supabase.from("solicitudes").update({ documentos }).eq("id", sol.id);
+    if (error) {
+      console.warn("[avance manual desmarque]", error.message);
+      onSaveSolicitudes(solicitudes);
+      alert("No se pudo guardar el ajuste manual de avance. No se modificó el registro.");
+      return;
+    }
+    await registrarAuditoria?.("ajustar_avance_desmarque", "solicitudes", sol.id, {
+      solicitante: persona?.nombre || "",
+      paso: numeroPaso,
+      marcado: !!marcado,
+    });
+  };
+
   const guardarCalificacionDesmarque = async (sol, estado) => {
     if (!sol) return;
     let detalle = "";
@@ -4796,7 +4860,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             </div>
             {sol.programaId === "habitabilidad" && (
               <>
-                <LineaAvanceDesmarque sol={sol} />
+                <LineaAvanceDesmarque sol={sol} onTogglePaso={(numeroPaso, marcado) => guardarAvanceManualDesmarque(sol, numeroPaso, marcado)} />
                 {(() => {
                   const st = estadoLineaDesmarque(sol);
                   return <div style={{ marginBottom: 14, padding: "10px 14px", background: st.calificacion.estado === "NO_CALIFICA" ? "#FEF2F2" : st.calificacion.estado === "CALIFICA" ? "#ECFDF5" : "#F9FAFB", borderRadius: 8, border: "1px solid " + (st.calificacion.estado === "NO_CALIFICA" ? "#FCA5A5" : st.calificacion.estado === "CALIFICA" ? "#86EFAC" : "#E5E7EB"), display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
