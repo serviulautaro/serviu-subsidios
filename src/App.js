@@ -2774,6 +2774,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [generandoInforme, setGenerandoInforme] = useState(false);
   const [docMenu, setDocMenu] = useState(null); // { arch, x, y }
   const [htmlPreview, setHtmlPreview] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
   const [showModalZip, setShowModalZip] = useState(false);
   const [zipSearch, setZipSearch] = useState("");
   const [zipSeleccionados, setZipSeleccionados] = useState([]);
@@ -3502,20 +3503,23 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       if (dataUrl.startsWith("data:text/html")) {
         const partes = dataUrl.split(",");
         const html = partes.length > 1 ? decodeURIComponent(partes.slice(1).join(",")) : "";
+        setFilePreview(null);
         setHtmlPreview(html);
         return;
       }
-      setHtmlPreview(`<iframe title="${nombre}" src="${dataUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
+      setHtmlPreview(null);
+      setFilePreview({ url: dataUrl, title: nombre });
       return;
     }
     if (String(fileUrl).toLowerCase().endsWith(".html")) {
       fetch(fileUrl, { cache: "no-store" })
         .then(r => r.ok ? r.text() : Promise.reject(new Error("No se pudo abrir el documento.")))
-        .then(html => setHtmlPreview(html))
+        .then(html => { setFilePreview(null); setHtmlPreview(html); })
         .catch(() => window.open(fileUrl, "_blank", "noopener,noreferrer"));
       return;
     }
-    setHtmlPreview(`<iframe title="${nombre}" src="${fileUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
+    setHtmlPreview(null);
+    setFilePreview({ url: fileUrl, title: nombre });
   };
 
   const imprimirArchivo = async (nombre) => {
@@ -7066,7 +7070,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         </div>
       )}
 
-      {htmlPreview && (
+      {(htmlPreview || filePreview) && (
         <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", background: "#111" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", background: "#1e3a5f", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
             <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>📄 Vista previa del documento</div>
@@ -7077,7 +7081,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 🖨 Imprimir
               </button>
               <button
-                onClick={() => setHtmlPreview(null)}
+                onClick={() => { setHtmlPreview(null); setFilePreview(null); }}
                 style={{ padding: "8px 16px", borderRadius: 7, background: "rgba(255,255,255,0.18)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                 ✕ Cerrar
               </button>
@@ -7085,9 +7089,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           </div>
           <iframe
             ref={iframePreviewRef}
-            srcDoc={htmlPreview}
-            title="Vista previa documento"
-            style={{ flex: 1, border: "none", width: "100%", background: "#e8e8e8" }}
+            src={filePreview?.url || undefined}
+            srcDoc={filePreview ? undefined : htmlPreview}
+            title={filePreview?.title || "Vista previa documento"}
+            style={{ flex: 1, minHeight: 0, border: "none", width: "100%", background: "#e8e8e8" }}
           />
         </div>
       )}
