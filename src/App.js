@@ -603,24 +603,30 @@ const COMITES_BASE_DATOS = [
 ];
 
 const LINEA_TIEMPO_CSP = [
-  { id: "postulacion", label: "POSTULACIÓN" },
-  { id: "calificacion", label: "Calificación" },
-  { id: "califica", label: "Califica" },
-  { id: "no_califica", label: "No Califica" },
-  { id: "ingreso_comite", label: "Ingreso Comité" },
-  { id: "revision_rukan", label: "Revisión RUKAN" },
-  { id: "observaciones_serviu", label: "Observaciones SERVIU" },
-  { id: "ingreso_proyecto_serviu", label: "Ingreso Proyecto SERVIU" },
-  { id: "inicio_actividades_serviu", label: "Inicio Actividades SERVIU" },
-  { id: "proceso_concurso_oferta", label: "Proceso Concurso Oferta" },
-  { id: "tramitacion_pj", label: "Tramitación P.J." },
-  { id: "entrega_documentos", label: "Entrega documentos" },
-  { id: "preparacion_proyecto_constructora", label: "Preparación Proyecto Constructora", detalle: "Área Técnica" },
-  { id: "pre_banco", label: "Pre Banco", detalle: "Reuniones Normativas - Área Social" },
   { id: "inicia_consulta", label: "Inicia Consulta" },
-  { id: "ejecucion_proyecto", label: "Ejecución Proyecto" },
-  { id: "entrega_vivienda", label: "Entrega Vivienda" },
+  { id: "revision_rukan", label: "Revisión RUKAN" },
+  { id: "solicitud_documentos", label: "Solicitud de documentos" },
+  { id: "recepcion_documentos", label: "Recepción de documentos" },
+  { id: "revision_documentos", label: "Revisión de documentos", decision: "documentos" },
+  { id: "ingreso_grupo", label: "Ingreso a un grupo" },
+  { id: "directiva_nombre_comite", label: "Elige directiva y nombre del comité" },
+  { id: "ratifica_directiva_pj", label: "Ratifica directiva y solicitud PJ" },
+  { id: "comite_pj", label: "Comité con PJ" },
+  { id: "llamado_licitacion", label: "Llamado a licitación" },
+  { id: "adjudicacion_empresa", label: "Adjudicación Empresa" },
+  { id: "inicio_actividades_serviu", label: "Inicio actividades SERVIU" },
+  { id: "pre_banco", label: "Pre Banco", detalle: "Reuniones Normativas - Área Social", reuniones: true },
+  { id: "preparacion_proyecto_constructora", label: "Preparación Proyecto Constructora", detalle: "Área Técnica", reuniones: true },
+  { id: "ingreso_proyecto_serviu", label: "Ingreso proyecto SERVIU" },
+  { id: "observaciones_serviu", label: "Observaciones SERVIU" },
+  { id: "calificacion_serviu", label: "Calificación SERVIU", decision: "serviu" },
+  { id: "postulacion_serviu", label: "Postulación SERVIU" },
+  { id: "ejecucion_obras", label: "Ejecución de las obras" },
 ];
+const decisionLineaTiempoCsp = (linea = {}, tipo = "") => linea[`decision_${tipo}`] || "";
+const lineaTiempoCspCortada = (linea = {}, etapaIndex = 0) =>
+  (decisionLineaTiempoCsp(linea, "documentos") === "no_califica" && etapaIndex > 4) ||
+  (decisionLineaTiempoCsp(linea, "serviu") === "no_califica" && etapaIndex > 16);
 const normalizarLineaTiempoCsp = (valor = {}) => {
   if (typeof valor === "string") {
     try { valor = JSON.parse(valor); } catch { valor = {}; }
@@ -4369,26 +4375,61 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {LINEA_TIEMPO_CSP.map((etapa, idx) => {
               const marcada = !!lineaTiempoPersonaCsp[etapa.id];
+              const bloqueada = lineaTiempoCspCortada(lineaTiempoPersonaCsp, idx);
+              const decision = etapa.decision ? decisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
+              const reunionesMarcadas = etapa.reuniones ? [1, 2, 3, 4, 5].filter(n => lineaTiempoPersonaCsp[`${etapa.id}_reunion_${n}`]).length : 0;
               return (
-                <button key={etapa.id} type="button"
-                  onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: !prev[etapa.id] }))}
+                <div key={etapa.id}
                   title={etapa.detalle || etapa.label}
                   style={{
                     minWidth: 155,
                     flex: "1 1 155px",
                     textAlign: "left",
-                    border: "1.5px solid " + (marcada ? "#10B981" : "#CBD5E1"),
-                    background: marcada ? "#ECFDF5" : "#F8FAFC",
-                    color: marcada ? "#047857" : "#475569",
+                    border: "1.5px solid " + (bloqueada ? "#E5E7EB" : marcada ? "#10B981" : decision === "no_califica" ? "#FCA5A5" : decision === "califica" ? "#10B981" : "#CBD5E1"),
+                    background: bloqueada ? "#F3F4F6" : marcada ? "#ECFDF5" : decision === "no_califica" ? "#FEF2F2" : decision === "califica" ? "#ECFDF5" : "#F8FAFC",
+                    color: bloqueada ? "#9CA3AF" : marcada || decision === "califica" ? "#047857" : decision === "no_califica" ? "#B91C1C" : "#475569",
                     borderRadius: 9,
                     padding: "9px 10px",
-                    cursor: "pointer",
-                    boxShadow: marcada ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
+                    boxShadow: marcada || decision ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
                   }}>
                   <div style={{ fontSize: 10, fontWeight: 900, opacity: .75 }}>ETAPA {idx + 1}</div>
-                  <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "✓ " : ""}{etapa.label}</div>
+                  <button type="button" disabled={bloqueada}
+                    onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: !prev[etapa.id] }))}
+                    style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: 0, padding: 0, color: "inherit", cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "✓ " : ""}{etapa.label}</div>
+                  </button>
                   {etapa.detalle && <div style={{ fontSize: 10, marginTop: 3, opacity: .82 }}>{etapa.detalle}</div>}
-                </button>
+                  {etapa.decision && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 8 }}>
+                      <button type="button" disabled={bloqueada} onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [`decision_${etapa.decision}`]: "califica" }))}
+                        style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "califica" ? "#059669" : "#D1FAE5", color: decision === "califica" ? "#fff" : "#047857", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                        Califica
+                      </button>
+                      <button type="button" disabled={bloqueada} onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [`decision_${etapa.decision}`]: "no_califica" }))}
+                        style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "no_califica" ? "#DC2626" : "#FEE2E2", color: decision === "no_califica" ? "#fff" : "#B91C1C", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                        No califica
+                      </button>
+                    </div>
+                  )}
+                  {etapa.reuniones && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, marginTop: 8 }}>
+                      {[1, 2, 3, 4, 5].map(n => {
+                        const key = `${etapa.id}_reunion_${n}`;
+                        const vb = !!lineaTiempoPersonaCsp[key];
+                        return (
+                          <button key={key} type="button" disabled={bloqueada}
+                            onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [key]: !prev[key] }))}
+                            title={`Reunión ${n} - VB`}
+                            style={{ border: 0, borderRadius: 6, padding: "5px 2px", background: vb ? "#059669" : "#E5E7EB", color: vb ? "#fff" : "#475569", fontSize: 10, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                            R{n}
+                          </button>
+                        );
+                      })}
+                      <div style={{ gridColumn: "1 / -1", fontSize: 10, color: "#64748b", marginTop: 2 }}>{reunionesMarcadas}/5 VB</div>
+                    </div>
+                  )}
+                  {bloqueada && <div style={{ fontSize: 10, marginTop: 6, color: "#9CA3AF", fontWeight: 800 }}>Avance cortado por No califica</div>}
+                </div>
               );
             })}
           </div>

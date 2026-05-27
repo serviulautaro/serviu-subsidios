@@ -68,6 +68,9 @@ function main() {
   ok("Linea de tiempo CSP requiere confirmacion", contains(app, "¿Está seguro de guardar la línea de tiempo"));
   ok("Linea de tiempo CSP se guarda en comites", contains(app, "linea_tiempo") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo\""));
   ok("Linea de tiempo CSP se guarda por solicitante", contains(app, "Línea de tiempo CSP del solicitante") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo_csp\""));
+  ok("Linea de tiempo CSP usa etapas oficiales nuevas", contains(app, "Solicitud de documentos") && contains(app, "Calificación SERVIU") && contains(app, "Ejecución de las obras"));
+  ok("Linea de tiempo CSP permite VB por reuniones", contains(app, "_reunion_") && contains(app, "/5 VB"));
+  ok("Linea de tiempo CSP corta avance por no califica", contains(app, "lineaTiempoCspCortada") && contains(app, "Avance cortado por No califica"));
   ok("Nombre de solicitante se normaliza en mayusculas", contains(app, "normalizarNombreSolicitante") && contains(app, "APELLIDOS PRIMERO, LUEGO NOMBRES"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
 
