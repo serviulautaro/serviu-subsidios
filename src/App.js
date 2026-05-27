@@ -3405,7 +3405,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } else {
       (supaFiles || []).forEach(sf => {
         if (!rutasMap[sf.nombre]) rutasMap[sf.nombre] = sf.carpeta || carpeta;
-        if (sf.storage_path) datosMap[sf.nombre] = { dataUrl: storagePublicUrl(sf.storage_path, sf.storage_bucket), mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta, storagePath: sf.storage_path, storageBucket: sf.storage_bucket || STORAGE_BUCKET };
+        const storagePath = sf.storage_path || storageObjectPath(sf.carpeta || carpeta, sf.nombre);
+        datosMap[sf.nombre] = {
+          dataUrl: sf.storage_path ? storagePublicUrl(sf.storage_path, sf.storage_bucket) : "",
+          mimeType: sf.mime_type || "",
+          carpeta: sf.carpeta || carpeta,
+          storagePath,
+          storageBucket: sf.storage_bucket || STORAGE_BUCKET
+        };
       });
       supaNames = (supaFiles || []).map(sf => sf.nombre);
     }
@@ -3495,22 +3502,35 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const abrirArchivo = async (nombre) => {
     const archivoGuardado = archivosDatos[nombre];
     const fileUrl = await urlDocumentoDisponible(nombre);
+    const abrirDesdeStorage = async (storagePath, bucket = STORAGE_BUCKET) => {
+      if (!storagePath) return false;
+      try {
+        const { data, error } = await supabase.storage.from(bucket || STORAGE_BUCKET).download(storagePath);
+        if (error || !data) return false;
+        const dataUrl = await fileToDataUrl(data);
+        setHtmlPreview(null);
+        setFilePreview({ url: dataUrl, title: nombre });
+        return true;
+      } catch {
+        return false;
+      }
+    };
     if (!fileUrl) {
+      const rutasCandidatas = [...new Set([
+        archivoGuardado?.storagePath,
+        storageObjectPath(archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta, nombre),
+        [archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta, nombre].filter(Boolean).join("/"),
+        carpetaVieja ? storageObjectPath(carpetaVieja, nombre) : "",
+        carpetaVieja ? [carpetaVieja, nombre].filter(Boolean).join("/") : "",
+      ].filter(Boolean))];
+      for (const ruta of rutasCandidatas) {
+        if (await abrirDesdeStorage(ruta, archivoGuardado?.storageBucket || STORAGE_BUCKET)) return;
+      }
       alert("No se pudo abrir el documento. El archivo no está disponible en la carpeta ni en respaldo.");
       return;
     }
     if (archivoGuardado?.storagePath) {
-      try {
-        const { data, error } = await supabase.storage
-          .from(archivoGuardado.storageBucket || STORAGE_BUCKET)
-          .download(archivoGuardado.storagePath);
-        if (!error && data) {
-          const dataUrl = await fileToDataUrl(data);
-          setHtmlPreview(null);
-          setFilePreview({ url: dataUrl, title: nombre });
-          return;
-        }
-      } catch {}
+      if (await abrirDesdeStorage(archivoGuardado.storagePath, archivoGuardado.storageBucket || STORAGE_BUCKET)) return;
     }
     if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:")) {
       const dataUrl = String(archivoGuardado.dataUrl);
