@@ -627,6 +627,8 @@ const normalizarLineaTiempoCsp = (valor = {}) => {
   }
   return valor && typeof valor === "object" && !Array.isArray(valor) ? valor : {};
 };
+const normalizarNombreSolicitante = (valor = "") =>
+  String(valor || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("es-CL");
 
 // Normaliza nombre para comparación (sin tildes, minúsculas, sin caracteres especiales)
 function normNomDirectiva(s) {
@@ -1430,7 +1432,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
   const [motivoSinComite, setMotivoSinComite] = useState("");
 
   const CAMPOS = [
-    ["nombre", "Nombre completo *", "text", "12"],
+    ["nombre", "Apellidos y nombres *", "text", "12"],
     ["rut", "Cédula de identidad *", "text", "6"],
     ["telefono", "Telefono", "tel", "6"],
     ["direccion", "Direccion", "text", "12"],
@@ -1545,8 +1547,12 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
                       style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
                     <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>⚠ Solo números y guión. Ej: 10398338-K → 10.398.338-K</div></>
                   ) : (
-                    <input type={t} value={form[k] || ""} onChange={e => setForm({ ...form, [k]: e.target.value })}
-                      style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+                    <>
+                      <input type={t} value={form[k] || ""} onChange={e => setForm({ ...form, [k]: k === "nombre" ? e.target.value.toLocaleUpperCase("es-CL") : e.target.value })}
+                        placeholder={k === "nombre" ? "APELLIDOS PRIMERO, LUEGO NOMBRES" : ""}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+                      {k === "nombre" && <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>Ingrese APELLIDOS primero y luego NOMBRES. Se guardará en MAYÚSCULAS.</div>}
+                    </>
                   )}
                 </div>
               );
@@ -1738,7 +1744,8 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
     const numeroRecepcion = form.comiteId === "comite_desmarque" ? String(totalDesmarque) : "";
     const fechaRecepcion = form.comiteId === "comite_desmarque" ? today() : "";
     const fechaSistema = today();
-    const nueva = { ...form, rut: rutFormateado, id: uid(), fechaIngreso: fechaSistema, fecha_ingreso: fechaSistema, 
+    const nombreNormalizado = normalizarNombreSolicitante(form.nombre);
+    const nueva = { ...form, nombre: nombreNormalizado, rut: rutFormateado, id: uid(), fechaIngreso: fechaSistema, fecha_ingreso: fechaSistema, 
       numero_recepcion: numeroRecepcion, fecha_recepcion: fechaRecepcion,
       tipo_comite: form.tipo_comite || "",
       rol_propiedad: form.rol_propiedad || "",
@@ -1748,11 +1755,11 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
       coordenadas: form.coordenadas || "",
       observaciones: form.observaciones || "",
     };
-    const carpeta = carpetaNombre(form.nombre, rutFormateado);
+    const carpeta = carpetaNombre(nombreNormalizado, rutFormateado);
     try { 
       await fetch(apiPath("/carpeta/", carpeta), { method: "POST" });
       // Mover archivos de carpeta temporal si existe
-      const carpetaTmp = form.nombre.replace(/\s+/g,"_").replace(/[^a-zA-Z0-9_]/g,"") + "_" + rutFormateado.replace(/[^0-9kK]/g,"");
+      const carpetaTmp = nombreNormalizado.replace(/\s+/g,"_").replace(/[^a-zA-Z0-9_]/g,"") + "_" + rutFormateado.replace(/[^0-9kK]/g,"");
       if (carpetaTmp !== carpeta) {
         await fetch(API + "/renombrar-carpeta", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ origen: carpetaTmp, destino: carpeta }) });
       }
@@ -2794,6 +2801,12 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
   const misSols = solicitudes.filter(s => s.personaId === personaId);
+  const tieneSolicitudCsp = misSols.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
+  const [lineaTiempoPersonaCsp, setLineaTiempoPersonaCsp] = useState(() => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
+  const [guardandoLineaTiempoPersona, setGuardandoLineaTiempoPersona] = useState(false);
+  useEffect(() => {
+    setLineaTiempoPersonaCsp(normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
+  }, [personaId, persona?.lineaTiempoCsp, persona?.linea_tiempo_csp]);
   const esPrioritario = solicitantePrioritario(personaId, solicitudes);
   const VISITAS_DOC_KEY = "__registro_visitas_oficina__";
 
@@ -3110,6 +3123,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       metrosNoRegul:         "metrosnoregul",
       totalMetros:           "totalmetros",
       modalidadPostulacion:  "modalidadpostulacion",
+      lineaTiempoCsp:        "linea_tiempo_csp",
     };
     const dbFields = {};
     for (const [k, v] of Object.entries(fields)) dbFields[snakeMap[k] || k] = v;
@@ -3125,6 +3139,24 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }
       return actualizado;
     }));
+  };
+
+  const guardarLineaTiempoPersonaCsp = async () => {
+    if (!persona) return;
+    if (!window.confirm("¿Está seguro de guardar la línea de tiempo de este solicitante?")) return;
+    setGuardandoLineaTiempoPersona(true);
+    try {
+      await syncPersona({ lineaTiempoCsp: lineaTiempoPersonaCsp, linea_tiempo_csp: lineaTiempoPersonaCsp });
+      await registrarAuditoria?.("guardar_linea_tiempo_solicitante_csp", "personas", persona.id, {
+        solicitante: persona.nombre,
+        marcadas: Object.entries(lineaTiempoPersonaCsp).filter(([, v]) => !!v).map(([k]) => k),
+      });
+    } catch (err) {
+      console.warn("[linea tiempo solicitante csp]", err?.message || err);
+      alert("No se pudo guardar la línea de tiempo del solicitante. Revise la conexión e intente nuevamente.");
+    } finally {
+      setGuardandoLineaTiempoPersona(false);
+    }
   };
 
   useEffect(() => {
@@ -4275,6 +4307,47 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           </div>
         </div>
       </div>
+
+      {tieneSolicitudCsp && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", marginBottom: 20, border: "1px solid #dbeafe" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f" }}>Línea de tiempo CSP del solicitante</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Marca manualmente las etapas completadas para este solicitante.</div>
+            </div>
+            <button onClick={guardarLineaTiempoPersonaCsp} disabled={guardandoLineaTiempoPersona}
+              style={{ background: guardandoLineaTiempoPersona ? "#94A3B8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
+              {guardandoLineaTiempoPersona ? "Guardando..." : "Guardar línea de tiempo"}
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {LINEA_TIEMPO_CSP.map((etapa, idx) => {
+              const marcada = !!lineaTiempoPersonaCsp[etapa.id];
+              return (
+                <button key={etapa.id} type="button"
+                  onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: !prev[etapa.id] }))}
+                  title={etapa.detalle || etapa.label}
+                  style={{
+                    minWidth: 155,
+                    flex: "1 1 155px",
+                    textAlign: "left",
+                    border: "1.5px solid " + (marcada ? "#10B981" : "#CBD5E1"),
+                    background: marcada ? "#ECFDF5" : "#F8FAFC",
+                    color: marcada ? "#047857" : "#475569",
+                    borderRadius: 9,
+                    padding: "9px 10px",
+                    cursor: "pointer",
+                    boxShadow: marcada ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
+                  }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, opacity: .75 }}>ETAPA {idx + 1}</div>
+                  <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "✓ " : ""}{etapa.label}</div>
+                  {etapa.detalle && <div style={{ fontSize: 10, marginTop: 3, opacity: .82 }}>{etapa.detalle}</div>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Modal asignar comité */}
       {showAsignarComite && (
@@ -8340,8 +8413,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     }
     const fechaSistema = today();
     const rutFormateado = formatRut(form.rut);
-    const nueva = { ...form, rut: rutFormateado, id: uid(), fechaIngreso: fechaSistema, fecha_ingreso: fechaSistema, comiteId };
-    const carpeta = carpetaNombre(form.nombre, rutFormateado);
+    const nombreNormalizado = normalizarNombreSolicitante(form.nombre);
+    const nueva = { ...form, nombre: nombreNormalizado, rut: rutFormateado, id: uid(), fechaIngreso: fechaSistema, fecha_ingreso: fechaSistema, comiteId };
+    const carpeta = carpetaNombre(nombreNormalizado, rutFormateado);
     try { await fetch(apiPath("/carpeta/", carpeta), { method: "POST" }); } catch (e) { }
     onSavePersonas([...personas, nueva]);
     setForm({ ...EMPTY });
@@ -9804,6 +9878,7 @@ export default function App() {
     fecha_recepcion:      x.fecha_recepcion || "",
     estado_desmarque:     x.estado_desmarque || "",
     observaciones:        x.observaciones || "",
+    lineaTiempoCsp:       normalizarLineaTiempoCsp(x.linea_tiempo_csp),
     // Mapeos lowercase DB -> camelCase app (campos de fichas técnicas)
     dominiopropiedad:      x.dominiopropiedad || "",
     nFJS:                  x.nfjs || "",
@@ -10075,6 +10150,7 @@ export default function App() {
         fecha_recepcion: ultima.fecha_recepcion || "",
         estado_desmarque: ultima.estado_desmarque || "NO VISITADO",
         observaciones: ultima.observaciones || "",
+        linea_tiempo_csp: normalizarLineaTiempoCsp(ultima.lineaTiempoCsp || ultima.linea_tiempo_csp),
       }]);
       await registrarAuditoria("crear_solicitante", "personas", ultima.id, { nombre: ultima.nombre, rut: ultima.rut });
       // Si es comité desmarque → crear solicitud Habitabilidad automáticamente
@@ -10112,7 +10188,8 @@ export default function App() {
           email: p.email, direccion: p.direccion, comuna: p.comuna,
           puntaje_rsh: p.puntajeRSH, integrantes_familiares: p.integrantesFamiliares,
           comite_id: p.comiteId || null, comite: p.comite || null,
-          fecha_ingreso: p.fechaIngreso || p.fecha_ingreso || today()
+          fecha_ingreso: p.fechaIngreso || p.fecha_ingreso || today(),
+          linea_tiempo_csp: normalizarLineaTiempoCsp(p.lineaTiempoCsp || p.linea_tiempo_csp)
         });
         const cambios = resumenCambiosPersona(anterioresPorId.get(p.id), p);
         if (cambios.length) {

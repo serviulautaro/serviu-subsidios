@@ -76,6 +76,7 @@ async function ensureRuntimeSchema() {
     schemaRuntimePromise = requirePg().query(`
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "tipo" text;
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "linea_tiempo" jsonb DEFAULT '{}'::jsonb;
+      ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "linea_tiempo_csp" jsonb DEFAULT '{}'::jsonb;
     `).catch(err => {
       schemaRuntimePromise = null;
       throw err;
@@ -146,7 +147,7 @@ const aligerarSolicitudListado = (sol = {}) => ({
 
 async function pgSelect(table, query = {}) {
   validarTabla(table);
-  if (table === 'comites') await ensureRuntimeSchema();
+  if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
   const values = [];
   let sql = `SELECT ${columnasSelect(query.select)} FROM ${quoteIdent(table)}`;
   sql += whereSql(filtrosDesdeQuery(query), values);
@@ -157,7 +158,7 @@ async function pgSelect(table, query = {}) {
 
 async function pgInsert(table, rows = [], { upsert = false } = {}) {
   validarTabla(table);
-  if (table === 'comites') await ensureRuntimeSchema();
+  if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
   const lista = Array.isArray(rows) ? rows : [rows];
   if (!lista.length) return [];
   const keys = [...new Set(lista.flatMap(row => Object.keys(row || {})))];
@@ -181,7 +182,7 @@ async function pgInsert(table, rows = [], { upsert = false } = {}) {
 
 async function pgUpdate(table, filtros = [], valuesObj = {}) {
   validarTabla(table);
-  if (table === 'comites') await ensureRuntimeSchema();
+  if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
   if (!filtros.length) throw new Error('Update sin filtros bloqueado.');
   const keys = Object.keys(valuesObj || {});
   if (!keys.length) return [];
