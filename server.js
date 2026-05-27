@@ -37,6 +37,7 @@ const pgPool = process.env.DATABASE_URL
 let cacheBootstrap = null;
 let cacheSolicitudes = null;
 const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita';
+const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
 const TABLAS_PERMITIDAS = new Set(['comites', 'personas', 'solicitudes', 'programas_custom', 'archivos_solicitante', 'visitas', 'audit_log', 'app_users']);
 const ADMIN_KEY = process.env.ADMIN_KEY || Buffer.from('MTk2NTYw', 'base64').toString('utf8');
 
@@ -109,6 +110,26 @@ const aplicarOrdenRango = (query = {}, values = []) => {
   return sql;
 };
 
+const aligerarDocumentoListado = (doc = {}) => {
+  if (!doc || typeof doc !== 'object') return doc;
+  const {
+    archivoData,
+    data,
+    base64,
+    contenido,
+    buffer,
+    ...resto
+  } = doc;
+  return resto;
+};
+
+const aligerarSolicitudListado = (sol = {}) => ({
+  ...sol,
+  documentos: Array.isArray(sol.documentos)
+    ? sol.documentos.map(aligerarDocumentoListado)
+    : []
+});
+
 async function pgSelect(table, query = {}) {
   validarTabla(table);
   const values = [];
@@ -171,17 +192,20 @@ async function pgDelete(table, filtros = []) {
 }
 
 async function cargarSolicitudesServidor() {
-  if (pgPool) return pgSelect('solicitudes', { select: SOLICITUDES_SELECT_BASE });
+  if (pgPool) {
+    const rows = await pgSelect('solicitudes', { select: SOLICITUDES_SELECT_LISTADO });
+    return rows.map(aligerarSolicitudListado);
+  }
   const pageSize = 100;
   const todas = [];
   for (let inicio = 0; ; inicio += pageSize) {
     const { data, error } = await timeout(
-      supabaseServer.from('solicitudes').select(SOLICITUDES_SELECT_BASE).range(inicio, inicio + pageSize - 1),
+      supabaseServer.from('solicitudes').select(SOLICITUDES_SELECT_LISTADO).range(inicio, inicio + pageSize - 1),
       10000,
       'Tiempo agotado cargando solicitudes'
     );
     if (error) throw error;
-    todas.push(...(data || []));
+    todas.push(...(data || []).map(aligerarSolicitudListado));
     if (!data || data.length < pageSize) break;
   }
   return todas;

@@ -197,6 +197,7 @@ const API = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includ
   ? window.location.origin
   : "http://localhost:3001";
 const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita";
+const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
 const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
 const apiPath = (prefix, routePath = "", fileName = "") =>
@@ -7983,7 +7984,10 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const sol = solicitudHabitabilidadPersona(p.id);
     if (!sol) return false;
     const st = estadoLineaDesmarque(sol);
-    return st.calificacion.estado === "CALIFICA" &&
+    const estadoGuardado = String(p.estado_desmarque || p.estadoDesmarque || "").trim().toUpperCase();
+    const sigueNoVisitado = !estadoGuardado || estadoGuardado === "NO VISITADO";
+    return sigueNoVisitado &&
+      st.calificacion.estado === "CALIFICA" &&
       !st.visitado &&
       !st.solicitudDom &&
       !st.informeIngresado &&
@@ -9631,7 +9635,7 @@ export default function App() {
       const { data, error } = await conTiempoMaximo(
         supabase
           .from("solicitudes")
-          .select(SOLICITUDES_SELECT_BASE)
+          .select(SOLICITUDES_SELECT_LISTADO)
           .range(inicio, inicio + pageSize - 1),
         6000,
         "Tiempo agotado cargando solicitudes."
@@ -9900,12 +9904,28 @@ export default function App() {
   const cargarSolicitudesPersona = async (personaId) => {
     if (!personaId) return;
     try {
-      const { data, error } = await conTiempoMaximo(
-        supabase.from("solicitudes").select("*").eq("persona_id", personaId),
-        12000,
-        "Tiempo agotado cargando documentos del solicitante."
-      );
-      if (error) throw error;
+      let data = null;
+      try {
+        const params = new URLSearchParams({ select: "*", [`eq[persona_id]`]: personaId });
+        const res = await conTiempoMaximo(
+          fetch(`${API}/api/db/solicitudes?${params.toString()}`, { cache: "no-store" }),
+          12000,
+          "Tiempo agotado cargando documentos del solicitante desde Render."
+        );
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok !== false) data = json.data || [];
+      } catch (apiErr) {
+        console.warn("[detalle solicitante render]", apiErr?.message || apiErr);
+      }
+      if (!data) {
+        const { data: dataSupabase, error } = await conTiempoMaximo(
+          supabase.from("solicitudes").select("*").eq("persona_id", personaId),
+          12000,
+          "Tiempo agotado cargando documentos del solicitante."
+        );
+        if (error) throw error;
+        data = dataSupabase || [];
+      }
       const programasCarga = combinarProgramas(programasCustom);
       const solicitudesCompletas = (data || []).map(sol => mapearSolicitudDb(sol, programasCarga));
       setSolicitudes(prev => {
