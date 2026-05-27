@@ -641,9 +641,18 @@ const buscarComitePersona = (comites = [], persona = {}) => {
 const normComiteComparar = (v) => (v || "").toString().toLowerCase().trim()
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
   .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+const codigoComitePorConstituir = (comiteRef = {}) => {
+  const texto = normComiteComparar(`${comiteRef.id || ""} ${comiteRef.codigo || ""} ${comiteRef.nombre || ""} ${comiteRef.tipo || ""} ${comiteRef.programaId || comiteRef.programa_id || ""}`);
+  const esPorConstituir = texto.includes("por constituir") || texto.includes("falta constituir");
+  if (!esPorConstituir) return "";
+  const esUrbano = texto.includes("urbano") || texto.includes("csp urbano") || texto.includes("csp_urbano") || texto.includes("gru");
+  return esUrbano ? "gr2U" : "gr6R";
+};
 const referenciasComite = (comiteRef = {}) => {
   const base = comitesBaseCompletos();
   const refs = [comiteRef.id, comiteRef.codigo].filter(Boolean).map(String);
+  const codigoAlias = codigoComitePorConstituir(comiteRef);
+  if (codigoAlias) refs.push(codigoAlias);
   const nombreNorm = normComiteComparar(comiteRef.nombre);
   const fijo = base.find(c =>
     refs.includes(String(c.id)) ||
