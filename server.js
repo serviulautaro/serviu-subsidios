@@ -6,6 +6,7 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { execFileSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
+const { Pool } = require('pg');
 // (documentos generados en HTML — sin dependencia docx)
 
 const app = express();
@@ -24,16 +25,153 @@ const db = new Database(path.join(__dirname, 'serviu.db'));
 const SUPABASE_URL = 'https://qirjfgjesjzikouehmib.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_SSAA2undzTyVsgCjMgbXBw_Bu9D_lvt';
 const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
+const pgPool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
+      max: Number(process.env.PGPOOL_MAX || 10),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 15000,
+    })
+  : null;
 let cacheBootstrap = null;
 let cacheSolicitudes = null;
 const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita';
+const TABLAS_PERMITIDAS = new Set(['comites', 'personas', 'solicitudes', 'programas_custom', 'archivos_solicitante', 'visitas', 'audit_log', 'app_users']);
+const ADMIN_KEY = process.env.ADMIN_KEY || Buffer.from('MTk2NTYw', 'base64').toString('utf8');
 
 const timeout = (promise, ms, message) => Promise.race([
   promise,
   new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
 ]);
 
+const quoteIdent = (name) => '"' + String(name).replace(/"/g, '""') + '"';
+const requirePg = () => {
+  if (!pgPool) {
+    const err = new Error('DATABASE_URL no configurada en el servidor.');
+    err.status = 503;
+    throw err;
+  }
+  return pgPool;
+};
+const validarTabla = (table) => {
+  if (!TABLAS_PERMITIDAS.has(table)) {
+    const err = new Error('Tabla no permitida.');
+    err.status = 400;
+    throw err;
+  }
+};
+const validarAdmin = (key) => {
+  if (String(key || '') !== ADMIN_KEY) {
+    const err = new Error('Clave de administrador incorrecta.');
+    err.status = 403;
+    throw err;
+  }
+};
+const columnasSelect = (select = '*') => {
+  const limpio = String(select || '*').trim();
+  if (!limpio || limpio === '*') return '*';
+  return limpio.split(',').map(c => quoteIdent(c.trim())).join(', ');
+};
+const filtrosDesdeQuery = (query = {}) => {
+  const filtros = [];
+  Object.entries(query).forEach(([key, value]) => {
+    const match = key.match(/^eq\[(.+)\]$/);
+    if (match) filtros.push({ col: match[1], value });
+  });
+  return filtros;
+};
+const whereSql = (filtros = [], values = []) => {
+  if (!filtros.length) return '';
+  const partes = filtros.map(f => {
+    values.push(f.value);
+    return `${quoteIdent(f.col)} = $${values.length}`;
+  });
+  return ' WHERE ' + partes.join(' AND ');
+};
+const aplicarOrdenRango = (query = {}, values = []) => {
+  let sql = '';
+  if (query.order) {
+    sql += ` ORDER BY ${quoteIdent(query.order)} ${query.ascending === 'false' ? 'DESC' : 'ASC'}`;
+  }
+  if (query.limit) {
+    values.push(Number(query.limit));
+    sql += ` LIMIT $${values.length}`;
+  }
+  if (query.from && query.to) {
+    const from = Number(query.from);
+    const to = Number(query.to);
+    values.push(Math.max(0, to - from + 1));
+    sql += ` LIMIT $${values.length}`;
+    values.push(from);
+    sql += ` OFFSET $${values.length}`;
+  }
+  return sql;
+};
+
+async function pgSelect(table, query = {}) {
+  validarTabla(table);
+  const values = [];
+  let sql = `SELECT ${columnasSelect(query.select)} FROM ${quoteIdent(table)}`;
+  sql += whereSql(filtrosDesdeQuery(query), values);
+  sql += aplicarOrdenRango(query, values);
+  const { rows } = await requirePg().query(sql, values);
+  return rows;
+}
+
+async function pgInsert(table, rows = [], { upsert = false } = {}) {
+  validarTabla(table);
+  const lista = Array.isArray(rows) ? rows : [rows];
+  if (!lista.length) return [];
+  const keys = [...new Set(lista.flatMap(row => Object.keys(row || {})))];
+  if (!keys.length) return [];
+  const values = [];
+  const valueSql = lista.map((row, rowIdx) => {
+    const placeholders = keys.map((key, colIdx) => {
+      const value = row[key];
+      values.push(value && typeof value === 'object' && !Buffer.isBuffer(value) ? JSON.stringify(value) : value);
+      return `$${rowIdx * keys.length + colIdx + 1}`;
+    });
+    return `(${placeholders.join(', ')})`;
+  }).join(', ');
+  const updateSql = upsert && keys.includes('id')
+    ? ` ON CONFLICT (id) DO UPDATE SET ${keys.filter(k => k !== 'id').map(k => `${quoteIdent(k)} = EXCLUDED.${quoteIdent(k)}`).join(', ')}`
+    : '';
+  const sql = `INSERT INTO ${quoteIdent(table)} (${keys.map(quoteIdent).join(', ')}) VALUES ${valueSql}${updateSql} RETURNING *`;
+  const { rows: inserted } = await requirePg().query(sql, values);
+  return inserted;
+}
+
+async function pgUpdate(table, filtros = [], valuesObj = {}) {
+  validarTabla(table);
+  const keys = Object.keys(valuesObj || {});
+  if (!keys.length) return [];
+  const values = [];
+  const setSql = keys.map(key => {
+    const value = valuesObj[key];
+    values.push(value && typeof value === 'object' && !Buffer.isBuffer(value) ? JSON.stringify(value) : value);
+    return `${quoteIdent(key)} = $${values.length}`;
+  }).join(', ');
+  let sql = `UPDATE ${quoteIdent(table)} SET ${setSql}`;
+  sql += whereSql(filtros, values);
+  sql += ' RETURNING *';
+  const { rows } = await requirePg().query(sql, values);
+  return rows;
+}
+
+async function pgDelete(table, filtros = []) {
+  validarTabla(table);
+  if (!filtros.length) throw new Error('Delete sin filtros bloqueado.');
+  const values = [];
+  let sql = `DELETE FROM ${quoteIdent(table)}`;
+  sql += whereSql(filtros, values);
+  sql += ' RETURNING *';
+  const { rows } = await requirePg().query(sql, values);
+  return rows;
+}
+
 async function cargarSolicitudesServidor() {
+  if (pgPool) return pgSelect('solicitudes', { select: SOLICITUDES_SELECT_BASE });
   const pageSize = 100;
   const todas = [];
   for (let inicio = 0; ; inicio += pageSize) {
@@ -74,6 +212,15 @@ db.exec(`
 
 app.get('/api/bootstrap', async (req, res) => {
   try {
+    if (pgPool) {
+      const [comites, personas, programasCustom] = await Promise.all([
+        pgSelect('comites'),
+        pgSelect('personas'),
+        pgSelect('programas_custom')
+      ]);
+      cacheBootstrap = { comites, personas, programasCustom, actualizado: new Date().toISOString(), fuente: 'render_postgres' };
+      return res.json({ ok: true, ...cacheBootstrap });
+    }
     const [comitesRes, personasRes, programasRes] = await timeout(Promise.all([
       supabaseServer.from('comites').select('*'),
       supabaseServer.from('personas').select('*'),
@@ -102,6 +249,157 @@ app.get('/api/solicitudes', async (req, res) => {
   } catch (e) {
     if (cacheSolicitudes) return res.json({ ok: true, cache: true, ...cacheSolicitudes });
     res.status(504).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/db/:table', async (req, res) => {
+  try {
+    const data = await pgSelect(req.params.table, req.query);
+    res.json({ ok: true, data });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/db/:table/insert', async (req, res) => {
+  try {
+    const data = await pgInsert(req.params.table, req.body?.rows || req.body || []);
+    res.json({ ok: true, data });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/db/:table/upsert', async (req, res) => {
+  try {
+    const data = await pgInsert(req.params.table, req.body?.rows || req.body || [], { upsert: true });
+    res.json({ ok: true, data });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.patch('/api/db/:table/update', async (req, res) => {
+  try {
+    const data = await pgUpdate(req.params.table, req.body?.filters || [], req.body?.values || {});
+    res.json({ ok: true, data });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/db/:table/delete', async (req, res) => {
+  try {
+    const data = await pgDelete(req.params.table, req.body?.filters || []);
+    res.json({ ok: true, data });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/rpc/:fn', async (req, res) => {
+  try {
+    const fn = req.params.fn;
+    const body = req.body || {};
+    if (fn === 'login_app_user') {
+      const { rows } = await requirePg().query(
+        `SELECT id, nombre, username, rol, debe_cambiar_clave
+         FROM app_users
+         WHERE lower(username) = lower(trim($1))
+           AND activo = true
+           AND password_hash = encode(digest(password_salt || $2, 'sha256'), 'hex')`,
+        [body.p_username, body.p_password]
+      );
+      return res.json({ ok: true, data: rows });
+    }
+    if (fn === 'cambiar_clave_app_user') {
+      if (String(body.p_nueva || '').length < 8) return res.json({ ok: true, data: false });
+      const actual = await requirePg().query(
+        `SELECT id FROM app_users
+         WHERE id = $1 AND activo = true
+           AND password_hash = encode(digest(password_salt || $2, 'sha256'), 'hex')`,
+        [body.p_user_id, body.p_actual]
+      );
+      if (!actual.rows.length) return res.json({ ok: true, data: false });
+      const salt = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      await requirePg().query(
+        `UPDATE app_users
+         SET password_salt = $1,
+             password_hash = encode(digest($1 || $2, 'sha256'), 'hex'),
+             debe_cambiar_clave = false,
+             actualizado = now()
+         WHERE id = $3`,
+        [salt, body.p_nueva, body.p_user_id]
+      );
+      return res.json({ ok: true, data: true });
+    }
+    if (fn === 'registrar_auditoria') {
+      await requirePg().query(
+        `INSERT INTO audit_log(user_id, usuario, accion, entidad, entidad_id, detalle)
+         SELECT u.id, u.nombre, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb)
+         FROM app_users u
+         WHERE u.id = $1 AND u.activo = true`,
+        [body.p_user_id, body.p_accion, body.p_entidad, body.p_entidad_id, JSON.stringify(body.p_detalle || {})]
+      );
+      return res.json({ ok: true, data: null });
+    }
+    if (fn === 'admin_listar_app_users') {
+      validarAdmin(body.p_admin_key);
+      const { rows } = await requirePg().query(
+        `SELECT id, nombre, username, rol, activo, debe_cambiar_clave, creado, actualizado
+         FROM app_users ORDER BY nombre`
+      );
+      return res.json({ ok: true, data: rows });
+    }
+    if (fn === 'admin_crear_app_user') {
+      validarAdmin(body.p_admin_key);
+      const nombre = String(body.p_nombre || '').trim();
+      const username = String(body.p_username || '').trim().toLowerCase();
+      const password = String(body.p_password || '');
+      const rol = String(body.p_rol || 'usuario') === 'admin' ? 'admin' : 'usuario';
+      if (!nombre || !username || !password) {
+        return res.status(400).json({ ok: false, error: 'Faltan datos para crear el usuario.' });
+      }
+      const salt = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const { rows } = await requirePg().query(
+        `INSERT INTO app_users(nombre, username, rol, activo, debe_cambiar_clave, password_salt, password_hash, creado, actualizado)
+         VALUES ($1, $2, $3, true, true, $4, encode(digest($4 || $5, 'sha256'), 'hex'), now(), now())
+         ON CONFLICT (username) DO UPDATE SET
+           nombre = EXCLUDED.nombre,
+           rol = EXCLUDED.rol,
+           activo = true,
+           debe_cambiar_clave = true,
+           password_salt = EXCLUDED.password_salt,
+           password_hash = EXCLUDED.password_hash,
+           actualizado = now()
+         RETURNING id, nombre, username, rol, activo, debe_cambiar_clave, creado, actualizado`,
+        [nombre, username, rol, salt, password]
+      );
+      return res.json({ ok: true, data: rows });
+    }
+    if (fn === 'admin_estado_app_user') {
+      validarAdmin(body.p_admin_key);
+      const { rows } = await requirePg().query(
+        `UPDATE app_users SET activo = $1, actualizado = now()
+         WHERE id = $2
+         RETURNING id, nombre, username, rol, activo, debe_cambiar_clave, creado, actualizado`,
+        [Boolean(body.p_activo), body.p_user_id]
+      );
+      return res.json({ ok: true, data: rows });
+    }
+    if (fn === 'admin_eliminar_app_user') {
+      validarAdmin(body.p_admin_key);
+      const { rows } = await requirePg().query(
+        `DELETE FROM app_users
+         WHERE id = $1
+         RETURNING id, nombre, username, rol, activo, debe_cambiar_clave, creado, actualizado`,
+        [body.p_user_id]
+      );
+      return res.json({ ok: true, data: rows });
+    }
+    return res.status(404).json({ ok: false, error: 'RPC no implementada en backend.' });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
   }
 });
 
@@ -593,10 +891,10 @@ const buildPath = path.join(__dirname, 'build');
 if (!fs.existsSync(buildPath)) {
   try {
     console.log('Build React no encontrado. Generando build antes de iniciar...');
-    execFileSync(process.execPath, [path.join(__dirname, 'scripts', 'demo_env.js'), 'build'], {
+    execFileSync(process.execPath, [require.resolve('react-scripts/bin/react-scripts.js'), 'build'], {
       cwd: __dirname,
       stdio: 'inherit',
-      env: { ...process.env, REACT_APP_DEMO_MODE: process.env.REACT_APP_DEMO_MODE || 'true' }
+      env: { ...process.env, REACT_APP_DEMO_MODE: process.env.REACT_APP_DEMO_MODE || 'false' }
     });
   } catch (e) {
     console.error('No se pudo generar build React:', e.message);
