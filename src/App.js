@@ -2712,6 +2712,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const todosProgramas = combinarProgramas(programasCustom);
   const [showModal, setShowModal] = useState(false);
   const [progSel, setProgSel] = useState("");
+  const [programaTrabajoId, setProgramaTrabajoId] = useState("");
   const [archivos, setArchivos] = useState([]);
   const [archivosRutas, setArchivosRutas] = useState({});
   const [archivosDatos, setArchivosDatos] = useState({});
@@ -2801,7 +2802,18 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
   const misSols = solicitudes.filter(s => s.personaId === personaId);
-  const tieneSolicitudCsp = misSols.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
+  useEffect(() => {
+    if (!misSols.length) {
+      setProgramaTrabajoId("");
+      return;
+    }
+    if (!misSols.some(s => (s.programaId || s.programa_id) === programaTrabajoId)) {
+      setProgramaTrabajoId(misSols[0].programaId || misSols[0].programa_id || "");
+    }
+  }, [personaId, misSols.length, programaTrabajoId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const programaSeleccionadoId = programaTrabajoId || misSols[0]?.programaId || misSols[0]?.programa_id || "";
+  const solsTrabajo = programaSeleccionadoId ? misSols.filter(s => (s.programaId || s.programa_id) === programaSeleccionadoId) : misSols;
+  const tieneSolicitudCsp = solsTrabajo.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
   const [lineaTiempoPersonaCsp, setLineaTiempoPersonaCsp] = useState(() => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
   const [guardandoLineaTiempoPersona, setGuardandoLineaTiempoPersona] = useState(false);
   useEffect(() => {
@@ -4148,6 +4160,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }))
     };
     onSaveSolicitudes([...solicitudes, nueva]);
+    setProgramaTrabajoId(nueva.programaId);
     setProgSel("");
     setShowModal(false);
   };
@@ -4308,6 +4321,39 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         </div>
       </div>
 
+      {misSols.length > 1 && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 20, border: "1px solid #dbeafe" }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Programa a revisar</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {misSols.map(sol => {
+              const prog = todosProgramas.find(p => p.id === (sol.programaId || sol.programa_id));
+              const activo = (sol.programaId || sol.programa_id) === programaSeleccionadoId;
+              const conteo = conteoDocumentosSolicitud(sol.documentos || [], sol.programaId || sol.programa_id);
+              return (
+                <button key={sol.id} type="button" onClick={() => setProgramaTrabajoId(sol.programaId || sol.programa_id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    border: "1.5px solid " + (activo ? (prog?.color || "#1e3a5f") : "#CBD5E1"),
+                    background: activo ? (prog?.colorLight || "#EFF6FF") : "#F8FAFC",
+                    color: activo ? (prog?.color || "#1e3a5f") : "#475569",
+                    borderRadius: 10,
+                    padding: "10px 13px",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}>
+                  <span>{prog?.icon || "P"}</span>
+                  <span>{prog?.nombre || sol.programaId}</span>
+                  <span style={{ fontSize: 11, opacity: .78 }}>{conteo.completos}/{conteo.total}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {tieneSolicitudCsp && (
         <div style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", marginBottom: 20, border: "1px solid #dbeafe" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
@@ -4402,11 +4448,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         </div>
 
         {showFormVisita && (() => {
-          const progId = misSols.find(s => s.programaId === "csp_urbano") ? "csp_urbano"
+          const progId = programaSeleccionadoId || (misSols.find(s => s.programaId === "csp_urbano") ? "csp_urbano"
             : misSols.find(s => s.programaId === "csp_rural") ? "csp_rural"
             : misSols.find(s => s.programaId === "habitabilidad") ? "habitabilidad"
             : persona.comiteId === "comite_desmarque" ? "habitabilidad"
-            : null;
+            : null);
           console.log("[Visitas] programaId detectado:", progId, "| misSols programas:", misSols.map(s => s.programaId));
           const progDocs = progId ? (DOCS_SOLICITUD[progId] || []) : [];
           const progLabel = progId === "csp_urbano" ? "Construcción Sitio Propio Urbano"
@@ -4897,7 +4943,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
       {misSols.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 40, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>No tiene programas asignados aun.</div>}
 
-      {misSols.map(sol => {
+      {solsTrabajo.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
         const p = pct(sol.documentos, sol.programaId);
         const conteoSol = conteoDocumentosSolicitud(sol.documentos, sol.programaId);
