@@ -221,7 +221,7 @@ const storageObjectPath = (carpeta = "", nombre = "") =>
     .map(safeStorageSegment)
     .join("/");
 const storagePublicUrl = (objectPath = "", bucket = STORAGE_BUCKET) =>
-  objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl : "";
+  objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(encodeRoutePath(objectPath)).data.publicUrl : "";
 const fileToDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(reader.result);
@@ -3401,7 +3401,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const abrirArchivo = (nombre) => {
     const archivoGuardado = archivosDatos[nombre];
-    const fileUrl = archivoGuardado?.dataUrl || apiPath("/files/", archivosRutas[nombre] || carpeta, nombre);
+    const respaldoUrl = archivoGuardado?.dataUrl || "";
+    const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
+    const fileUrl = String(respaldoUrl).startsWith("data:")
+      ? respaldoUrl
+      : apiPath("/files/", rutaLocal, nombre);
     if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:")) {
       const dataUrl = String(archivoGuardado.dataUrl);
       if (dataUrl.startsWith("data:text/html")) {
@@ -3425,7 +3429,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const imprimirArchivo = (nombre) => {
     const archivoGuardado = archivosDatos[nombre];
-    const fileUrl = archivoGuardado?.dataUrl || apiPath("/files/", archivosRutas[nombre] || carpeta, nombre);
+    const respaldoUrl = archivoGuardado?.dataUrl || "";
+    const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
+    const fileUrl = String(respaldoUrl).startsWith("data:")
+      ? respaldoUrl
+      : apiPath("/files/", rutaLocal, nombre);
     const abrirParaImprimir = (url) => {
       const iframe = document.createElement("iframe");
       iframe.style.position = "fixed";
