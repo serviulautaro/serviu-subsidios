@@ -8155,9 +8155,6 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   if (!comite) return null;
 
   const esComiteDesmarque = comiteId === "comite_desmarque" || comite.programaId === "habitabilidad" || /DESMARQUE/i.test(comite.nombre || "");
-  const esComiteCsp = ["csp_rural", "csp_urbano"].includes(comite.programaId || comite.programa_id) ||
-    ["RURAL", "URBANO"].includes(String(comite.tipo || "").toUpperCase()) ||
-    /^gr\d+[RU]$/i.test(String(comite.id || comite.codigo || comiteId || ""));
   const todosProgramas = combinarProgramas(programasCustom);
   const comitesDestino = [
     { id: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
@@ -8211,6 +8208,15 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       !st.desmarcado;
   };
   const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
+  const rutComparable = (v) => (v || "").toString().replace(/[^0-9kK]/g, "").toUpperCase();
+  const solicitudesMiembros = solicitudes.filter(s =>
+    miembros.some(p => p.id === s.personaId || rutComparable(p.rut) === rutComparable(s.personaRut || s.rut || ""))
+  );
+  const esComiteCsp = ["csp_rural", "csp_urbano"].includes(comite.programaId || comite.programa_id) ||
+    ["RURAL", "URBANO"].includes(String(comite.tipo || "").toUpperCase()) ||
+    /^gr\d+[RU]$/i.test(String(comite.id || comite.codigo || comiteId || "")) ||
+    /CONSTRUCCI[ÓO]N SITIO PROPIO|CSP/i.test(String(comite.nombre || "")) ||
+    solicitudesMiembros.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
   const noVisitadosDesmarque = miembros.filter(p => {
     const estado = estadoDesmarquePersona(p);
     const estadoGuardado = String(p.estado_desmarque || p.estadoDesmarque || "").toUpperCase();
