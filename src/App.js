@@ -2821,9 +2821,11 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const solsTrabajo = programaSeleccionadoId ? misSols.filter(s => (s.programaId || s.programa_id) === programaSeleccionadoId) : misSols;
   const tieneSolicitudCsp = solsTrabajo.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
   const [lineaTiempoPersonaCsp, setLineaTiempoPersonaCsp] = useState(() => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
+  const [editandoLineaTiempoPersona, setEditandoLineaTiempoPersona] = useState(false);
   const [guardandoLineaTiempoPersona, setGuardandoLineaTiempoPersona] = useState(false);
   useEffect(() => {
     setLineaTiempoPersonaCsp(normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
+    setEditandoLineaTiempoPersona(false);
   }, [personaId, persona?.lineaTiempoCsp, persona?.linea_tiempo_csp]);
   const esPrioritario = solicitantePrioritario(personaId, solicitudes);
   const VISITAS_DOC_KEY = "__registro_visitas_oficina__";
@@ -3161,7 +3163,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const guardarLineaTiempoPersonaCsp = async () => {
     if (!persona) return;
-    if (!window.confirm("¿Está seguro de guardar la línea de tiempo de este solicitante?")) return;
+    if (!window.confirm("¿Está seguro de guardar los cambios de la línea de tiempo de este solicitante?")) return;
     setGuardandoLineaTiempoPersona(true);
     try {
       await syncPersona({ lineaTiempoCsp: lineaTiempoPersonaCsp, linea_tiempo_csp: lineaTiempoPersonaCsp });
@@ -3174,7 +3176,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       alert("No se pudo guardar la línea de tiempo del solicitante. Revise la conexión e intente nuevamente.");
     } finally {
       setGuardandoLineaTiempoPersona(false);
+      setEditandoLineaTiempoPersona(false);
     }
+  };
+
+  const cancelarEdicionLineaTiempoPersona = () => {
+    setLineaTiempoPersonaCsp(normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
+    setEditandoLineaTiempoPersona(false);
   };
 
   useEffect(() => {
@@ -4365,17 +4373,33 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f" }}>Línea de tiempo CSP del solicitante</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Marca manualmente las etapas completadas para este solicitante.</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>{editandoLineaTiempoPersona ? "Modifique las etapas y luego guarde los cambios." : "Presione Modificar línea de tiempo para editar las etapas."}</div>
             </div>
-            <button onClick={guardarLineaTiempoPersonaCsp} disabled={guardandoLineaTiempoPersona}
-              style={{ background: guardandoLineaTiempoPersona ? "#94A3B8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
-              {guardandoLineaTiempoPersona ? "Guardando..." : "Guardar línea de tiempo"}
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {!editandoLineaTiempoPersona ? (
+                <button onClick={() => setEditandoLineaTiempoPersona(true)}
+                  style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
+                  Modificar línea de tiempo
+                </button>
+              ) : (
+                <>
+                  <button onClick={cancelarEdicionLineaTiempoPersona} disabled={guardandoLineaTiempoPersona}
+                    style={{ background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
+                    Cancelar
+                  </button>
+                  <button onClick={guardarLineaTiempoPersonaCsp} disabled={guardandoLineaTiempoPersona}
+                    style={{ background: guardandoLineaTiempoPersona ? "#94A3B8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
+                    {guardandoLineaTiempoPersona ? "Guardando..." : "Guardar línea de tiempo"}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {LINEA_TIEMPO_CSP.map((etapa, idx) => {
               const marcada = !!lineaTiempoPersonaCsp[etapa.id];
-              const bloqueada = lineaTiempoCspCortada(lineaTiempoPersonaCsp, idx);
+              const bloqueadaPorCorte = lineaTiempoCspCortada(lineaTiempoPersonaCsp, idx);
+              const bloqueada = !editandoLineaTiempoPersona || bloqueadaPorCorte;
               const decision = etapa.decision ? decisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
               const reunionesMarcadas = etapa.reuniones ? [1, 2, 3, 4, 5].filter(n => lineaTiempoPersonaCsp[`${etapa.id}_reunion_${n}`]).length : 0;
               return (
@@ -4428,7 +4452,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       <div style={{ gridColumn: "1 / -1", fontSize: 10, color: "#64748b", marginTop: 2 }}>{reunionesMarcadas}/5 VB</div>
                     </div>
                   )}
-                  {bloqueada && <div style={{ fontSize: 10, marginTop: 6, color: "#9CA3AF", fontWeight: 800 }}>Avance cortado por No califica</div>}
+                  {bloqueadaPorCorte && <div style={{ fontSize: 10, marginTop: 6, color: "#9CA3AF", fontWeight: 800 }}>Avance cortado por No califica</div>}
                 </div>
               );
             })}
