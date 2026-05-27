@@ -61,6 +61,9 @@ function main() {
   ok("No hay localStorage.clear", !contains(app, "localStorage.clear"));
   ok("No hay window.location.reload forzado", !contains(app, "window.location.reload"));
   ok("Update backend sin filtros bloqueado", contains(server, "Update sin filtros bloqueado"));
+  ok("Rutas de documentos quedan dentro de carpeta documentos", contains(server, "safeDocsPath"));
+  ok("Eliminar archivo local mueve a papelera interna", contains(server, "archivarArchivoLocal") && !contains(server, "unlinkSync"));
+  ok("Cliente API bloquea update/delete sin filtros", contains(read(path.join(root, "src", "supabaseClient.js")), "sin filtros bloqueado por seguridad"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);
   deleteCalls.forEach((call, index) => {

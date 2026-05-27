@@ -97,6 +97,10 @@ class ApiQuery {
         return { data: json.data || [], error: null };
       }
 
+      if ((this.action === "update" || this.action === "delete") && !this.filters.length) {
+        return { data: null, error: { message: `${this.action} sin filtros bloqueado por seguridad` } };
+      }
+
       const method = this.action === "update" ? "PATCH" : this.action === "delete" ? "DELETE" : "POST";
       const endpoint = this.action === "update" ? "update" : this.action === "delete" ? "delete" : this.action;
       const body = this.action === "update"

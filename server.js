@@ -477,10 +477,31 @@ function getWildcard(req) {
   return decodeURIComponent(req.params.path || req.params[0] || '');
 }
 
+function safeDocsPath(...parts) {
+  const target = path.resolve(docsDir, ...parts);
+  const root = path.resolve(docsDir);
+  if (target !== root && !target.startsWith(root + path.sep)) {
+    const err = new Error('Ruta fuera de documentos bloqueada.');
+    err.status = 400;
+    throw err;
+  }
+  return target;
+}
+
+function archivarArchivoLocal(filePath, carpetaRel, archivo) {
+  if (!fs.existsSync(filePath)) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const carpetaPapelera = safeDocsPath('_papelera_serviu', stamp, carpetaRel);
+  fs.mkdirSync(carpetaPapelera, { recursive: true });
+  const destino = path.join(carpetaPapelera, archivo);
+  fs.renameSync(filePath, destino);
+  return destino;
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const carpetaRel = getWildcard(req);
-    const carpeta = path.join(docsDir, carpetaRel);
+    const carpeta = safeDocsPath(carpetaRel);
     if (!fs.existsSync(carpeta)) fs.mkdirSync(carpeta, { recursive: true });
     cb(null, carpeta);
   },
@@ -493,7 +514,7 @@ const upload = multer({ storage });
 
 app.post('/carpeta/{*path}', (req, res) => {
   const carpetaRel = getWildcard(req);
-  const carpeta = path.join(docsDir, carpetaRel);
+  const carpeta = safeDocsPath(carpetaRel);
   if (!fs.existsSync(carpeta)) fs.mkdirSync(carpeta, { recursive: true });
   res.json({ ok: true });
 });
@@ -516,7 +537,7 @@ app.get('/archivos/{*path}', (req, res) => {
   } catch {}
   // Leer del filesystem (compatibilidad con archivos previos no registrados)
   let fsFiles = [];
-  const carpetaPath = path.join(docsDir, carpetaRel);
+  const carpetaPath = safeDocsPath(carpetaRel);
   if (fs.existsSync(carpetaPath)) {
     try {
       fsFiles = fs.readdirSync(carpetaPath).filter(item => {
@@ -541,8 +562,8 @@ app.delete('/archivos/{*path}', (req, res) => {
     if (lastSlash === -1) return res.status(400).json({ error: 'Ruta inválida' });
     const carpetaRel = fullRel.substring(0, lastSlash);
     const archivo = fullRel.substring(lastSlash + 1);
-    const filePath = path.join(docsDir, carpetaRel, archivo);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const filePath = safeDocsPath(carpetaRel, archivo);
+    archivarArchivoLocal(filePath, carpetaRel, archivo);
     try { db.prepare('DELETE FROM archivos WHERE carpeta = ? AND nombre = ?').run(carpetaRel, archivo); } catch {}
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -552,8 +573,8 @@ app.delete('/archivos/{*path}', (req, res) => {
 app.post('/renombrar-carpeta', (req, res) => {
   try {
     const { origen, destino } = req.body;
-    const carpetaOrigen = path.join(docsDir, origen);
-    const carpetaDestino = path.join(docsDir, destino);
+    const carpetaOrigen = safeDocsPath(origen);
+    const carpetaDestino = safeDocsPath(destino);
     if (fs.existsSync(carpetaOrigen) && origen !== destino) {
       if (!fs.existsSync(carpetaDestino)) fs.mkdirSync(carpetaDestino, { recursive: true });
       // Mover todos los archivos
@@ -647,9 +668,9 @@ function encabezadoHTML() {
 
 function guardarHtml(carpeta, nombreArchivo, html) {
   if (!carpeta) return;
-  const carpetaPath = path.join(docsDir, carpeta);
+  const carpetaPath = safeDocsPath(carpeta);
   if (!fs.existsSync(carpetaPath)) fs.mkdirSync(carpetaPath, { recursive: true });
-  fs.writeFileSync(path.join(carpetaPath, nombreArchivo), html, 'utf8');
+  fs.writeFileSync(safeDocsPath(carpeta, nombreArchivo), html, 'utf8');
 }
 
 // Guardar HTML generado en el frontend dentro de la carpeta del solicitante
@@ -658,9 +679,9 @@ app.post('/guardar-html/{*path}', (req, res) => {
     const carpetaRel = getWildcard(req);
     const { nombre, html } = req.body;
     if (!nombre || !html) return res.status(400).json({ error: 'Faltan campos' });
-    const carpetaPath = path.join(docsDir, carpetaRel);
+    const carpetaPath = safeDocsPath(carpetaRel);
     if (!fs.existsSync(carpetaPath)) fs.mkdirSync(carpetaPath, { recursive: true });
-    fs.writeFileSync(path.join(carpetaPath, nombre), html, 'utf8');
+    fs.writeFileSync(safeDocsPath(carpetaRel, nombre), html, 'utf8');
     try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run(`${carpetaRel}/${nombre}`, carpetaRel, nombre); } catch {}
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
