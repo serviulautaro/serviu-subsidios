@@ -602,6 +602,32 @@ const COMITES_BASE_DATOS = [
   { codigo: "gr2U", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", vencimiento: "-" },
 ];
 
+const LINEA_TIEMPO_CSP = [
+  { id: "postulacion", label: "POSTULACIÓN" },
+  { id: "calificacion", label: "Calificación" },
+  { id: "califica", label: "Califica" },
+  { id: "no_califica", label: "No Califica" },
+  { id: "ingreso_comite", label: "Ingreso Comité" },
+  { id: "revision_rukan", label: "Revisión RUKAN" },
+  { id: "observaciones_serviu", label: "Observaciones SERVIU" },
+  { id: "ingreso_proyecto_serviu", label: "Ingreso Proyecto SERVIU" },
+  { id: "inicio_actividades_serviu", label: "Inicio Actividades SERVIU" },
+  { id: "proceso_concurso_oferta", label: "Proceso Concurso Oferta" },
+  { id: "tramitacion_pj", label: "Tramitación P.J." },
+  { id: "entrega_documentos", label: "Entrega documentos" },
+  { id: "preparacion_proyecto_constructora", label: "Preparación Proyecto Constructora", detalle: "Área Técnica" },
+  { id: "pre_banco", label: "Pre Banco", detalle: "Reuniones Normativas - Área Social" },
+  { id: "inicia_consulta", label: "Inicia Consulta" },
+  { id: "ejecucion_proyecto", label: "Ejecución Proyecto" },
+  { id: "entrega_vivienda", label: "Entrega Vivienda" },
+];
+const normalizarLineaTiempoCsp = (valor = {}) => {
+  if (typeof valor === "string") {
+    try { valor = JSON.parse(valor); } catch { valor = {}; }
+  }
+  return valor && typeof valor === "object" && !Array.isArray(valor) ? valor : {};
+};
+
 // Normaliza nombre para comparación (sin tildes, minúsculas, sin caracteres especiales)
 function normNomDirectiva(s) {
   return (s||"").toLowerCase().trim()
@@ -8057,7 +8083,7 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
 }
 
 // ─── DETALLE COMITÉ ───────────────────────────────────────────────────────────
-function DetalleComite({ comiteId, comites, personas, solicitudes, programasCustom = [], onBack, onSavePersonas, onSaveSolicitudes, onDetail, currentUser, registrarAuditoria }) {
+function DetalleComite({ comiteId, comites, personas, solicitudes, programasCustom = [], onBack, onSaveComites, onSavePersonas, onSaveSolicitudes, onDetail, currentUser, registrarAuditoria }) {
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [tabDesmarque, setTabDesmarque] = useState("todos");
@@ -8082,9 +8108,17 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     c.codigo === comiteId ||
     normComiteComparar(c.nombre) === normComiteComparar(comiteId)
   ) || comitesBaseCompletos().find(c => c.id === comiteId || c.codigo === comiteId);
+  const [lineaTiempoCsp, setLineaTiempoCsp] = useState(() => normalizarLineaTiempoCsp(comite?.lineaTiempo || comite?.linea_tiempo));
+  const [guardandoLineaTiempo, setGuardandoLineaTiempo] = useState(false);
+  useEffect(() => {
+    setLineaTiempoCsp(normalizarLineaTiempoCsp(comite?.lineaTiempo || comite?.linea_tiempo));
+  }, [comite?.id, comite?.linea_tiempo, comite?.lineaTiempo]);
   if (!comite) return null;
 
   const esComiteDesmarque = comiteId === "comite_desmarque" || comite.programaId === "habitabilidad" || /DESMARQUE/i.test(comite.nombre || "");
+  const esComiteCsp = ["csp_rural", "csp_urbano"].includes(comite.programaId || comite.programa_id) ||
+    ["RURAL", "URBANO"].includes(String(comite.tipo || "").toUpperCase()) ||
+    /^gr\d+[RU]$/i.test(String(comite.id || comite.codigo || comiteId || ""));
   const todosProgramas = combinarProgramas(programasCustom);
   const comitesDestino = [
     { id: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
@@ -8410,6 +8444,37 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const sols = getSols(p.id);
     return sols.length > 0 && sols.every(s => pct(s.documentos, s.programaId) === 100);
   }).length;
+  const guardarLineaTiempoCsp = async () => {
+    if (!window.confirm("¿Está seguro de guardar la línea de tiempo de este comité?")) return;
+    setGuardandoLineaTiempo(true);
+    try {
+      const idComite = comite.id || comite.codigo || comiteId;
+      const payload = {
+        id: idComite,
+        nombre: comite.nombre,
+        descripcion: comite.descripcion || null,
+        programaId: comite.programaId || comite.programa_id || (String(comite.tipo || "").toUpperCase() === "URBANO" ? "csp_urbano" : "csp_rural"),
+        tipo: comite.tipo || ((comite.programaId || comite.programa_id) === "csp_urbano" ? "URBANO" : "RURAL"),
+        fechaCreacion: comite.fechaCreacion || comite.fecha_creacion || today(),
+        lineaTiempo: lineaTiempoCsp,
+        linea_tiempo: lineaTiempoCsp,
+      };
+      const existe = comites.some(c => (c.id || c.codigo) === idComite);
+      const actualizados = existe
+        ? comites.map(c => (c.id || c.codigo) === idComite ? { ...c, ...payload } : c)
+        : [...comites, payload];
+      await onSaveComites(actualizados);
+      await registrarAuditoria?.("guardar_linea_tiempo_csp", "comites", idComite, {
+        comite: comite.nombre,
+        marcadas: Object.entries(lineaTiempoCsp).filter(([, v]) => !!v).map(([k]) => k),
+      });
+    } catch (err) {
+      console.warn("[linea tiempo csp]", err?.message || err);
+      alert("No se pudo guardar la línea de tiempo. Revise la conexión e intente nuevamente.");
+    } finally {
+      setGuardandoLineaTiempo(false);
+    }
+  };
 
   return (
     <div>
@@ -8431,6 +8496,47 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           </div>
         </div>
       </div>
+
+      {esComiteCsp && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", marginBottom: 20, border: "1px solid #dbeafe" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f" }}>Línea de tiempo CSP</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Marca manualmente las etapas completadas para pintar el avance del comité.</div>
+            </div>
+            <button onClick={guardarLineaTiempoCsp} disabled={guardandoLineaTiempo}
+              style={{ background: guardandoLineaTiempo ? "#94A3B8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempo ? "not-allowed" : "pointer" }}>
+              {guardandoLineaTiempo ? "Guardando..." : "Guardar línea de tiempo"}
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {LINEA_TIEMPO_CSP.map((etapa, idx) => {
+              const marcada = !!lineaTiempoCsp[etapa.id];
+              return (
+                <button key={etapa.id} type="button"
+                  onClick={() => setLineaTiempoCsp(prev => ({ ...prev, [etapa.id]: !prev[etapa.id] }))}
+                  title={etapa.detalle || etapa.label}
+                  style={{
+                    minWidth: 155,
+                    flex: "1 1 155px",
+                    textAlign: "left",
+                    border: "1.5px solid " + (marcada ? "#10B981" : "#CBD5E1"),
+                    background: marcada ? "#ECFDF5" : "#F8FAFC",
+                    color: marcada ? "#047857" : "#475569",
+                    borderRadius: 9,
+                    padding: "9px 10px",
+                    cursor: "pointer",
+                    boxShadow: marcada ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
+                  }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, opacity: .75 }}>ETAPA {idx + 1}</div>
+                  <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "✓ " : ""}{etapa.label}</div>
+                  {etapa.detalle && <div style={{ fontSize: 10, marginTop: 3, opacity: .82 }}>{etapa.detalle}</div>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Lista de integrantes */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -9704,6 +9810,7 @@ export default function App() {
       ...x,
       programaId: x.programa_id,
       fechaCreacion: x.fecha_creacion,
+      lineaTiempo: normalizarLineaTiempoCsp(x.linea_tiempo),
     })));
     setPersonas((p || []).map(mapearPersonaDb));
     setDatosBaseListos(true);
@@ -10022,7 +10129,9 @@ export default function App() {
       for (const c of lista) {
         const { error } = await supabase.from("comites").upsert({
           id: c.id, nombre: c.nombre, descripcion: c.descripcion || null,
-          programa_id: c.programaId || null, fecha_creacion: c.fechaCreacion
+          programa_id: c.programaId || null, fecha_creacion: c.fechaCreacion,
+          tipo: c.tipo || null,
+          linea_tiempo: normalizarLineaTiempoCsp(c.lineaTiempo || c.linea_tiempo)
         });
         if (error) throw error;
       }
@@ -10227,7 +10336,7 @@ export default function App() {
         {datosBaseListos && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onNav={nav} />}
         {datosBaseListos && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
         {datosBaseListos && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
-        {datosBaseListos && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {datosBaseListos && view === "detalleComite" && <DetalleComite comiteId={comiteDetailId} comites={comites} personas={personas} solicitudes={solicitudes} programasCustom={programasCustom} onBack={() => nav("comites")} onSaveComites={saveComites} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
         {datosBaseListos && view === "programas" && <ProgramasView solicitudes={solicitudes} programasCustom={programasCustom} onAddPrograma={async (prog) => {
           const { data, error } = await supabase.from("programas_custom").insert([{
             id: uid(), nombre: prog.nombre, descripcion: prog.descripcion,

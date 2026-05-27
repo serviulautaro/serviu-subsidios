@@ -69,6 +69,20 @@ const validarAdmin = (key) => {
     throw err;
   }
 };
+let schemaRuntimePromise = null;
+async function ensureRuntimeSchema() {
+  if (!pgPool) return;
+  if (!schemaRuntimePromise) {
+    schemaRuntimePromise = requirePg().query(`
+      ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "tipo" text;
+      ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "linea_tiempo" jsonb DEFAULT '{}'::jsonb;
+    `).catch(err => {
+      schemaRuntimePromise = null;
+      throw err;
+    });
+  }
+  await schemaRuntimePromise;
+}
 const columnasSelect = (select = '*') => {
   const limpio = String(select || '*').trim();
   if (!limpio || limpio === '*') return '*';
@@ -132,6 +146,7 @@ const aligerarSolicitudListado = (sol = {}) => ({
 
 async function pgSelect(table, query = {}) {
   validarTabla(table);
+  if (table === 'comites') await ensureRuntimeSchema();
   const values = [];
   let sql = `SELECT ${columnasSelect(query.select)} FROM ${quoteIdent(table)}`;
   sql += whereSql(filtrosDesdeQuery(query), values);
@@ -142,6 +157,7 @@ async function pgSelect(table, query = {}) {
 
 async function pgInsert(table, rows = [], { upsert = false } = {}) {
   validarTabla(table);
+  if (table === 'comites') await ensureRuntimeSchema();
   const lista = Array.isArray(rows) ? rows : [rows];
   if (!lista.length) return [];
   const keys = [...new Set(lista.flatMap(row => Object.keys(row || {})))];
@@ -165,6 +181,7 @@ async function pgInsert(table, rows = [], { upsert = false } = {}) {
 
 async function pgUpdate(table, filtros = [], valuesObj = {}) {
   validarTabla(table);
+  if (table === 'comites') await ensureRuntimeSchema();
   if (!filtros.length) throw new Error('Update sin filtros bloqueado.');
   const keys = Object.keys(valuesObj || {});
   if (!keys.length) return [];

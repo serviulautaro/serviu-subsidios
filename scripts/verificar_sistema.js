@@ -65,6 +65,8 @@ function main() {
   ok("Eliminar archivo local mueve a papelera interna", contains(server, "archivarArchivoLocal") && !contains(server, "unlinkSync"));
   ok("Cliente API bloquea update/delete sin filtros", contains(read(path.join(root, "src", "supabaseClient.js")), "sin filtros bloqueado por seguridad"));
   ok("Comités por constituir se reconocen por alias", contains(app, "codigoComitePorConstituir") && contains(app, "falta constituir"));
+  ok("Linea de tiempo CSP requiere confirmacion", contains(app, "¿Está seguro de guardar la línea de tiempo"));
+  ok("Linea de tiempo CSP se guarda en comites", contains(app, "linea_tiempo") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo\""));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);
   deleteCalls.forEach((call, index) => {
