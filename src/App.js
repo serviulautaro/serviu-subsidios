@@ -3444,13 +3444,24 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const respaldoUrl = archivoGuardado?.dataUrl || "";
     const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
     if (String(respaldoUrl).startsWith("data:")) return respaldoUrl;
+    const urlSirveDocumento = async (url) => {
+      if (!url) return false;
+      try {
+        let res = await fetch(url, { method: "HEAD", cache: "no-store" });
+        let contentType = res.headers.get("content-type") || "";
+        if (res.ok && !contentType.includes("text/html") && !contentType.includes("application/json")) return true;
+        if (res.status === 405 || !res.ok) {
+          res = await fetch(url, { method: "GET", cache: "no-store", headers: { Range: "bytes=0-0" } });
+          contentType = res.headers.get("content-type") || "";
+          return res.ok && !contentType.includes("text/html") && !contentType.includes("application/json");
+        }
+      } catch {}
+      return false;
+    };
     const localUrl = apiPath("/files/", rutaLocal, nombre);
-    try {
-      const res = await fetch(localUrl, { method: "HEAD", cache: "no-store" });
-      const contentType = res.headers.get("content-type") || "";
-      if (res.ok && !contentType.includes("text/html")) return localUrl;
-    } catch {}
-    return respaldoUrl || "";
+    if (await urlSirveDocumento(localUrl)) return localUrl;
+    if (await urlSirveDocumento(respaldoUrl)) return respaldoUrl;
+    return "";
   };
 
   const abrirArchivo = async (nombre) => {
