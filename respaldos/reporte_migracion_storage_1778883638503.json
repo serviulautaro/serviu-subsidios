@@ -1,0 +1,138 @@
+{
+  "fecha": "2026-05-15T22:20:38.500Z",
+  "total": 252,
+  "subidos": 220,
+  "registrados": 182,
+  "sinPersona": 38,
+  "errores": 32,
+  "detalleErrores": [
+    {
+      "archivo": "CHEUQUE_ZAVARIA_JOSE_DOMINGO_48387780/RUT.pdf",
+      "error": "Gateway Timeout"
+    },
+    {
+      "archivo": "CSP_Rural/comite_3/9853258-7/Boleta Electrónica Frontel – N° 59390600, Cliente Previsto Segura H., Dirección Dollinco Alto, Lautaro.pdf",
+      "error": "Invalid key: CSP_Rural/comite_3/9853258-7/Boleta Electrónica Frontel – N° 59390600, Cliente Previsto Segura H., Dirección Dollinco Alto, Lautaro.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_3/9853258-7/Certificado de Ruralidad N° 1532025 – Municipalidad de Lautaro, Dollinco Hijuela 5, Rol 302-16, a solicitud de Dominga Cheuquel Cheuquellan.pdf",
+      "error": "Invalid key: CSP_Rural/comite_3/9853258-7/Certificado de Ruralidad N° 1532025 – Municipalidad de Lautaro, Dollinco Hijuela 5, Rol 302-16, a solicitud de Dominga Cheuquel Cheuquellan.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_3/9853258-7/ertificado de Avalúo Fiscal Detallado – SII, Rol 00302-00016, Comuna Lautaro (Dollinco Hijuela 5).pdf",
+      "error": "Invalid key: CSP_Rural/comite_3/9853258-7/ertificado de Avalúo Fiscal Detallado – SII, Rol 00302-00016, Comuna Lautaro (Dollinco Hijuela 5).pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_5/11187743-2/APR Zuñiga Lican.pdf",
+      "error": "Invalid key: CSP_Rural/comite_5/11187743-2/APR Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_5/11187743-2/Avaluo Zuñiga Lican.pdf",
+      "error": "Invalid key: CSP_Rural/comite_5/11187743-2/Avaluo Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_5/11187743-2/Cert Ruralidad Zuñiga Lican.pdf",
+      "error": "Invalid key: CSP_Rural/comite_5/11187743-2/Cert Ruralidad Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_5/11187743-2/codiner Zuñiga Lican.pdf",
+      "error": "Invalid key: CSP_Rural/comite_5/11187743-2/codiner Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_5/11187743-2/Cta Ahorro Zuñiga Lican.pdf",
+      "error": "Invalid key: CSP_Rural/comite_5/11187743-2/Cta Ahorro Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/comite_5/11187743-2/Discapacidad Zuñiga Lican.pdf",
+      "error": "Invalid key: CSP_Rural/comite_5/11187743-2/Discapacidad Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "CSP_Rural/mot2lh6hdyx2slh2l4p/14725326-2/codiner Zuñiga Lican.pdf",
+      "error": "Invalid key: CSP_Rural/mot2lh6hdyx2slh2l4p/14725326-2/codiner Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/11187743-2/Avaluo Zuñiga Lican.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/11187743-2/Avaluo Zuñiga Lican.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/11187743-2/INFORME DOM N° 13.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/11187743-2/INFORME DOM N° 13.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12083836-9/COMPR MEMO N° 24.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/12083836-9/COMPR MEMO N° 24.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12307326-6/CARTA_22_JUAN.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12307326-6/CARTA_23_JUAN.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12307326-6/INFORME_JACC_JUAN_2026-05-13.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12307326-6/MEMO_21_JUAN.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12307326-6/MEMO_222_JUAN.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12307326-6/MEMO_22_JUAN.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12307326-6/MEMO_DDD_JUAN.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12927100-0/MEMO N°21.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/12927100-0/MEMO N°21.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/12927101-9/MEMO N° 20.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/12927101-9/MEMO N° 20.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/13314921-K/INF DOM N° 28.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/13314921-K/INF DOM N° 28.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/13514736-2/CARTA_36_BERTA.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/13514736-2/SOLICITUD_BERTA_2026-05-07.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/7402108-5/COMPR MEMO N°19.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/7402108-5/COMPR MEMO N°19.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/7484212-7/COMPR MEMO N° 22.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/7484212-7/COMPR MEMO N° 22.pdf"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/8424680-8/CARTA_22_MARIA.html",
+      "error": "mime type text/html; charset=utf-8 is not supported"
+    },
+    {
+      "archivo": "Desmarque/comite_desmarque/8640609-8/COMPR MEMO N° 23.pdf",
+      "error": "Invalid key: Desmarque/comite_desmarque/8640609-8/COMPR MEMO N° 23.pdf"
+    },
+    {
+      "archivo": "PICHUN_MILLALEN_JUANA_EMELINA_86406098/Copia de Inscripción de Propiedad - Parcela N°20 Unión Campesina Lautaro CBR Fojas 62 N°56 Año 1984.pdf",
+      "error": "Invalid key: PICHUN_MILLALEN_JUANA_EMELINA_86406098/Copia de Inscripción de Propiedad - Parcela N°20 Unión Campesina Lautaro CBR Fojas 62 N°56 Año 1984.pdf"
+    },
+    {
+      "archivo": "PRISCILLA_CURIN_CASTRO_16185087K/CERTIFICADO COMITÉ POTABLE RURAL.pdf",
+      "error": "Invalid key: PRISCILLA_CURIN_CASTRO_16185087K/CERTIFICADO COMITÉ POTABLE RURAL.pdf"
+    }
+  ]
+}

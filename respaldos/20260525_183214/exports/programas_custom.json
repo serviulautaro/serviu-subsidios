@@ -1,0 +1,64 @@
+[
+  {
+    "id": "mp4oal13gw2vpt4eyb",
+    "nombre": "SUBSIDIO DE ARRIENDO REGULAR",
+    "descripcion": "SUBSIDIO TOTAL 170 U.F, SE PUEDE POSTULAR SIMULTANEO",
+    "color": "#B45309",
+    "colorlight": "#FEF9C3",
+    "icon": "A",
+    "documentos": [
+      {
+        "nombre": "CEDULA DE IDENTIDAD",
+        "obligatorio": true,
+        "etiquetaTexto": "",
+        "requiereTexto": false,
+        "requiereArchivo": true
+      },
+      {
+        "nombre": "AHORRO DE LA VIVIENDA (4U.F)",
+        "obligatorio": true,
+        "etiquetaTexto": "",
+        "requiereTexto": false,
+        "requiereArchivo": true
+      },
+      {
+        "nombre": "RSH MENOR O IGUAL AL 70%",
+        "obligatorio": true,
+        "etiquetaTexto": "",
+        "requiereTexto": false,
+        "requiereArchivo": false
+      },
+      {
+        "nombre": "INGRESO FAMILIAR MAYOR A 7 U.F Y MENOR A 25 U.F.",
+        "obligatorio": true,
+        "etiquetaTexto": "",
+        "requiereTexto": false,
+        "requiereArchivo": false
+      }
+    ]
+  },
+  {
+    "id": "mp5ozvhmb19clbsa4a7",
+    "nombre": "Programa de Prueba",
+    "descripcion": "",
+    "color": "#7C3AED",
+    "colorlight": "#F5F3FF",
+    "icon": "P",
+    "documentos": [
+      {
+        "nombre": "Cédula de Identidad",
+        "obligatorio": true,
+        "etiquetaTexto": "",
+        "requiereTexto": false,
+        "requiereArchivo": true
+      },
+      {
+        "nombre": "Ahorro de la Vivienda",
+        "obligatorio": true,
+        "etiquetaTexto": "",
+        "requiereTexto": false,
+        "requiereArchivo": true
+      }
+    ]
+  }
+]

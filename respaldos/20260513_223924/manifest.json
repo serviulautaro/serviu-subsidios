@@ -1,0 +1,11 @@
+{
+  "fecha": "2026-05-14T02:40:28.277Z",
+  "tablas": {
+    "personas": 568,
+    "solicitudes": 509,
+    "comites": 12,
+    "archivos_solicitante": 50,
+    "programas_custom": 1
+  },
+  "nota": "Respaldo exportado desde Supabase con clave publica configurada en la app."
+}

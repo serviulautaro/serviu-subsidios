@@ -1,0 +1,114 @@
+[
+  {
+    "id": "mp964ikgfkvylqu1k7",
+    "nombre": "comite mave prueba",
+    "descripcion": null,
+    "programa_id": "mave_rural",
+    "fecha_creacion": "16-05-2026"
+  },
+  {
+    "id": "mpb9l65iytqm9u007s",
+    "nombre": "MAVE 2026",
+    "descripcion": "Se entrega informacion a Empresa Constructora Rukatem",
+    "programa_id": "mave_rural",
+    "fecha_creacion": "18-05-2026"
+  },
+  {
+    "id": "mpbfo0xzflp9hd1zi1v",
+    "nombre": "TERMICO 3 2026",
+    "descripcion": null,
+    "programa_id": "mejoramiento_termico",
+    "fecha_creacion": "18-05-2026"
+  },
+  {
+    "id": "mp5p40xdx71ku4vajji",
+    "nombre": "Comite de Prueba Priscilla",
+    "descripcion": null,
+    "programa_id": "mp5ozvhmb19clbsa4a7",
+    "fecha_creacion": "14-05-2026"
+  },
+  {
+    "id": "comite_0",
+    "nombre": "COMITE DE VIVIENDA RURAL MI NUEVO HOGAR",
+    "descripcion": null,
+    "programa_id": "csp_rural",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_1",
+    "nombre": "COMITE DE VIVIENDA RURAL LA FUERZA",
+    "descripcion": null,
+    "programa_id": "csp_rural",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_2",
+    "nombre": "COMITE DE VIVIENDA RURAL KUME RUKA",
+    "descripcion": null,
+    "programa_id": "csp_rural",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_3",
+    "nombre": "COMITE DE VIVIENDA RURAL NEWEN MAPU",
+    "descripcion": null,
+    "programa_id": "csp_rural",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_4",
+    "nombre": "COMITE DE VIVIENDA RURAL KIMEY RUCA",
+    "descripcion": null,
+    "programa_id": "csp_rural",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_5",
+    "nombre": "COMITE DE VIVIENDA RURAL FALTA CONSTITUIRLO",
+    "descripcion": null,
+    "programa_id": "csp_rural",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_6",
+    "nombre": "COMITE DE VIVIENDA URBANO PIONEROS DE LAUTARO",
+    "descripcion": null,
+    "programa_id": "csp_urbano",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_7",
+    "nombre": "COMITE DE VIVIENDA URBANO FALTA CONSTITUIRLO",
+    "descripcion": null,
+    "programa_id": "csp_urbano",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "comite_desmarque",
+    "nombre": "DESMARQUE DE VIVIENDA",
+    "descripcion": "Programa de desmarque de vivienda",
+    "programa_id": "habitabilidad",
+    "fecha_creacion": "01-05-2026"
+  },
+  {
+    "id": "mos20to5pyx2r9ci0s9",
+    "nombre": "COMITE PRUEBA URBANO",
+    "descripcion": "PRUEBA",
+    "programa_id": "csp_urbano",
+    "fecha_creacion": "04-05-2026"
+  },
+  {
+    "id": "mot2lh6hdyx2slh2l4p",
+    "nombre": "COMITE DE VIVIENDA RURAL PRUEBA",
+    "descripcion": "PRUEBA",
+    "programa_id": "csp_rural",
+    "fecha_creacion": "05-05-2026"
+  },
+  {
+    "id": "mp4sg9dwg4xwaox95xa",
+    "nombre": "ARRIENDO REGULAR 2026",
+    "descripcion": "SOLO ARRIENDO REGULAR",
+    "programa_id": "mp4oal13gw2vpt4eyb",
+    "fecha_creacion": "13-05-2026"
+  }
+]

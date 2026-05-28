@@ -1,0 +1,14 @@
+{
+  "fecha": "2026-05-15T22:33:28.698Z",
+  "total": 252,
+  "subidos": 251,
+  "registrados": 213,
+  "sinPersona": 38,
+  "errores": 1,
+  "detalleErrores": [
+    {
+      "archivo": "TRAIPE_HUENCHUAL_JORGE_ALEJANDRO_84356891/rut a colores.pdf",
+      "error": "Gateway Timeout"
+    }
+  ]
+}

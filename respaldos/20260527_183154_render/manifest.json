@@ -1,0 +1,13 @@
+{
+  "generado": "2026-05-27T22:31:55.546Z",
+  "fuente": "render_postgres",
+  "tablas": {
+    "comites": 16,
+    "personas": 576,
+    "solicitudes": 516,
+    "programas_custom": 2,
+    "archivos_solicitante": 658,
+    "app_users": 6,
+    "audit_log": 0
+  }
+}

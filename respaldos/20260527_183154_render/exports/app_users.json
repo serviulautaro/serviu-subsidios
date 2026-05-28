@@ -1,0 +1,74 @@
+[
+  {
+    "id": "22a5e7d3-591b-4517-a7aa-40f8726cafd0",
+    "nombre": "Marcelo Cifuentes Vasquez",
+    "username": "marcelo.cifuentes",
+    "password_salt": "febf9044e1b22a7a9e93d33bbdff9213",
+    "password_hash": "4c3b9ed937cebebb3cb1326eb88642a871080bec5ac32270036ce698e39c3b9a",
+    "rol": "usuario",
+    "activo": true,
+    "debe_cambiar_clave": true,
+    "creado": "2026-05-27T00:30:44.157Z",
+    "actualizado": "2026-05-27T00:30:44.157Z"
+  },
+  {
+    "id": "9e9e728c-0e5e-499c-91da-1e51f7ec2ca9",
+    "nombre": "Jacqueline Ortega",
+    "username": "jacqueline.ortega",
+    "password_salt": "12e5262ce35efec1c8833b6c2adfbaf3",
+    "password_hash": "ac7e6fb5554aeccc8e2c26332864ad74269d47609d123837026895bca5625efc",
+    "rol": "usuario",
+    "activo": true,
+    "debe_cambiar_clave": true,
+    "creado": "2026-05-27T00:30:44.157Z",
+    "actualizado": "2026-05-27T00:30:44.157Z"
+  },
+  {
+    "id": "b1c384f0-ac77-4d39-89a4-68728a4ac179",
+    "nombre": "Priscilla Curin Castro",
+    "username": "priscilla.curin",
+    "password_salt": "8141d3cd3471b079a9356db45cda196a",
+    "password_hash": "fb9c8e2d6e6127ef9d428d2ffb2a67998f1498c88513ad3c32cd6f9782ed9763",
+    "rol": "usuario",
+    "activo": true,
+    "debe_cambiar_clave": true,
+    "creado": "2026-05-27T00:30:44.157Z",
+    "actualizado": "2026-05-27T00:30:44.157Z"
+  },
+  {
+    "id": "1fcafed5-234d-4d89-b2f3-7a7a88831b6b",
+    "nombre": "Jonathan Rodriguez",
+    "username": "jonathan.rodriguez",
+    "password_salt": "a5e80f9eb67aae411e591f6ca4e5abf5",
+    "password_hash": "560064cea80a12810187d6c37cf05ba723026b1cdfea448480896561fe931e8e",
+    "rol": "usuario",
+    "activo": true,
+    "debe_cambiar_clave": true,
+    "creado": "2026-05-27T00:30:44.157Z",
+    "actualizado": "2026-05-27T00:30:44.157Z"
+  },
+  {
+    "id": "17a61342-da62-45bf-a026-42e0e0eedfc0",
+    "nombre": "Onoria Retamal",
+    "username": "onoria.retamal",
+    "password_salt": "c3595cb9d59c1367d445172829083089",
+    "password_hash": "2b01d259512fc3e25b36959f45dcfa4a5d042b71856172d44ad15cf6ce1414a7",
+    "rol": "usuario",
+    "activo": true,
+    "debe_cambiar_clave": true,
+    "creado": "2026-05-27T00:30:44.157Z",
+    "actualizado": "2026-05-27T00:30:44.157Z"
+  },
+  {
+    "id": "35c5eda2-3d97-47e8-9d35-b4d126dcf3db",
+    "nombre": "Jorge Campos Campos",
+    "username": "jorge.campos",
+    "password_salt": "f623de85221a4e472c06f2078404615f",
+    "password_hash": "b0847c0d4574aebd479d1f601c8d5699a3447c19c89ab4517ddf4be945581118",
+    "rol": "admin",
+    "activo": true,
+    "debe_cambiar_clave": true,
+    "creado": "2026-05-27T00:30:44.157Z",
+    "actualizado": "2026-05-27T00:30:44.157Z"
+  }
+]

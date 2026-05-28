@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx react-scripts *)",
+      "Bash(powershell -Command \"Select-String -Path src/App.js -Pattern 'supabase\\\\.from.*personas.*update' | head -20\")",
+      "Bash(npm start *)",
+      "Bash(node -e ' *)",
+      "PowerShell(Get-Process *)",
+      "Bash(node server.js)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/express/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/path-to-regexp/package.json'\\).version\\)\")",
+      "Bash(node --check server.js)",
+      "Bash(curl -s http://localhost:3001/archivos/test)",
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Get-Content \"C:\\\\Users\\\\JORGE\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-JORGE-Desktop-serviu-subsidios\\\\a4d01ae1-d683-4c00-bd8b-c0aa0c02682b\\\\tasks\\\\bskrwsb7m.output\" -ErrorAction SilentlyContinue)",
+      "Bash(Start-Sleep -Seconds 20)",
+      "Bash(Get-Content \"C:\\\\Users\\\\JORGE\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-JORGE-Desktop-serviu-subsidios\\\\a4d01ae1-d683-4c00-bd8b-c0aa0c02682b\\\\tasks\\\\bvv0pdf82.output\" -Tail 15)",
+      "Bash(node -e \"require\\('./server.js'\\)\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\JORGE\\\\Desktop\\\\serviu-subsidios\" -Recurse -Include \"server.js\", \"App.js\")",
+      "Bash(Select-Object FullName)",
+      "Bash(powershell *)",
+      "Bash(node -e \"require\\('jszip'\\); console.log\\('jszip OK'\\)\")"
+    ]
+  }
+}
