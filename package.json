@@ -30,6 +30,7 @@
     "verificar": "node scripts/verificar_sistema.js",
     "recuperar:documentos": "node scripts/recuperar_delta_supabase_render.js",
     "backup:render": "node scripts/backup_render.js",
+    "backup:documentos:local": "node scripts/backup_documentos_local.js",
     "restaurar:documentos:respaldo": "node scripts/restaurar_documentos_respaldo_render.js",
     "migrar:documentos": "node scripts/migrar_documentos_storage.js",
     "test": "react-scripts test",

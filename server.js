@@ -156,6 +156,20 @@ async function pgSelect(table, query = {}) {
   return rows;
 }
 
+async function pgSelectSolicitudesListado() {
+  const columnas = SOLICITUDES_SELECT_BASE.split(',').map(c => c.trim()).filter(Boolean);
+  const sql = `
+    SELECT ${columnas.map(quoteIdent).join(', ')},
+      COALESCE((
+        SELECT jsonb_agg(doc - 'archivoData' - 'data' - 'base64' - 'contenido' - 'buffer')
+        FROM jsonb_array_elements(COALESCE("documentos", '[]'::jsonb)) AS doc
+      ), '[]'::jsonb) AS documentos
+    FROM "solicitudes"
+  `;
+  const { rows } = await requirePg().query(sql);
+  return rows;
+}
+
 async function pgInsert(table, rows = [], { upsert = false } = {}) {
   validarTabla(table);
   if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
@@ -212,8 +226,7 @@ async function pgDelete(table, filtros = []) {
 
 async function cargarSolicitudesServidor() {
   if (pgPool) {
-    const rows = await pgSelect('solicitudes', { select: SOLICITUDES_SELECT_LISTADO });
-    return rows.map(aligerarSolicitudListado);
+    return pgSelectSolicitudesListado();
   }
   const pageSize = 100;
   const todas = [];

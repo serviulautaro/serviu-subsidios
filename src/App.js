@@ -2713,7 +2713,7 @@ function FichaProgramaCustom({ persona, programa, solicitud }) {
   );
 }
 
-function DetallePersona({ personaId, personas, solicitudes, comites, programasCustom, onBack, onSaveSolicitudes, onSavePersonas, currentUser, registrarAuditoria }) {
+function DetallePersona({ personaId, personas, solicitudes, comites, programasCustom, onBack, onSaveSolicitudes, onSavePersonas, onCargarSolicitudesPersona, currentUser, registrarAuditoria }) {
   const todosProgramas = combinarProgramas(programasCustom);
   const [showModal, setShowModal] = useState(false);
   const [progSel, setProgSel] = useState("");
@@ -2834,6 +2834,12 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   }, [personaId, persona?.lineaTiempoCsp, persona?.linea_tiempo_csp]);
   const esPrioritario = solicitantePrioritario(personaId, solicitudes);
   const VISITAS_DOC_KEY = "__registro_visitas_oficina__";
+
+  useEffect(() => {
+    if (!personaId || !onCargarSolicitudesPersona) return;
+    const incompletas = misSols.length === 0 || misSols.some(s => s.documentosCargados !== true);
+    if (incompletas) onCargarSolicitudesPersona(personaId);
+  }, [personaId, firmaArchivosSolicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visitasDesdeSolicitudes = () => {
     const visitasRecuperadas = [];
@@ -8306,6 +8312,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const [personaCondicional, setPersonaCondicional] = useState(null);
   const [notaCondicional, setNotaCondicional] = useState("");
   const [guardandoCondicional, setGuardandoCondicional] = useState(false);
+  const [solicitudesCompletasComite, setSolicitudesCompletasComite] = useState({});
+  const [cargandoDocsComite, setCargandoDocsComite] = useState(false);
   const EMPTY = { nombre: "", rut: "", fechaNacimiento: "", telefono: "", email: "", direccion: "", comuna: "", integrantesFamiliares: "", puntajeRSH: "", comiteId };
   const [form, setForm] = useState(EMPTY);
 
@@ -8336,7 +8344,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     return personaPerteneceAComite(p, { ...comite, id: comite.id || comiteId }, solicitudes);
   };
   const normFiltro = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  const solicitudHabitabilidadPersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
+  const solicitudesVista = solicitudes.map(s => solicitudesCompletasComite[s.id] ? { ...s, ...solicitudesCompletasComite[s.id] } : s);
+  const solicitudHabitabilidadPersona = (personaId) => solicitudesVista.find(s => (s.personaId || s.persona_id) === personaId && (s.programaId || s.programa_id) === "habitabilidad");
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudHabitabilidadPersona(p.id);
     return estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
@@ -8370,6 +8379,51 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       !st.desmarcado;
   };
   const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
+  // El comité ya fue validado arriba; este efecto completa documentos livianos del listado.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    let cancelado = false;
+    const cargarDocumentosComite = async () => {
+      const idsPersona = miembros.map(p => p.id).filter(Boolean);
+      if (!idsPersona.length) return;
+      const pendientes = solicitudes
+        .filter(s => idsPersona.includes(s.personaId || s.persona_id) && s.documentosCargados !== true && !solicitudesCompletasComite[s.id])
+        .slice(0, 80);
+      if (!pendientes.length) return;
+      setCargandoDocsComite(true);
+      const nuevas = {};
+      for (const sol of pendientes) {
+        if (cancelado) return;
+        try {
+          const params = new URLSearchParams({ select: "*", [`eq[id]`]: sol.id });
+          const res = await fetch(`${API}/api/db/solicitudes?${params.toString()}`, { cache: "no-store" });
+          const json = await res.json().catch(() => ({}));
+          const completa = res.ok && json.ok !== false ? json.data?.[0] : null;
+          if (completa) {
+            nuevas[sol.id] = {
+              ...completa,
+              personaId: completa.persona_id,
+              personaNombre: completa.persona_nombre,
+              programaId: completa.programa_id,
+              codigoComite: completa.codigo_comite,
+              tipoComite: completa.tipo_comite,
+              profesionalComite: completa.profesional_comite,
+              documentos: Array.isArray(completa.documentos) ? completa.documentos : [],
+              documentosCargados: true,
+            };
+          }
+        } catch (err) {
+          console.warn("[detalle comité] No se pudo completar documentos:", sol.id, err?.message || err);
+        }
+      }
+      if (!cancelado && Object.keys(nuevas).length) {
+        setSolicitudesCompletasComite(prev => ({ ...prev, ...nuevas }));
+      }
+      if (!cancelado) setCargandoDocsComite(false);
+    };
+    cargarDocumentosComite();
+    return () => { cancelado = true; };
+  }, [comiteId, miembros.map(p => p.id).join("|"), solicitudes.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const noVisitadosDesmarque = miembros.filter(p => {
     const estado = estadoDesmarquePersona(p);
     const estadoGuardado = String(p.estado_desmarque || p.estadoDesmarque || "").toUpperCase();
@@ -8477,7 +8531,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     setTimeout(() => win.print(), 300);
   };
 
-  const getSols = (id) => solicitudes.filter(s => s.personaId === id);
+  const getSols = (id) => solicitudesVista.filter(s => (s.personaId || s.persona_id) === id);
   const getDocPct = (id) => {
     const sols = getSols(id);
     if (!sols.length) return null;
@@ -8705,7 +8759,10 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
 
       {/* Lista de integrantes */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#1e3a5f" }}>Integrantes del comité</div>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: "#1e3a5f" }}>Integrantes del comité</div>
+          {cargandoDocsComite && <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Cargando documentos completos del comité...</div>}
+        </div>
         <button onClick={abrirNuevoIntegranteConClave} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo integrante</button>
       </div>
 
@@ -10548,7 +10605,7 @@ export default function App() {
           await registrarAuditoria("actualizar_programa", "programas_custom", prog.id, { nombre: prog.nombre });
         }} />}
         {datosBaseListos && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} programasCustom={programasCustom} onDetail={goDetail} />}
-        {datosBaseListos && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
+        {datosBaseListos && view === "detalle" && <DetallePersona personaId={detailId} personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onBack={() => fromView === "detalleComite" ? setView("detalleComite") : fromView === "sincomite" ? nav("sincomite") : nav("personas")} onSaveSolicitudes={saveSolicitudes} onSavePersonas={savePersonas} onCargarSolicitudesPersona={cargarSolicitudesPersona} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
         {datosBaseListos && view === "informes" && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} onSavePersonas={savePersonas} programasCustom={programasCustom} />}
         {datosBaseListos && view === "auditoria" && esAdmin && <InformesView personas={personas} comites={comites} solicitudes={solicitudes} currentUser={currentUser} soloAuditoria />}
         {view === "admin" && esAdmin && <AdminUsuariosView currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
