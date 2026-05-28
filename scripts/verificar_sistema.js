@@ -56,6 +56,7 @@ function main() {
   ok("Documentos no pierden archivoData por aligerado", contains(app, "const aliviarDocumento = (doc = {}) => doc"));
   ok("Visor usa archivoData antes que Supabase Storage", contains(app, "dataUrl: d.archivoData || \"\""));
   ok("Visor no descarga documentos desde Supabase", !contains(app, "const abrirDesdeStorage"));
+  ok("Carpeta recarga cuando llegan respaldos completos", contains(app, "firmaArchivosSolicitudes") && contains(app, "[carpeta, firmaArchivosSolicitudes]"));
 
   ok("Solicitud 2026 usa plantilla oficial", contains(app, "formulario_solicitud_habilitacion_inhabitabilidad_2026.pdf"));
   ok("Carta SERVIU tiene destinatario Marco Seguel", contains(app, "SEÑOR MARCO SEGUEL REYES"));

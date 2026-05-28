@@ -2807,6 +2807,12 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
   const misSols = solicitudes.filter(s => s.personaId === personaId);
+  const firmaArchivosSolicitudes = misSols.map(s => {
+    const docs = s.documentos || [];
+    const conArchivo = docs.filter(d => d?.archivo).length;
+    const conRespaldo = docs.filter(d => d?.archivoData || d?.storagePath).length;
+    return `${s.id}:${s.documentosCargados ? "1" : "0"}:${conArchivo}:${conRespaldo}`;
+  }).join("|");
   useEffect(() => {
     if (!misSols.length) {
       setProgramaTrabajoId("");
@@ -3193,10 +3199,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setShowFichaSolicitante(false);
   }, [currentUser?.usuario, currentUser?.nombre]);
 
-  // Re-cargar archivos cuando carpeta cambia (puede cambiar al cargar solicitudes)
+  // Re-cargar archivos cuando cambia la carpeta o llegan solicitudes completas con respaldos.
   useEffect(() => {
     if (persona && carpeta) { cargarArchivos(); }
-  }, [carpeta]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [carpeta, firmaArchivosSolicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-poblar N/A en Ficha Rural para CSP rural (debe ir antes del return null)
   useEffect(() => {
