@@ -516,6 +516,35 @@ function archivarArchivoLocal(filePath, carpetaRel, archivo) {
   return destino;
 }
 
+function normalizarArchivoLocal(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buscarArchivoLocal(carpetaRel, archivo) {
+  const directo = safeDocsPath(carpetaRel, archivo);
+  if (fs.existsSync(directo) && fs.statSync(directo).isFile()) return directo;
+  const objetivo = normalizarArchivoLocal(path.basename(archivo));
+  const carpetaNorm = normalizarArchivoLocal(carpetaRel).replace(/\\/g, '/');
+  const candidatos = [];
+  const recorrer = (dir) => {
+    let items = [];
+    try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const item of items) {
+      const full = path.join(dir, item.name);
+      if (item.isDirectory()) recorrer(full);
+      if (item.isFile() && normalizarArchivoLocal(item.name) === objetivo) candidatos.push(full);
+    }
+  };
+  recorrer(docsDir);
+  if (!candidatos.length) return null;
+  return candidatos.find(c => normalizarArchivoLocal(path.relative(docsDir, c)).replace(/\\/g, '/').includes(carpetaNorm)) || candidatos[0];
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const carpetaRel = getWildcard(req);
@@ -571,6 +600,21 @@ app.get('/archivos/{*path}', (req, res) => {
   // Unión deduplicada: DB primero, luego filesystem
   const todos = [...new Set([...dbFiles, ...fsFiles])];
   res.json(todos);
+});
+
+app.get('/archivo-local/{*path}', (req, res) => {
+  try {
+    const fullRel = getWildcard(req);
+    const lastSlash = fullRel.lastIndexOf('/');
+    if (lastSlash === -1) return res.status(400).json({ error: 'Ruta invÃ¡lida' });
+    const carpetaRel = fullRel.substring(0, lastSlash);
+    const archivo = fullRel.substring(lastSlash + 1);
+    const encontrado = buscarArchivoLocal(carpetaRel, archivo);
+    if (!encontrado) return res.status(404).json({ error: 'Archivo no encontrado en documentos locales.' });
+    res.sendFile(encontrado);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 app.delete('/archivos/{*path}', (req, res) => {

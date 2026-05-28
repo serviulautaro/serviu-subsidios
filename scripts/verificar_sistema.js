@@ -62,6 +62,7 @@ function main() {
   ok("No hay window.location.reload forzado", !contains(app, "window.location.reload"));
   ok("Update backend sin filtros bloqueado", contains(server, "Update sin filtros bloqueado"));
   ok("Rutas de documentos quedan dentro de carpeta documentos", contains(server, "safeDocsPath"));
+  ok("Visor prioriza documentos locales sobre Supabase", contains(app, "/archivo-local/") && contains(app, "esUrlSupabaseStorage") && contains(server, "buscarArchivoLocal"));
   ok("Eliminar archivo local mueve a papelera interna", contains(server, "archivarArchivoLocal") && !contains(server, "unlinkSync"));
   ok("Cliente API bloquea update/delete sin filtros", contains(read(path.join(root, "src", "supabaseClient.js")), "sin filtros bloqueado por seguridad"));
   ok("Comités por constituir se reconocen por alias", contains(app, "codigoComitePorConstituir") && contains(app, "falta constituir"));

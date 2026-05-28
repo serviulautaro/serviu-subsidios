@@ -222,6 +222,7 @@ const storageObjectPath = (carpeta = "", nombre = "") =>
     .join("/");
 const storagePublicUrl = (objectPath = "", bucket = STORAGE_BUCKET) =>
   objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(encodeRoutePath(objectPath)).data.publicUrl : "";
+const esUrlSupabaseStorage = (url = "") => /supabase\.co\/storage\/v1\/object/i.test(String(url || ""));
 const fileToDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(reader.result);
@@ -3550,10 +3551,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       } catch {}
       return false;
     };
-    const localUrl = apiPath("/files/", rutaLocal, nombre);
-    if (await urlSirveDocumento(localUrl)) return localUrl;
-    if (await urlSirveDocumento(respaldoUrl)) return respaldoUrl;
-    if (respaldoUrl && !String(respaldoUrl).startsWith(API + "/files/")) return respaldoUrl;
+    const rutasLocales = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
+    for (const ruta of rutasLocales) {
+      const localProtegido = apiPath("/archivo-local/", ruta, nombre);
+      if (await urlSirveDocumento(localProtegido)) return localProtegido;
+      const localEstatico = apiPath("/files/", ruta, nombre);
+      if (await urlSirveDocumento(localEstatico)) return localEstatico;
+    }
+    if (respaldoUrl && !esUrlSupabaseStorage(respaldoUrl) && await urlSirveDocumento(respaldoUrl)) return respaldoUrl;
     return "";
   };
 
