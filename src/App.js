@@ -140,11 +140,9 @@ const rutColoresDesdeSolicitudes = (sols = []) => {
   return "";
 };
 const docTieneValor = (doc) => !!((doc?.valor || "").toString().trim() || doc?.entregado || doc?.archivo || doc?.url);
-const aliviarDocumento = (doc = {}) => (
-  doc.storagePath && doc.archivoData ? { ...doc, archivoData: "" } : doc
-);
+const aliviarDocumento = (doc = {}) => doc;
 const aliviarDocumentosSolicitud = (documentos = []) => (documentos || []).map(aliviarDocumento);
-const tieneDocumentoPesadoConStorage = (documentos = []) => (documentos || []).some(d => d?.storagePath && d?.archivoData);
+const tieneDocumentoPesadoConStorage = () => false;
 const docCompletoEquivalente = (doc, docs = []) => {
   if (docTieneValor(doc)) return true;
   const n = docNombreNorm(doc);
@@ -3352,8 +3350,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const guardarArchivoPersistente = async (nombre, dataUrl, mimeType = "", carp = carpeta, storagePath = "") => {
     if (!nombre || (!dataUrl && !storagePath)) return;
-    const archivoUrl = storagePath ? storagePublicUrl(storagePath) : dataUrl;
-    setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp } }));
+    const archivoUrl = dataUrl || "";
+    setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp, storagePath } }));
     setArchivos(prev => prev.includes(nombre) ? prev : [nombre, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombre]: carp }));
     const solDestino = misSols[0];
@@ -3366,7 +3364,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       entregado: true,
       interno: true,
       archivo: nombre,
-      archivoData: storagePath ? "" : dataUrl,
+      archivoData: dataUrl,
       archivoTipo: mimeType,
       carpeta: carp,
       storagePath
@@ -3402,14 +3400,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       data = { nombre: file.name };
     }
     const storagePathFinal = storageErr ? "" : objectPath;
-    const dataUrl = storagePathFinal ? "" : await fileToDataUrl(file);
+    const dataUrl = await fileToDataUrl(file);
     await _registrarArchivoSupa(nombreSubido, carp, {
       storage_bucket: STORAGE_BUCKET,
       storage_path: storagePathFinal,
       mime_type: file.type || "application/octet-stream",
       tamano_bytes: file.size || 0
     });
-    const archivoUrl = storagePathFinal ? storagePublicUrl(storagePathFinal) : dataUrl;
+    const archivoUrl = dataUrl;
     setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl: archivoUrl, mimeType: file.type, carpeta: carp, storagePath: storagePathFinal, storageBucket: STORAGE_BUCKET } }));
     setArchivos(prev => prev.includes(nombreSubido) ? prev : [nombreSubido, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombreSubido]: carp }));
@@ -3482,7 +3480,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       .flatMap(s => s.documentos || [])
       .filter(d => d.archivo && (d.archivoData || d.storagePath));
     docsConArchivo.forEach(d => {
-      datosMap[d.archivo] = { dataUrl: d.storagePath ? storagePublicUrl(d.storagePath) : d.archivoData, mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "", storageBucket: STORAGE_BUCKET };
+      datosMap[d.archivo] = { dataUrl: d.archivoData || (d.storagePath ? storagePublicUrl(d.storagePath) : ""), mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "", storageBucket: STORAGE_BUCKET };
       if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
     });
 
@@ -3570,6 +3568,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       try {
         const { data, error } = await supabase.storage.from(bucket || STORAGE_BUCKET).download(storagePath);
         if (error || !data) return false;
+        if (String(data.type || "").includes("application/json")) return false;
         const dataUrl = await fileToDataUrl(data);
         setHtmlPreview(null);
         setFilePreview({ url: dataUrl, title: nombre });
@@ -3747,7 +3746,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           .forEach(d => {
             archivosSet.add(d.archivo);
             rutasPorArchivo[d.archivo] = d.carpeta || carpetaSol;
-            datosPorArchivo[d.archivo] = d.storagePath ? storagePublicUrl(d.storagePath) : d.archivoData;
+            datosPorArchivo[d.archivo] = d.archivoData || (d.storagePath ? storagePublicUrl(d.storagePath) : "");
           });
 
         // Desde Supabase
