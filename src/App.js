@@ -3464,7 +3464,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (!rutasMap[sf.nombre]) rutasMap[sf.nombre] = sf.carpeta || carpeta;
         const storagePath = sf.storage_path || storageObjectPath(sf.carpeta || carpeta, sf.nombre);
         datosMap[sf.nombre] = {
-          dataUrl: sf.storage_path ? storagePublicUrl(sf.storage_path, sf.storage_bucket) : "",
+          dataUrl: "",
           mimeType: sf.mime_type || "",
           carpeta: sf.carpeta || carpeta,
           storagePath,
@@ -3480,7 +3480,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       .flatMap(s => s.documentos || [])
       .filter(d => d.archivo && (d.archivoData || d.storagePath));
     docsConArchivo.forEach(d => {
-      datosMap[d.archivo] = { dataUrl: d.archivoData || (d.storagePath ? storagePublicUrl(d.storagePath) : ""), mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "", storageBucket: STORAGE_BUCKET };
+      datosMap[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "", storageBucket: STORAGE_BUCKET };
       if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
     });
 
@@ -3563,36 +3563,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const abrirArchivo = async (nombre) => {
     const archivoGuardado = archivosDatos[nombre];
     const fileUrl = await urlDocumentoDisponible(nombre);
-    const abrirDesdeStorage = async (storagePath, bucket = STORAGE_BUCKET) => {
-      if (!storagePath) return false;
-      try {
-        const { data, error } = await supabase.storage.from(bucket || STORAGE_BUCKET).download(storagePath);
-        if (error || !data) return false;
-        if (String(data.type || "").includes("application/json")) return false;
-        const dataUrl = await fileToDataUrl(data);
-        setHtmlPreview(null);
-        setFilePreview({ url: dataUrl, title: nombre });
-        return true;
-      } catch {
-        return false;
-      }
-    };
     if (!fileUrl) {
-      const rutasCandidatas = [...new Set([
-        archivoGuardado?.storagePath,
-        storageObjectPath(archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta, nombre),
-        [archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta, nombre].filter(Boolean).join("/"),
-        carpetaVieja ? storageObjectPath(carpetaVieja, nombre) : "",
-        carpetaVieja ? [carpetaVieja, nombre].filter(Boolean).join("/") : "",
-      ].filter(Boolean))];
-      for (const ruta of rutasCandidatas) {
-        if (await abrirDesdeStorage(ruta, archivoGuardado?.storageBucket || STORAGE_BUCKET)) return;
-      }
       alert("No se pudo abrir el documento. El archivo no está disponible en la carpeta ni en respaldo.");
       return;
-    }
-    if (archivoGuardado?.storagePath) {
-      if (await abrirDesdeStorage(archivoGuardado.storagePath, archivoGuardado.storageBucket || STORAGE_BUCKET)) return;
     }
     if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:")) {
       const dataUrl = String(archivoGuardado.dataUrl);
@@ -3746,7 +3719,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           .forEach(d => {
             archivosSet.add(d.archivo);
             rutasPorArchivo[d.archivo] = d.carpeta || carpetaSol;
-            datosPorArchivo[d.archivo] = d.archivoData || (d.storagePath ? storagePublicUrl(d.storagePath) : "");
+            datosPorArchivo[d.archivo] = d.archivoData || "";
           });
 
         // Desde Supabase
@@ -3764,7 +3737,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         (supaArch || []).forEach(a => {
           archivosSet.add(a.nombre);
           rutasPorArchivo[a.nombre] = a.carpeta || carpetaSol;
-          if (a.storage_path) datosPorArchivo[a.nombre] = storagePublicUrl(a.storage_path, a.storage_bucket);
+          if (!datosPorArchivo[a.nombre]) datosPorArchivo[a.nombre] = "";
         });
 
         // Desde servidor local (nueva carpeta y vieja)

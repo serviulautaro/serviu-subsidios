@@ -54,7 +54,8 @@ function main() {
   ok("Borrar documento limpia solicitud sin borrar otros datos", contains(app, "archivoData: \"\"") && contains(app, "storagePath: \"\""));
   ok("Archivos guardados conservan respaldo data/storage", contains(app, "archivoData: dataUrl") && contains(app, "storagePath"));
   ok("Documentos no pierden archivoData por aligerado", contains(app, "const aliviarDocumento = (doc = {}) => doc"));
-  ok("Visor usa archivoData antes que Supabase Storage", contains(app, "d.archivoData || (d.storagePath ? storagePublicUrl(d.storagePath) : \"\")"));
+  ok("Visor usa archivoData antes que Supabase Storage", contains(app, "dataUrl: d.archivoData || \"\""));
+  ok("Visor no descarga documentos desde Supabase", !contains(app, "const abrirDesdeStorage"));
 
   ok("Solicitud 2026 usa plantilla oficial", contains(app, "formulario_solicitud_habilitacion_inhabitabilidad_2026.pdf"));
   ok("Carta SERVIU tiene destinatario Marco Seguel", contains(app, "SEÑOR MARCO SEGUEL REYES"));
