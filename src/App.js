@@ -1705,6 +1705,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
   const getDocPct = (id) => {
     const sols = getSols(id);
     if (!sols.length) return null;
+    if (sols.some(s => s.documentosCargados !== true)) return null;
     const all = sols.flatMap(s => s.documentos || []);
     if (!all.length) return null;
     return Math.round(all.filter(d => d.entregado).length / all.length * 100);
@@ -8536,6 +8537,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const getDocPct = (id) => {
     const sols = getSols(id);
     if (!sols.length) return null;
+    if (sols.some(s => s.documentosCargados !== true)) return null;
     const all = sols.flatMap(s => s.documentos || []);
     if (!all.length) return null;
     return Math.round(all.filter(d => d.entregado).length / all.length * 100);
