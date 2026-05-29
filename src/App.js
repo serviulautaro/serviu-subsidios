@@ -66,14 +66,14 @@ const formatPesosChilenos = (value) => {
 };
 const mostrarSiNo = (value) => {
   const txt = String(value || "").trim().toUpperCase();
-  if (txt === "S" || txt === "SI" || txt === "SÍ") return "Sí";
+  if (txt === "S" || txt === "SI" || txt === "S�") return "S�";
   if (txt === "N" || txt === "NO") return "No";
   return value || "";
 };
 const textoAdultoMayor = (fechaNac) => {
   const edad = calcularEdad(fechaNac);
   if (edad === null) return "";
-  return `${edad >= 60 ? "SI" : "NO"}/ ${edad} años`;
+  return `${edad >= 60 ? "SI" : "NO"}/ ${edad} a�os`;
 };
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const docNombreCanonico = (doc) => {
@@ -119,7 +119,7 @@ const documentosConPrioridad = (docs = [], valor = "normal") => {
     ? base.map(d => d.nombre === DOC_PRIORIDAD_SOLICITANTE ? { ...d, ...doc } : d)
     : [...base, doc];
 };
-const DOC_CORREO_SOLICITANTE = { nombre: "Correo del solicitante", obligatorio: true, requiereTexto: true, etiquetaTexto: "Correo electrónico" };
+const DOC_CORREO_SOLICITANTE = { nombre: "Correo del solicitante", obligatorio: true, requiereTexto: true, etiquetaTexto: "Correo electr�nico" };
 const asegurarCorreoSolicitante = (documentos = []) => {
   const docs = Array.isArray(documentos) ? documentos : [];
   const tieneCorreo = docs.some(d => {
@@ -261,7 +261,7 @@ const ESTADO_DESMARQUE = {
   "NO VISITADO":               { color: "#555", bg: "#F5F5F5", label: "No Visitado" },
 };
 
-// Calcula estado desmarque automáticamente según documentos ingresados
+// Calcula estado desmarque autom�ticamente seg�n documentos ingresados
 const calcularEstadoDesmarque = (sol, estadoActual) => {
   if (!sol || sol.programaId !== "habitabilidad") return estadoActual;
   if (["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(estadoActual)) return estadoActual;
@@ -464,8 +464,8 @@ const PROGRAMAS = [
       { nombre: "Titulo de dominio / Derecho real de uso / Usufructo / Goce de tierra", obligatorio: true },
       { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
       { nombre: "Informe DOM", obligatorio: false, valor: "" },
-      { nombre: "N° Memo DOM", obligatorio: false, valor: "" },
-      { nombre: "N° Carta SERVIU", obligatorio: false, valor: "" },
+      { nombre: "N� Memo DOM", obligatorio: false, valor: "" },
+      { nombre: "N� Carta SERVIU", obligatorio: false, valor: "" },
       { nombre: "Respuesta SERVIU", obligatorio: false, valor: "" }
     ]
   },
@@ -568,59 +568,59 @@ function combinarProgramas(programasCustom = []) {
 }
 
 const COMITES_FIJOS = [
-  { codigo:"gr1R", nombre:"Comité de Vivienda Rural Mi Nuevo Hogar",         tipo:"RURAL"  },
-  { codigo:"gr2R", nombre:"Comité de Vivienda Rural La Fuerza",               tipo:"RURAL"  },
-  { codigo:"gr3R", nombre:"Comité de Vivienda Rural Küme Ruka",               tipo:"RURAL"  },
-  { codigo:"gr4R", nombre:"Comité de Vivienda Rural Newen Mapu",              tipo:"RURAL"  },
-  { codigo:"gr5R", nombre:"Comité de Vivienda Rural Kimey Ruca",              tipo:"RURAL"  },
-  { codigo:"gr6R", nombre:"Comité de Vivienda Rural (Por Constituir)",        tipo:"RURAL"  },
-  { codigo:"gr1U", nombre:"Comité de Vivienda Urbano Pioneros de Lautaro",    tipo:"URBANO" },
-  { codigo:"gr2U", nombre:"Comité de Vivienda Urbano (Por Constituir)",       tipo:"URBANO" },
+  { codigo:"gr1R", nombre:"Comit� de Vivienda Rural Mi Nuevo Hogar",         tipo:"RURAL"  },
+  { codigo:"gr2R", nombre:"Comit� de Vivienda Rural La Fuerza",               tipo:"RURAL"  },
+  { codigo:"gr3R", nombre:"Comit� de Vivienda Rural K�me Ruka",               tipo:"RURAL"  },
+  { codigo:"gr4R", nombre:"Comit� de Vivienda Rural Newen Mapu",              tipo:"RURAL"  },
+  { codigo:"gr5R", nombre:"Comit� de Vivienda Rural Kimey Ruca",              tipo:"RURAL"  },
+  { codigo:"gr6R", nombre:"Comit� de Vivienda Rural (Por Constituir)",        tipo:"RURAL"  },
+  { codigo:"gr1U", nombre:"Comit� de Vivienda Urbano Pioneros de Lautaro",    tipo:"URBANO" },
+  { codigo:"gr2U", nombre:"Comit� de Vivienda Urbano (Por Constituir)",       tipo:"URBANO" },
 ];
 
-// Directiva de cada comité (fuente de verdad para el cargo automático)
+// Directiva de cada comit� (fuente de verdad para el cargo autom�tico)
 const COMITES_DIRECTIVA = [
-  { codigo:"gr1R", directiva:[{rol:"Presidente",nombre:"Juan Pérez González"},{rol:"Secretario",nombre:"Carlos Hernán Paillaleo Paillaleo"},{rol:"Tesorero",nombre:"Elías Fernando Apablaza Riffo"},{rol:"1er Director",nombre:"Juan Carlos Huenchuan Méndez"}]},
-  { codigo:"gr2R", directiva:[{rol:"Presidente",nombre:"Liber Omar Cancino Campos"},{rol:"Vicepresidente",nombre:"Orfelina Leonor Inostroza Burgos"},{rol:"Secretario",nombre:"Alejandra Maribel Lefián Silva"},{rol:"Tesorero",nombre:"Mirta Rosa Martín Vallejos"},{rol:"1er Director",nombre:"Luis Fernando Sánchez Llancamil"}]},
-  { codigo:"gr3R", directiva:[{rol:"Presidente",nombre:"Rosa Llancapan Liempe"},{rol:"Vicepresidente",nombre:"María Angélica Antinao Liempe"},{rol:"Secretario",nombre:"Elías Rivas Espinoza"},{rol:"Tesorero",nombre:"Mónica Maribel Rubilar Antilaf"},{rol:"1er Director",nombre:"Juan Miguel Tripaiñan Huenulao"}]},
+  { codigo:"gr1R", directiva:[{rol:"Presidente",nombre:"Juan P�rez Gonz�lez"},{rol:"Secretario",nombre:"Carlos Hern�n Paillaleo Paillaleo"},{rol:"Tesorero",nombre:"El�as Fernando Apablaza Riffo"},{rol:"1er Director",nombre:"Juan Carlos Huenchuan M�ndez"}]},
+  { codigo:"gr2R", directiva:[{rol:"Presidente",nombre:"Liber Omar Cancino Campos"},{rol:"Vicepresidente",nombre:"Orfelina Leonor Inostroza Burgos"},{rol:"Secretario",nombre:"Alejandra Maribel Lefi�n Silva"},{rol:"Tesorero",nombre:"Mirta Rosa Mart�n Vallejos"},{rol:"1er Director",nombre:"Luis Fernando S�nchez Llancamil"}]},
+  { codigo:"gr3R", directiva:[{rol:"Presidente",nombre:"Rosa Llancapan Liempe"},{rol:"Vicepresidente",nombre:"Mar�a Ang�lica Antinao Liempe"},{rol:"Secretario",nombre:"El�as Rivas Espinoza"},{rol:"Tesorero",nombre:"M�nica Maribel Rubilar Antilaf"},{rol:"1er Director",nombre:"Juan Miguel Tripai�an Huenulao"}]},
   { codigo:"gr4R", directiva:[]},
   { codigo:"gr5R", directiva:[]},
   { codigo:"gr6R", directiva:[]},
-  { codigo:"gr1U", directiva:[{rol:"Presidente",nombre:"Luis Armando Espinoza Mendoza"},{rol:"Vicepresidente",nombre:"Tomás Salvador Díaz Barrientos"},{rol:"Secretario",nombre:"Margot Leticia Contreras Márquez"},{rol:"Tesorero",nombre:"Iris del Carmen Godoy Morales"},{rol:"1er Director",nombre:"Domingo Antonio Bucarey Torres"}]},
+  { codigo:"gr1U", directiva:[{rol:"Presidente",nombre:"Luis Armando Espinoza Mendoza"},{rol:"Vicepresidente",nombre:"Tom�s Salvador D�az Barrientos"},{rol:"Secretario",nombre:"Margot Leticia Contreras M�rquez"},{rol:"Tesorero",nombre:"Iris del Carmen Godoy Morales"},{rol:"1er Director",nombre:"Domingo Antonio Bucarey Torres"}]},
   { codigo:"gr2U", directiva:[]},
 ];
 
 const COMITES_BASE_DATOS = [
-  { codigo: "gr1R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curín Castro", pj: "P.J. 376054", vencimiento: "07/02/2028" },
+  { codigo: "gr1R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Cur�n Castro", pj: "P.J. 376054", vencimiento: "07/02/2028" },
   { codigo: "gr2R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "P.J. 379826", vencimiento: "14/05/2028" },
-  { codigo: "gr3R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "En trámite", vencimiento: "-" },
-  { codigo: "gr4R", constructora: "Falta Licitar", profesional: "Priscilla Curín Castro", pj: "-", vencimiento: "-" },
+  { codigo: "gr3R", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "En tr�mite", vencimiento: "-" },
+  { codigo: "gr4R", constructora: "Falta Licitar", profesional: "Priscilla Cur�n Castro", pj: "-", vencimiento: "-" },
   { codigo: "gr5R", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", vencimiento: "-" },
-  { codigo: "gr6R", constructora: "Falta Licitar", profesional: "Priscilla Curín Castro", pj: "-", vencimiento: "-" },
-  { codigo: "gr1U", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curín Castro", pj: "P.J. 379720", vencimiento: "08/05/2028" },
+  { codigo: "gr6R", constructora: "Falta Licitar", profesional: "Priscilla Cur�n Castro", pj: "-", vencimiento: "-" },
+  { codigo: "gr1U", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Cur�n Castro", pj: "P.J. 379720", vencimiento: "08/05/2028" },
   { codigo: "gr2U", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", vencimiento: "-" },
 ];
 
 const LINEA_TIEMPO_CSP = [
   { id: "inicia_consulta", label: "Inicia Consulta" },
-  { id: "revision_rukan", label: "Revisión RUKAN" },
+  { id: "revision_rukan", label: "Revisi�n RUKAN" },
   { id: "solicitud_documentos", label: "Solicitud de documentos" },
-  { id: "recepcion_documentos", label: "Recepción de documentos" },
-  { id: "revision_documentos", label: "Revisión de documentos", decision: "documentos" },
+  { id: "recepcion_documentos", label: "Recepci�n de documentos" },
+  { id: "revision_documentos", label: "Revisi�n de documentos", decision: "documentos" },
   { id: "ingreso_grupo", label: "Ingreso a un grupo" },
-  { id: "directiva_nombre_comite", label: "Elige directiva y nombre del comité" },
+  { id: "directiva_nombre_comite", label: "Elige directiva y nombre del comit�" },
   { id: "ratifica_directiva_pj", label: "Ratifica directiva y solicitud PJ" },
-  { id: "comite_pj", label: "Comité con PJ" },
-  { id: "llamado_licitacion", label: "Llamado a licitación" },
-  { id: "adjudicacion_empresa", label: "Adjudicación Empresa" },
+  { id: "comite_pj", label: "Comit� con PJ" },
+  { id: "llamado_licitacion", label: "Llamado a licitaci�n" },
+  { id: "adjudicacion_empresa", label: "Adjudicaci�n Empresa" },
   { id: "inicio_actividades_serviu", label: "Inicio actividades SERVIU" },
-  { id: "pre_banco", label: "Pre Banco", detalle: "Reuniones Normativas - Área Social", reuniones: true },
-  { id: "preparacion_proyecto_constructora", label: "Preparación Proyecto Constructora", detalle: "Área Técnica", reuniones: true },
+  { id: "pre_banco", label: "Pre Banco", detalle: "Reuniones Normativas - �rea Social", reuniones: true },
+  { id: "preparacion_proyecto_constructora", label: "Preparaci�n Proyecto Constructora", detalle: "�rea T�cnica", reuniones: true },
   { id: "ingreso_proyecto_serviu", label: "Ingreso proyecto SERVIU" },
   { id: "observaciones_serviu", label: "Observaciones SERVIU" },
-  { id: "calificacion_serviu", label: "Calificación SERVIU", decision: "serviu" },
-  { id: "postulacion_serviu", label: "Postulación SERVIU" },
-  { id: "ejecucion_obras", label: "Ejecución de las obras" },
+  { id: "calificacion_serviu", label: "Calificaci�n SERVIU", decision: "serviu" },
+  { id: "postulacion_serviu", label: "Postulaci�n SERVIU" },
+  { id: "ejecucion_obras", label: "Ejecuci�n de las obras" },
 ];
 const decisionLineaTiempoCsp = (linea = {}, tipo = "") => linea[`decision_${tipo}`] || "";
 const lineaTiempoCspCortada = (linea = {}, etapaIndex = 0) =>
@@ -635,14 +635,14 @@ const normalizarLineaTiempoCsp = (valor = {}) => {
 const normalizarNombreSolicitante = (valor = "") =>
   String(valor || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("es-CL");
 
-// Normaliza nombre para comparación (sin tildes, minúsculas, sin caracteres especiales)
+// Normaliza nombre para comparaci�n (sin tildes, min�sculas, sin caracteres especiales)
 function normNomDirectiva(s) {
   return (s||"").toLowerCase().trim()
-    .normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .normalize("NFD").replace(/[`-?]/g,"")
     .replace(/[^a-z\s]/g,"").replace(/\s+/g," ");
 }
 
-// Infiere el cargo de un solicitante comparando su nombre con la directiva del comité
+// Infiere el cargo de un solicitante comparando su nombre con la directiva del comit�
 const comitesBaseCompletos = () => COMITES_FIJOS.map(c => {
   const datos = COMITES_BASE_DATOS.find(d => d.codigo === c.codigo) || {};
   const directiva = COMITES_DIRECTIVA.find(d => d.codigo === c.codigo)?.directiva || [];
@@ -740,24 +740,24 @@ const constructoraDeComite = (persona = {}, comites = []) => {
 const DOCS_SOLICITUD = {
   habitabilidad: [
     { id: "dominio",  label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
-    { id: "rut",      label: "Cédula de identidad colores" },
-    { id: "avaluo",   label: "Avalúo fiscal detallado" },
+    { id: "rut",      label: "C�dula de identidad colores" },
+    { id: "avaluo",   label: "Aval�o fiscal detallado" },
   ],
   csp_urbano: [
     { id: "dominio",      label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
-    { id: "avaluo",       label: "Avalúo fiscal detallado" },
+    { id: "avaluo",       label: "Aval�o fiscal detallado" },
     { id: "infoprevias",  label: "Informaciones previas" },
     { id: "cuenta",       label: "Cuenta de ahorro para la vivienda" },
-    { id: "rut",          label: "Cédula de identidad colores" },
+    { id: "rut",          label: "C�dula de identidad colores" },
     { id: "agua",         label: "Boleta de agua o factibilidad" },
     { id: "luz",          label: "Boleta de luz o factibilidad" },
   ],
   csp_rural: [
-    { id: "rut",          label: "Cédula de identidad colores" },
+    { id: "rut",          label: "C�dula de identidad colores" },
     { id: "agua",         label: "Boleta de agua (si corresponde)" },
     { id: "luz",          label: "Boleta de luz (si corresponde)" },
     { id: "dominio",      label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
-    { id: "avaluo",       label: "Certificado de avalúo detallado" },
+    { id: "avaluo",       label: "Certificado de aval�o detallado" },
     { id: "ruralidad",    label: "Certificado de ruralidad" },
     { id: "cuenta",       label: "Cuenta de ahorro para la vivienda" },
   ],
@@ -770,7 +770,7 @@ const DB = {
 
 const carpetaNombre = (nombre, rut) => nombre.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") + "_" + rut.replace(/[^0-9kK]/g, "");
 
-// ─── GENERADORES DE DOCUMENTOS HTML (frontend puro) ───────────────────────────
+// --- GENERADORES DE DOCUMENTOS HTML (frontend puro) ---------------------------
 
 function _fechaHoy() {
   const m = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -817,14 +817,14 @@ function _encabezado() {
 
 function generarHtmlMemo({ numero, nombre, rut, direccion, coordenadas, problemas, remitente, destinatario }) {
   const de = {
-    nombre: "MARCELO CIFUENTES VÁSQUEZ",
+    nombre: "MARCELO CIFUENTES V�SQUEZ",
     cargo: "ENCARGADO ENTIDAD PATROCINANTE",
     institucion: "MUNICIPALIDAD DE LAUTARO",
     iniciales: "MCV/mcv",
     ...(remitente || {})
   };
   const a = {
-    nombre: "SEÑOR EDUARDO BUSTOS VALDEBENITO",
+    nombre: "SE�OR EDUARDO BUSTOS VALDEBENITO",
     cargo: "DIRECTOR DE OBRAS",
     institucion: "MUNICIPALIDAD DE LAUTARO",
     trato: "PRESENTE.",
@@ -836,9 +836,9 @@ function generarHtmlMemo({ numero, nombre, rut, direccion, coordenadas, problema
   const probHtml = lista
     .map((p, i) => `<p style="padding-left:60px;margin:5px 0">${i+1}.- ${String(p||'')}</p>`)
     .join('');
-  return _wrap(`Memorándum N° ${numero}`, `
+  return _wrap(`Memor�ndum N� ${numero}`, `
 ${_encabezado()}
-<div style="text-align:right"><div style="display:inline-block;text-align:left"><p><b>MEMO N°&nbsp;:</b>&nbsp;${numero}</p><p><b>MAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;Solicitud evaluación de vivienda</p><p><b>LAUTARO,</b>&nbsp;${_fechaHoy()}</p></div></div>
+<div style="text-align:right"><div style="display:inline-block;text-align:left"><p><b>MEMO N�&nbsp;:</b>&nbsp;${numero}</p><p><b>MAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;Solicitud evaluaci�n de vivienda</p><p><b>LAUTARO,</b>&nbsp;${_fechaHoy()}</p></div></div>
 <p><b>DE&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${de.nombre}</b></p>
 <p style="padding-left:60px">${de.cargo}</p>
 <p style="padding-left:60px">${de.institucion}</p>
@@ -854,7 +854,7 @@ ${_encabezado()}
 <span class="sp"></span>
 <p><b>RUT:</b> ${rut||''}</p>
 <span class="sp"></span>
-<p><b>DIRECCIÓN:</b> ${(direccion||'')}</p>
+<p><b>DIRECCI�N:</b> ${(direccion||'')}</p>
 <span class="sp"></span>
 <p><b>Coordenadas:</b> ${coordenadas||''}</p>
 <span class="sp"></span>
@@ -864,7 +864,7 @@ ${_encabezado()}
 <p><b>ADJUNTO:</b></p>
 <span class="sp"></span>
 <p>- Rut del propietario.</p>
-<p>- Informe de evaluación previa. vivienda revisada por JACC.</p>
+<p>- Informe de evaluaci�n previa. vivienda revisada por JACC.</p>
 <p>- Escritura u otro que acredite la propiedad de la vivienda.</p>
 <div class="firma">
   <p>Sin otro particular, saluda atentamente a Usted.,</p>
@@ -876,29 +876,29 @@ ${_encabezado()}
 <span class="sp"></span>
 <p>${de.iniciales || ""}</p>
 <span class="sp"></span>
-<p><b>DISTRIBUCIÓN:</b></p>
+<p><b>DISTRIBUCI�N:</b></p>
 <p>- Destinatario</p>
 <p>- Archivo Vivienda</p>`);
 }
 
 function generarHtmlCarta({ numero, nombre, rut, remitente, destinatario }) {
   const de = {
-    nombre: "MARCELO CIFUENTES VÁSQUEZ",
+    nombre: "MARCELO CIFUENTES V�SQUEZ",
     cargo: "ENCARGADO ENTIDAD PATROCINANTE",
     institucion: "MUNICIPALIDAD DE LAUTARO",
     iniciales: "MCV/mcv",
     ...(remitente || {})
   };
   const a = {
-    nombre: "SEÑOR MARCO SEGUEL REYES",
+    nombre: "SE�OR MARCO SEGUEL REYES",
     cargo: "DIRECTOR DE SERVIU (S)",
-    institucion: "REGIÓN DE LA ARAUCANIA",
+    institucion: "REGI�N DE LA ARAUCANIA",
     trato: "PRESENTE.",
     ...(destinatario || {})
   };
-  return _wrap(`Carta SERVIU N° ${numero}`, `
+  return _wrap(`Carta SERVIU N� ${numero}`, `
 ${_encabezado()}
-<div style="text-align:right"><div style="display:inline-block;text-align:left"><p><b>CNº&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${numero}</b></p><p><b>MAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;Lo que indica</p><p><b>LAUTARO,</b>&nbsp;${_fechaHoy()}</p></div></div>
+<div style="text-align:right"><div style="display:inline-block;text-align:left"><p><b>CN�&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${numero}</b></p><p><b>MAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</b>&nbsp;Lo que indica</p><p><b>LAUTARO,</b>&nbsp;${_fechaHoy()}</p></div></div>
 <span class="sp"></span>
 <p><b>DE&nbsp;&nbsp;&nbsp;:</b>&nbsp;<b>${de.nombre}</b></p>
 <p class="ind">${de.cargo}</p>
@@ -920,7 +920,7 @@ ${_encabezado()}
 <span class="sp"></span>
 <p>${de.iniciales || ""}</p>
 <span class="sp"></span>
-<p><b>DISTRIBUCIÓN:</b></p>
+<p><b>DISTRIBUCI�N:</b></p>
 <p>- Destinatario</p>
 <p>- Archivo Vivienda</p>`);
 }
@@ -938,9 +938,9 @@ function textoSubsidioSolicitud(persona = {}) {
   const existente = persona.subsidio_adjudicado || persona.subsidioAdjudicado || persona.subsidio || persona.programa_subsidio || "";
   if (existente) return existente;
   const tipo = String(persona.tipo_comite || persona.tipoComite || persona.tipo || "").toUpperCase();
-  if (tipo.includes("RURAL")) return `SUBSIDIOS RURALES TITULO I Llamado N°1${anio ? " Año " + anio : ""}`;
-  if (tipo.includes("URBANO")) return `SUBSIDIO HABITACIONAL URBANO${anio ? " Año " + anio : ""}`;
-  return anio ? `SUBSIDIO HABITACIONAL Año ${anio}` : "";
+  if (tipo.includes("RURAL")) return `SUBSIDIOS RURALES TITULO I Llamado N�1${anio ? " A�o " + anio : ""}`;
+  if (tipo.includes("URBANO")) return `SUBSIDIO HABITACIONAL URBANO${anio ? " A�o " + anio : ""}`;
+  return anio ? `SUBSIDIO HABITACIONAL A�o ${anio}` : "";
 }
 
 async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, subsidio, anioSubsidio }) {
@@ -953,9 +953,9 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const black = rgb(0, 0, 0);
   const upper = (v) => String(v || "")
-    .replaceAll("N°", "NRO ")
-    .replaceAll("n°", "NRO ")
-    .replaceAll("°", "")
+    .replaceAll("N�", "NRO ")
+    .replaceAll("n�", "NRO ")
+    .replaceAll("�", "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase();
@@ -1010,26 +1010,26 @@ function generarHtmlInformeJACC({ nombre, rut, telefono, direccion, coordenadas,
     </tr>`;
   }).join('');
   const encJACC = _encabezado();
-  const parrafoVerificacion = `<p style="margin:18px 0;line-height:1.7;text-align:justify">Según el registro de verificación con fecha <b>${fechaVisita||'_____________'}</b>, con las visitas de inspección realizadas en la propiedad indicada. Se informa que la vivienda se encuentra en estado: <b>${estadoVivienda||'_____________'}</b></p>`;
+  const parrafoVerificacion = `<p style="margin:18px 0;line-height:1.7;text-align:justify">Seg�n el registro de verificaci�n con fecha <b>${fechaVisita||'_____________'}</b>, con las visitas de inspecci�n realizadas en la propiedad indicada. Se informa que la vivienda se encuentra en estado: <b>${estadoVivienda||'_____________'}</b></p>`;
   return _wrap(`Informe JACC - ${nombre||''}`, `
 ${encJACC}
-<p style="text-align:center;font-size:13pt;font-weight:bold;margin-bottom:18px">INFORME TÉCNICO DE VISITA JACC</p>
+<p style="text-align:center;font-size:13pt;font-weight:bold;margin-bottom:18px">INFORME T�CNICO DE VISITA JACC</p>
 <p style="font-weight:bold;margin-bottom:8px">I. ANTECEDENTES DEL BENEFICIARIO</p>
 <table style="margin-bottom:18px"><tbody>
   <tr><td class="lbl" style="width:35%">NOMBRE BENEFICIARIO</td><td>${(nombre||'')}</td></tr>
   <tr><td class="lbl">RUT</td><td>${rutFmt}</td></tr>
-  <tr><td class="lbl">TELÉFONO</td><td>${telefono||''}</td></tr>
-  <tr><td class="lbl">DIRECCIÓN</td><td>${(direccion||'')}</td></tr>
+  <tr><td class="lbl">TEL�FONO</td><td>${telefono||''}</td></tr>
+  <tr><td class="lbl">DIRECCI�N</td><td>${(direccion||'')}</td></tr>
   <tr><td class="lbl">COORDENADAS</td><td>${coordenadas||''}</td></tr>
-  <tr><td class="lbl">AÑO Y TIPO DE SUBSIDIO</td><td>${subsidioTexto||''}</td></tr>
+  <tr><td class="lbl">A�O Y TIPO DE SUBSIDIO</td><td>${subsidioTexto||''}</td></tr>
 </tbody></table>
 ${parrafoVerificacion}
-<p style="font-weight:bold;margin-bottom:8px">II. REGISTRO FOTOGRÁFICO</p>
+<p style="font-weight:bold;margin-bottom:8px">II. REGISTRO FOTOGR�FICO</p>
 <table>
   <thead><tr>
-    <th style="width:50px">N° Foto</th>
+    <th style="width:50px">N� Foto</th>
     <th>Estado de la Vivienda</th>
-    <th style="width:8.5cm;text-align:center">Fotografía</th>
+    <th style="width:8.5cm;text-align:center">Fotograf�a</th>
   </tr></thead>
   <tbody>${filasHtml}</tbody>
 </table>
@@ -1074,7 +1074,7 @@ function toDbFields(form) {
     metrosNoRegul:          "metrosnoregul",
     totalMetros:            "totalmetros",
     modalidadPostulacion:   "modalidadpostulacion",
-    // Ya en snake_case — pasan directo:
+    // Ya en snake_case � pasan directo:
     // dominiopropiedad, discapacidad, banco, rol, cargo_comite, numero_lista, etc.
   };
   const EXCLUDE = ["comiteId", "fechaIngreso"]; // campos que no van en update directo
@@ -1104,17 +1104,17 @@ const carpetaPrograma = (persona, solicitudes) => {
   if (!persona) return "";
   const cid = persona.comiteId || "";
   let prog;
-  // 1) Detección por comiteId conocido
+  // 1) Detecci�n por comiteId conocido
   if (cid === "comite_desmarque") prog = "Desmarque";
   else if (/^gr\d+R$/i.test(cid)) prog = "CSP_Rural";
   else if (/^gr\d+U$/i.test(cid)) prog = "CSP_Urbano";
-  // 2) Detección por tipo_comite en persona (no requiere solicitudes cargadas)
+  // 2) Detecci�n por tipo_comite en persona (no requiere solicitudes cargadas)
   else {
     const tipo = (persona.tipo_comite || "").toUpperCase();
     if (tipo === "RURAL") prog = "CSP_Rural";
     else if (tipo === "URBANO") prog = "CSP_Urbano";
     else {
-      // 3) Último recurso: solicitudes (si ya están cargadas)
+      // 3) �ltimo recurso: solicitudes (si ya est�n cargadas)
       const sol = (solicitudes || []).find(s => s.personaId === persona.id || s.persona_id === persona.id);
       const pid = sol?.programaId || sol?.programa_id || "";
       const map = { habitabilidad: "Desmarque", csp_rural: "CSP_Rural", csp_urbano: "CSP_Urbano" };
@@ -1145,13 +1145,13 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
   const paso = (numero, label, estado, detalle = "") => ({ numero, label, estado, detalle });
   let pasos = [
     paso(1, "Ingresa solicitante", "done", "Datos iniciales del solicitante"),
-    paso(2, "Documentos obligatorios", st.docsCompletos ? "done" : "pending", "VB cédula de identidad y título de dominio"),
+    paso(2, "Documentos obligatorios", st.docsCompletos ? "done" : "pending", "VB c�dula de identidad y t�tulo de dominio"),
   ];
 
   if (st.calificacion.estado === "NO_CALIFICA") {
     pasos.push(paso(3, "NO CALIFICA", "stop-red", st.calificacion.detalle));
   } else {
-    pasos.push(paso(3, "Califica para visita", st.calificacion.estado === "CALIFICA" ? "done" : "pending", "Acción manual del usuario"));
+    pasos.push(paso(3, "Califica para visita", st.calificacion.estado === "CALIFICA" ? "done" : "pending", "Acci�n manual del usuario"));
     pasos.push(paso(5, "Fecha de visita", st.visitado ? "done" : "pending"));
     pasos.push(paso(6, "Memo recibido DOM", st.solicitudDom ? "done" : "pending", "Subir memo recibido"));
     if (st.informeRechazado) pasos.push(paso(7, "RECHAZADO DOM", "stop-red", st.informeDetalle));
@@ -1193,7 +1193,7 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
     : estadoActualLineaDesmarque(sol);
 
   return <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: "1px solid #dbeafe", background: "#f8fbff" }}>
-    <div style={{ fontSize: 12, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Línea de avance Desmarque de Vivienda</div>
+    <div style={{ fontSize: 12, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>L�nea de avance Desmarque de Vivienda</div>
     <div style={{ display: "inline-block", marginBottom: 10, background: estadoActual.bg, color: estadoActual.color, borderRadius: 9, padding: "4px 11px", fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>
       Estado actual: {estadoActual.label}
     </div>
@@ -1308,7 +1308,7 @@ function ProgramaFigura({ programa, tipo = "", size = 56 }) {
     </svg>
   );
   if (id === "csp_urbano") return (
-    <svg {...common} aria-label="Vivienda DS49 urbana en construcción">
+    <svg {...common} aria-label="Vivienda DS49 urbana en construcci�n">
       <rect x="7" y="58" width="66" height="8" rx="3" fill="#d1d5db" />
       <path d="M18 54 L18 36 L39 22 L62 36 V54" fill="#ecfdf5" stroke="#059669" strokeWidth="3" />
       <rect x="25" y="43" width="10" height="13" fill="#a7f3d0" stroke="#047857" />
@@ -1329,7 +1329,7 @@ function ProgramaFigura({ programa, tipo = "", size = 56 }) {
     </svg>
   );
   if (id === "mave_rural" || id === "ampliacion_vivienda") return (
-    <svg {...common} aria-label="Mejoramiento y ampliación de vivienda rural">
+    <svg {...common} aria-label="Mejoramiento y ampliaci�n de vivienda rural">
       <rect x="8" y="58" width="64" height="8" rx="4" fill="#ddd6fe" />
       <path d="M16 54 L16 35 L36 20 L56 35 V54 Z" fill={id === "ampliacion_vivienda" ? "#ccfbf1" : "#f5f3ff"} stroke={id === "ampliacion_vivienda" ? "#0f766e" : "#7c3aed"} strokeWidth="3" />
       <path d="M50 54 V39 H67 V54 Z" fill={id === "ampliacion_vivienda" ? "#99f6e4" : "#ede9fe"} stroke={id === "ampliacion_vivienda" ? "#0f766e" : "#7c3aed"} strokeWidth="3" />
@@ -1347,7 +1347,7 @@ function ProgramaFigura({ programa, tipo = "", size = 56 }) {
     </svg>
   );
   if (tipo === "sincomite") return (
-    <svg {...common} aria-label="Sin comité">
+    <svg {...common} aria-label="Sin comit�">
       <rect x="21" y="13" width="38" height="54" rx="6" fill="#f8fafc" stroke="#64748b" strokeWidth="3" />
       <rect x="30" y="9" width="20" height="10" rx="3" fill="#e2e8f0" stroke="#64748b" strokeWidth="3" />
       <path d="M29 32 H52 M29 43 H52 M29 54 H44" stroke="#94a3b8" strokeWidth="4" strokeLinecap="round" />
@@ -1377,7 +1377,7 @@ function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav
         <div style={{ background: "#fff", border: "1px solid #BFDBFE", borderRadius: 14, padding: 28, color: "#1e3a5f" }}>
           <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>Cargando datos reales del sistema</div>
           <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6 }}>
-            No se muestran contadores en cero mientras la base de datos no responda. Presione “Actualizar datos” si tarda demasiado.
+            No se muestran contadores en cero mientras la base de datos no responda. Presione �Actualizar datos� si tarda demasiado.
           </div>
         </div>
       </div>
@@ -1392,7 +1392,7 @@ function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 16, marginBottom: 28 }}>
         {[
           ["Solicitantes", personas.length, "#1e3a5f", "personas"],
-          ["Comités", comites.length, "#7C3AED", "comites"],
+          ["Comit�s", comites.length, "#7C3AED", "comites"],
           ["Solicitudes", solicitudes.length, "#0891B2", "solicitudes"],
           ["Completas", completas, "#059669", "solicitudes"],
           ["Pendientes", solicitudes.length - completas, "#DC2626", "solicitudes"]
@@ -1415,7 +1415,7 @@ function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1e3a5f", marginBottom: 4 }}>{p.nombre}</div>
               <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{p.descripcion}</div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span style={{ color: "#666" }}>{comitesPrograma.length} comités · {personasPrograma.length} personas</span>
+                <span style={{ color: "#666" }}>{comitesPrograma.length} comit�s � {personasPrograma.length} personas</span>
                 <span style={{ color: "#059669", fontWeight: 600 }}>{comp} completas</span>
               </div>
             </div>
@@ -1426,7 +1426,7 @@ function Dashboard({ personas, solicitudes, comites, programasCustom = [], onNav
   );
 }
 
-// ─── FORMULARIO DE PERSONA (reutilizable) ───────────────────────────────────
+// --- FORMULARIO DE PERSONA (reutilizable) -----------------------------------
 function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFijo, programasCustom }) {
   const [tipoSolicitud, setTipoSolicitud] = useState(
     form.comiteId === "comite_desmarque" ? "desmarque" : (form.comiteId ? "comite" : "")
@@ -1438,16 +1438,16 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
 
   const CAMPOS = [
     ["nombre", "Apellidos y nombres *", "text", "12"],
-    ["rut", "Cédula de identidad *", "text", "6"],
+    ["rut", "C�dula de identidad *", "text", "6"],
     ["telefono", "Telefono", "tel", "6"],
     ["direccion", "Direccion", "text", "12"],
     ["puntajeRSH", "Puntaje RSH", "text", "6"],
     ["comuna", "Comuna", "text", "6"],
   ];
 
-  // Lista dinámica: COMITES_FIJOS (con códigos) + nuevos comités de Supabase
-  const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
-  // Si el tipo es comite_PROGID, filtrar comités de ese programa
+  // Lista din�mica: COMITES_FIJOS (con c�digos) + nuevos comit�s de Supabase
+  const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[`-?]/g,"").replace(/\s+/g," ");
+  // Si el tipo es comite_PROGID, filtrar comit�s de ese programa
   const progIdSeleccionado = tipoSolicitud && tipoSolicitud.startsWith("comite_") ? tipoSolicitud.replace("comite_","") : null;
   const todosProgramas = combinarProgramas(programasCustom);
 
@@ -1482,17 +1482,17 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
 
   const handleGuardar = () => {
     if (tipoSolicitud === "sincomite" && !motivoSinComite.trim()) {
-      alert("El motivo es obligatorio cuando no se asigna comité."); return;
+      alert("El motivo es obligatorio cuando no se asigna comit�."); return;
     }
     onGuardar();
   };
 
   return (
     <>
-      {/* Selección tipo solicitud - todos los programas del sistema */}
+      {/* Selecci�n tipo solicitud - todos los programas del sistema */}
       {!comiteIdFijo && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 10 }}>¿Programa de solicitud? *</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 10 }}>�Programa de solicitud? *</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
             {/* Programa Habitabilidad (desmarque) */}
             <div onClick={() => seleccionarTipo("desmarque")}
@@ -1502,43 +1502,43 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
               <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "desmarque" ? "#0891B2" : "#555", marginTop: 4 }}>Habitabilidad de Vivienda</div>
               <div style={{ fontSize: 10, color: "#888" }}>Desmarque</div>
             </div>
-            {/* Programas CSP y personalizados (con comité) */}
+            {/* Programas CSP y personalizados (con comit�) */}
             {todosProgramas.filter(p => p.id !== "habitabilidad").map(p => (
               <div key={p.id} onClick={() => seleccionarTipo("comite_" + p.id)}
                 style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "comite_" + p.id ? (p.color || "#7C3AED") : "#ddd"),
                   background: tipoSolicitud === "comite_" + p.id ? (p.colorLight || p.colorlight || "#F5F3FF") : "#fafafa", cursor: "pointer", textAlign: "center" }}>
                 <ProgramaFigura programa={p} size={58} />
                 <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "comite_" + p.id ? (p.color || "#7C3AED") : "#555", marginTop: 4 }}>{p.nombre}</div>
-                <div style={{ fontSize: 10, color: "#888" }}>{p.descripcion || "Con comité"}</div>
+                <div style={{ fontSize: 10, color: "#888" }}>{p.descripcion || "Con comit�"}</div>
               </div>
             ))}
-            {/* Sin comité */}
+            {/* Sin comit� */}
             <div onClick={() => seleccionarTipo("sincomite")}
               style={{ padding: "14px 16px", borderRadius: 10, border: "2px solid " + (tipoSolicitud === "sincomite" ? "#D97706" : "#ddd"),
                 background: tipoSolicitud === "sincomite" ? "#FFFBEB" : "#fafafa", cursor: "pointer", textAlign: "center" }}>
               <ProgramaFigura tipo="sincomite" size={58} />
-              <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "sincomite" ? "#D97706" : "#555", marginTop: 4 }}>Sin comité</div>
-              <div style={{ fontSize: 10, color: "#888" }}>Pendiente de asignación</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: tipoSolicitud === "sincomite" ? "#D97706" : "#555", marginTop: 4 }}>Sin comit�</div>
+              <div style={{ fontSize: 10, color: "#888" }}>Pendiente de asignaci�n</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Formulario solo aparece después de seleccionar tipo */}
+      {/* Formulario solo aparece despu�s de seleccionar tipo */}
       {(tipoSolicitud || comiteIdFijo) && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             {CAMPOS.map(([k, l, t, cols]) => {
-              // Cédula de identidad - campo normal con nota para subir cédula después
+              // C�dula de identidad - campo normal con nota para subir c�dula despu�s
               if (k === "rut" && tipoSolicitud === "desmarque") {
                 return (
                   <div key={k} style={{ gridColumn: "span 6" }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Cédula de identidad *</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>C�dula de identidad *</label>
                     <input value={formatRut(form.rut || "")}
                       onChange={e => setForm({...form, rut: limpiarRut(e.target.value)})}
-                      placeholder="Solo números y guión: 10398338-K"
+                      placeholder="Solo n�meros y gui�n: 10398338-K"
                       style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
-                    <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>⚠ Solo números y guión. Ej: 10398338-K → se mostrará 10.398.338-K</div>
+                    <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>? Solo n�meros y gui�n. Ej: 10398338-K ? se mostrar� 10.398.338-K</div>
                   </div>
                 );
               }
@@ -1548,26 +1548,26 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
                   {k === "rut" ? (
                     <><input value={formatRut(form.rut || "")}
                       onChange={e => setForm({ ...form, rut: limpiarRut(e.target.value) })}
-                      placeholder="Solo números y guión: 10398338-K"
+                      placeholder="Solo n�meros y gui�n: 10398338-K"
                       style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
-                    <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>⚠ Solo números y guión. Ej: 10398338-K → 10.398.338-K</div></>
+                    <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>? Solo n�meros y gui�n. Ej: 10398338-K ? 10.398.338-K</div></>
                   ) : (
                     <>
                       <input type={t} value={form[k] || ""} onChange={e => setForm({ ...form, [k]: k === "nombre" ? e.target.value.toLocaleUpperCase("es-CL") : e.target.value })}
                         placeholder={k === "nombre" ? "APELLIDOS PRIMERO, LUEGO NOMBRES" : ""}
                         style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
-                      {k === "nombre" && <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>Ingrese APELLIDOS primero y luego NOMBRES. Se guardará en MAYÚSCULAS.</div>}
+                      {k === "nombre" && <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>Ingrese APELLIDOS primero y luego NOMBRES. Se guardar� en MAY�SCULAS.</div>}
                     </>
                   )}
                 </div>
               );
             })}
 
-            {/* Selector de comité Rural/Urbano — carga desde Supabase + estáticos */}
+            {/* Selector de comit� Rural/Urbano � carga desde Supabase + est�ticos */}
             {!comiteIdFijo && tipoSolicitud && tipoSolicitud.startsWith("comite_") && (
               <div style={{ gridColumn: "span 12" }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>
-                  Comité * <span style={{ fontWeight: 400, color: "#9ca3af" }}>({comitesMerged.length} disponibles)</span>
+                  Comit� * <span style={{ fontWeight: 400, color: "#9ca3af" }}>({comitesMerged.length} disponibles)</span>
                 </label>
                 <select value={form.comiteId || ""} onChange={e => {
                   const sel = comitesMerged.find(c => c.id === e.target.value);
@@ -1576,36 +1576,36 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
                     : { ...form, comiteId: "", comite: "", tipo_comite: "" }
                   );
                 }} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (form.comiteId ? "#7C3AED" : "#ddd"), fontSize: 14, boxSizing: "border-box", background: "#fff" }}>
-                  <option value="">-- Seleccionar comité --</option>
+                  <option value="">-- Seleccionar comit� --</option>
                   {comitesMerged.map(c => (
-                    <option key={c.id} value={c.id}>{c.tipo === "RURAL" ? "🌾" : "🏙️"} {c.nombre}</option>
+                    <option key={c.id} value={c.id}>{c.tipo === "RURAL" ? "??" : "???"} {c.nombre}</option>
                   ))}
                 </select>
                 {form.comiteId && (
                   <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 5, fontWeight: 600 }}>
-                    ✓ {form.tipo_comite === "RURAL" ? "🌾 Rural" : "🏙️ Urbano"} — {form.comite}
+                    ? {form.tipo_comite === "RURAL" ? "?? Rural" : "??? Urbano"} � {form.comite}
                   </div>
                 )}
               </div>
             )}
 
-            {/* Campo motivo cuando no se asigna comité */}
+            {/* Campo motivo cuando no se asigna comit� */}
             {!comiteIdFijo && tipoSolicitud === "sincomite" && (
               <div style={{ gridColumn: "span 12" }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#D97706", display: "block", marginBottom: 5, textTransform: "uppercase" }}>
-                  ¿Motivo por el que no se asigna comité? *
+                  �Motivo por el que no se asigna comit�? *
                 </label>
                 <textarea value={motivoSinComite}
                   onChange={e => {
                     setMotivoSinComite(e.target.value);
                     setForm(f => ({ ...f, observaciones: e.target.value.trim() ? "Pendiente por: " + e.target.value.trim() : "" }));
                   }}
-                  placeholder="Ej: En espera de apertura de lista, pendiente de asignación por SERVIU..."
+                  placeholder="Ej: En espera de apertura de lista, pendiente de asignaci�n por SERVIU..."
                   rows={3}
                   style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (motivoSinComite.trim() ? "#D97706" : "#FCA5A5"), fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                 {motivoSinComite.trim() && (
                   <div style={{ fontSize: 11, color: "#D97706", marginTop: 4 }}>
-                    Se guardará como: <strong>"Pendiente por: {motivoSinComite.trim()}"</strong>
+                    Se guardar� como: <strong>"Pendiente por: {motivoSinComite.trim()}"</strong>
                   </div>
                 )}
               </div>
@@ -1624,7 +1624,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
                   </select>
                 </div>
                 <div style={{ gridColumn: "span 6" }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Año Subsidio *</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>A�o Subsidio *</label>
                   <input value={form.anio_subsidio || ""} onChange={e => setForm({ ...form, anio_subsidio: e.target.value })}
                     placeholder="Ej: 1989" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (!form.anio_subsidio ? "#FCA5A5" : "#ddd"), fontSize: 14, boxSizing: "border-box" }} />
                 </div>
@@ -1679,7 +1679,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
   );
 }
 
-// ─── VISTA SOLICITANTES ──────────────────────────────────────────────────────
+// --- VISTA SOLICITANTES ------------------------------------------------------
 function PersonasView({ personas, solicitudes, comites, onSave, onDetail, programasCustom }) {
   const [search, setSearch] = useState("");
   const [modoBusqueda, setModoBusqueda] = useState("cedula");
@@ -1728,25 +1728,25 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
   };
 
   const guardar = async () => {
-    if (!form.nombre.trim() || !form.rut.trim()) { alert("Nombre y cédula de identidad son obligatorios."); return; }
+    if (!form.nombre.trim() || !form.rut.trim()) { alert("Nombre y c�dula de identidad son obligatorios."); return; }
     if (!rutFormatoChilenoValido(form.rut)) {
-      alert("La cédula de identidad no es válida. Debe ingresar una cédula chilena con puntos, guion y dígito verificador correcto. Ejemplo: 10.398.338-K");
+      alert("La c�dula de identidad no es v�lida. Debe ingresar una c�dula chilena con puntos, guion y d�gito verificador correcto. Ejemplo: 10.398.338-K");
       return;
     }
     const rutFormateado = formatRut(form.rut);
     const rutLimpio = form.rut.replace(/[^0-9kK]/g, "").toLowerCase();
     const duplicado = personas.find(p => p.rut && p.rut.replace(/[^0-9kK]/g,"").toLowerCase() === rutLimpio);
-    if (duplicado) { alert("\u26A0 La cédula " + formatRut(form.rut) + " ya está registrada para: " + duplicado.nombre + ".\n\nNo se puede registrar el mismo solicitante dos veces."); return; }
+    if (duplicado) { alert("\u26A0 La c�dula " + formatRut(form.rut) + " ya est� registrada para: " + duplicado.nombre + ".\n\nNo se puede registrar el mismo solicitante dos veces."); return; }
     if (form.comiteId === "comite_desmarque") {
-      if (!form.telefono.trim()) { alert("El teléfono es obligatorio para Desmarque."); return; }
-      if (!form.direccion.trim()) { alert("La dirección es obligatoria para Desmarque."); return; }
+      if (!form.telefono.trim()) { alert("El tel�fono es obligatorio para Desmarque."); return; }
+      if (!form.direccion.trim()) { alert("La direcci�n es obligatoria para Desmarque."); return; }
       if (!form.tipo_comite) { alert("Debe seleccionar RURAL o URBANO."); return; }
-      if (!form.anio_subsidio) { alert("El año de subsidio es obligatorio."); return; }
+      if (!form.anio_subsidio) { alert("El a�o de subsidio es obligatorio."); return; }
       if (!form.rol_propiedad) { alert("El rol de la propiedad es obligatorio."); return; }
       if (!form.dominio_terreno) { alert("El documento de propiedad es obligatorio."); return; }
       if (!form.sector) { alert("El sector es obligatorio."); return; }
     }
-    // Generar N° Recepción automático basado en total de personas desmarque
+    // Generar N� Recepci�n autom�tico basado en total de personas desmarque
     const totalDesmarque = personas.filter(p => p.comiteId === "comite_desmarque").length + 1;
     const numeroRecepcion = form.comiteId === "comite_desmarque" ? String(totalDesmarque) : "";
     const fechaRecepcion = form.comiteId === "comite_desmarque" ? today() : "";
@@ -1790,11 +1790,11 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
         {["cedula", "nombre"].map(modo => (
           <button key={modo} onClick={() => { setModoBusqueda(modo); setSearch(""); }}
             style={{ border: "1.5px solid " + (modoBusqueda === modo ? "#1e3a5f" : "#e5e7eb"), background: modoBusqueda === modo ? "#1e3a5f" : "#fff", color: modoBusqueda === modo ? "#fff" : "#374151", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
-            {modo === "cedula" ? "Cédula" : "Nombre"}
+            {modo === "cedula" ? "C�dula" : "Nombre"}
           </button>
         ))}
         <input
-          placeholder={modoBusqueda === "cedula" ? "Buscar por cédula: 10398338-K" : "Buscar por nombre del solicitante"}
+          placeholder={modoBusqueda === "cedula" ? "Buscar por c�dula: 10398338-K" : "Buscar por nombre del solicitante"}
           value={search}
           onChange={e => setSearch(modoBusqueda === "cedula" ? limpiarRut(e.target.value) : e.target.value)}
           style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }}
@@ -1802,16 +1802,16 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
       </div>
       {modoBusqueda === "cedula" && searchActivo && !searchRutValido && (
         <div style={{ marginBottom: 18, fontSize: 12, color: "#DC2626", fontWeight: 700 }}>
-          La cédula debe ingresarse sin puntos, con guion y dígito verificador chileno correcto. Ejemplo: 10398338-K
+          La c�dula debe ingresarse sin puntos, con guion y d�gito verificador chileno correcto. Ejemplo: 10398338-K
         </div>
       )}
       {modoBusqueda === "cedula" && searchActivo && searchRutValido && (
         <div style={{ marginBottom: 18, fontSize: 12, color: "#059669", fontWeight: 700 }}>
-          Cédula válida: {searchRut}
+          C�dula v�lida: {searchRut}
         </div>
       )}
 
-      {filtered.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>{searchActivo ? (modoBusqueda === "cedula" ? "No hay solicitantes para esa cédula válida." : "No hay solicitantes con ese nombre.") : "No hay solicitantes registrados aun."}</div>}
+      {filtered.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>{searchActivo ? (modoBusqueda === "cedula" ? "No hay solicitantes para esa c�dula v�lida." : "No hay solicitantes con ese nombre.") : "No hay solicitantes registrados aun."}</div>}
 
       <div style={{ display: "grid", gap: 10 }}>
         {filtered.map(p => {
@@ -1821,8 +1821,8 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
           const comite = comites.find(c => c.id === p.comiteId);
           const esPrioritario = solicitantePrioritario(p.id, solicitudes);
 
-          // Detectar "Desmarque en trámite": tiene habitabilidad + otro programa,
-          // y Respuesta SERVIU no está aprobada
+          // Detectar "Desmarque en tr�mite": tiene habitabilidad + otro programa,
+          // y Respuesta SERVIU no est� aprobada
           const tieneHabitabilidad = solsAll.some(s => s.programaId === "habitabilidad");
           const tieneOtroPrograma = solsAll.some(s => s.programaId !== "habitabilidad");
           const respuestaAprobada = solsAll.some(s =>
@@ -1845,11 +1845,11 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
                 <div style={{ width: 44, height: 44, borderRadius: 22, background: esPrioritario ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
-                  <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
-                  {comite && <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 2 }}>● {comite.nombre}</div>}
+                  <div style={{ fontSize: 13, color: "#888" }}>C�dula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
+                  {comite && <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 2 }}>? {comite.nombre}</div>}
                   {desmarqueEnTramite && (
                     <div style={{ display: "inline-block", marginTop: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: 0.3 }}>
-                      ⚠ Desmarque en trámite
+                      ? Desmarque en tr�mite
                     </div>
                   )}
                   {esPrioritario && (
@@ -1879,16 +1879,16 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }}
           onClick={() => setPendingDeleteId(null)}>
           <div style={{ background:"#fff", borderRadius:14, padding:"28px 32px", width:400, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:16, fontWeight:700, color:"#DC2626", marginBottom:8 }}>🗑 Eliminar solicitante</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#DC2626", marginBottom:8 }}>?? Eliminar solicitante</div>
             <div style={{ fontSize:13, color:"#555", marginBottom:18, lineHeight:1.6 }}>
-              Esta acción es irreversible. Ingresa la clave de administrador para confirmar la eliminación.
+              Esta acci�n es irreversible. Ingresa la clave de administrador para confirmar la eliminaci�n.
             </div>
             <input type="password" autoComplete="new-password" autoFocus value={claveInput}
               onChange={e => { setClaveInput(e.target.value); setClaveError(false); }}
               onKeyDown={e => e.key === "Enter" && confirmarEliminar()}
               placeholder="Clave de administrador"
               style={{ width:"100%", padding:"10px 14px", borderRadius:8, border:"1.5px solid " + (claveError ? "#DC2626" : "#ddd"), fontSize:14, boxSizing:"border-box", marginBottom:claveError ? 6 : 20 }} />
-            {claveError && <div style={{ fontSize:12, color:"#DC2626", marginBottom:14 }}>⚠ Clave incorrecta. Intenta nuevamente.</div>}
+            {claveError && <div style={{ fontSize:12, color:"#DC2626", marginBottom:14 }}>? Clave incorrecta. Intenta nuevamente.</div>}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
               <button onClick={() => setPendingDeleteId(null)}
                 style={{ padding:"9px 18px", borderRadius:8, border:"1px solid #ddd", background:"#fff", fontSize:14, fontWeight:600, cursor:"pointer" }}>Cancelar</button>
@@ -1902,10 +1902,10 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
   );
 }
 
-// ─── DETALLE PERSONA ─────────────────────────────────────────────────────────
+// --- DETALLE PERSONA ---------------------------------------------------------
 
-// ─── FICHA RURAL ─────────────────────────────────────────────────────────────
-// Formatea YYYY-MM-DD → DD/MM/YYYY para mostrar en pantalla e impresos
+// --- FICHA RURAL -------------------------------------------------------------
+// Formatea YYYY-MM-DD ? DD/MM/YYYY para mostrar en pantalla e impresos
 function fmtFecha(f) {
   if (!f) return "";
   // YYYY-MM-DD
@@ -1913,7 +1913,7 @@ function fmtFecha(f) {
     const [y, m, d] = f.split("-");
     return d + "/" + m + "/" + y;
   }
-  return f; // ya está formateada o formato desconocido
+  return f; // ya est� formateada o formato desconocido
 }
 
 function calcularEdad(fechaNac) {
@@ -1982,7 +1982,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   }, [persona, modo]);
 
   const guardar = () => {
-    setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Rural?", fn: async () => {
+    setConfirmModal({ msg: "�Guardar los cambios de la Ficha Rural?", fn: async () => {
       const formFinal = protegerDatosFicha(form, persona, {
         adultoMayor: textoAdultoMayor(form.fechaNacimiento) || form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
@@ -2020,7 +2020,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   const campo = (label, valor) => (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 13, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 500 : 600, padding: "5px 0", borderBottom: "1px solid #f0ede8" }}>{valor || "⚠ Falta"}</div>
+      <div style={{ fontSize: 13, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 500 : 600, padding: "5px 0", borderBottom: "1px solid #f0ede8" }}>{valor || "? Falta"}</div>
     </div>
   );
 
@@ -2048,7 +2048,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   return (
     <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
       <div style={{ background: "#FFFBEB", borderBottom: "3px solid #D97706", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: "#D97706" }}>🌾 Ficha Rural — {persona.comite}</div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#D97706" }}>?? Ficha Rural � {persona.comite}</div>
         <div style={{ display: "flex", gap: 8 }}>
           {[["ver","Ver"],["editar","Editar"]].map(([k,l]) => (
             <button key={k} onClick={() => { setForm({...persona}); if (k==="ver") setCamposDesbloqueados(false); setModo(k); }}
@@ -2060,52 +2060,52 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
       <div style={{ padding: "20px 24px" }}>
         {modo === "ver" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <div style={sectionTitleStyle}>Información General</div>
-            {campo("Nombre del Comité", persona.comite)}
-            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId, comites) || persona.cargo_comite)}
+            <div style={sectionTitleStyle}>Informaci�n General</div>
+            {campo("Nombre del Comit�", persona.comite)}
+            {campo("Cargo en el Comit�", inferirCargo(persona.nombre, persona.comiteId, comites) || persona.cargo_comite)}
             {campo("Nombre Postulante", persona.nombre)}
-            {campo("Cédula de identidad", persona.rut)}
+            {campo("C�dula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
             {campo("Fecha de Nacimiento", fmtFecha(fechaNacFicha))}
-            {campo("Dirección", persona.direccion)}
+            {campo("Direcci�n", persona.direccion)}
             {campo("Coordenadas", persona.coordenadas)}
             {campo("Rol", persona.rol)}
-            {campo("Teléfono", persona.telefono)}
-            {campo("Correo electrónico", persona.email)}
+            {campo("Tel�fono", persona.telefono)}
+            {campo("Correo electr�nico", persona.email)}
             {campo("RSH %", rshFicha ? String(rshFicha).replace("%", "") + "%" : "")}
             {campo("Comuna RSH", persona.comuna)}
-            {campo("N° Integrantes", persona.integrantesFamiliares)}
+            {campo("N� Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
               const val = textoAdultoMayor(fechaNacFicha) || persona.adultoMayor || "";
               return campo("Adulto Mayor", val);
             })()}
 
-            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Técnica</div>
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>�rea T�cnica</div>
             {campo("Dominio Propiedad", persona.dominiopropiedad)}
-            {campo("N° FJS / Año", persona.nFJS)}
+            {campo("N� FJS / A�o", persona.nFJS)}
             {campo("Sistema de Agua Potable", persona.sistemaAgua)}
-            {campo("N° Servicio Agua", persona.nServicioAgua)}
-            {campo("Proveedor Eléctrico", persona.proveedorElectrico)}
-            {campo("N° Cliente Electricidad", persona.nClienteElectricidad)}
+            {campo("N� Servicio Agua", persona.nServicioAgua)}
+            {campo("Proveedor El�ctrico", persona.proveedorElectrico)}
+            {campo("N� Cliente Electricidad", persona.nClienteElectricidad)}
             {campo("Inf. Previas", persona.infPrevias || "N/A")}
             {campo("Antecedentes de la Vivienda", persona.antecedentesVivienda || "N/A")}
             {campo("Cert. Ruralidad", persona.certRuralidad)}
-            {campo("Avalúo Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
-            {campo("Permiso Edificación", persona.permisoEdificacion)}
-            {campo("Recepción Definitiva", persona.recepcionDefinitiva)}
+            {campo("Aval�o Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
+            {campo("Permiso Edificaci�n", persona.permisoEdificacion)}
+            {campo("Recepci�n Definitiva", persona.recepcionDefinitiva)}
             {campo("Constructora Seleccionada", constructoraDeComite(persona, comites))}
             {campo("Metros Viv. Original", persona.metrosOriginal)}
-            {campo("Metros Ampliación", persona.metrosAmpl)}
+            {campo("Metros Ampliaci�n", persona.metrosAmpl)}
             {campo("Metros No Regularizados", persona.metrosNoRegul)}
             {campo("Total Metros", persona.totalMetros)}
-            {campo("Modalidad Postulación DS49", persona.modalidadPostulacion)}
+            {campo("Modalidad Postulaci�n DS49", persona.modalidadPostulacion)}
 
-            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Social</div>
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>�rea Social</div>
             {campo("Discapacidad", persona.discapacidad)}
             {campo("Movilidad Reducida", persona.movilidadReducida)}
             {campo("Credencial/Cert. Discapacidad", persona.credencialDiscapacidad)}
-            {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
+            {campo("N� Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
             {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
             {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(rshFicha))}
@@ -2115,25 +2115,25 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
 
         {modo === "editar" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-            {seccion("Información General")}
+            {seccion("Informaci�n General")}
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comité</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comit�</label>
               <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#374151", fontWeight: 600 }}>
                 {inferirCargo(form.nombre, persona.comiteId, comites)}
-                <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(automático)</span>
+                <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(autom�tico)</span>
               </div>
             </div>
             {inp("Nombre Postulante", "nombre")}
-            {!esCsp && inp("Cédula de identidad", "rut")}
+            {!esCsp && inp("C�dula de identidad", "rut")}
             {!esCsp && inp("Fecha de Nacimiento", "fechaNacimiento", "date")}
-            {inp("Dirección", "direccion")}
+            {inp("Direcci�n", "direccion")}
             {inp("Coordenadas", "coordenadas")}
             {!esCsp && inp("Rol", "rol")}
-            {inp("Teléfono", "telefono")}
-            {inp("Correo electrónico", "email")}
+            {inp("Tel�fono", "telefono")}
+            {inp("Correo electr�nico", "email")}
             {!esCsp && inp("RSH %", "puntajeRSH")}
             {!esCsp && inp("Comuna RSH", "comuna")}
-            {!esCsp && inp("N° Integrantes", "integrantesFamiliares")}
+            {!esCsp && inp("N� Integrantes", "integrantesFamiliares")}
             {!esCsp && (
             <div>
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Estado Civil</label>
@@ -2151,7 +2151,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
                 const val = textoAdultoMayor(form.fechaNacimiento);
                 return val ? (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: e >= 60 ? "#FFFBEB" : "#f9fafb", border: "1.5px solid " + (e >= 60 ? "#D97706" : "#e5e7eb"), fontSize: 13, fontWeight: 700, color: e >= 60 ? "#D97706" : "#6b7280" }}>
-                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>(calculado automáticamente)</span>
+                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>(calculado autom�ticamente)</span>
                   </div>
                 ) : (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#9ca3af" }}>
@@ -2161,7 +2161,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
               })()}
             </div>}
 
-            {seccion("Área Técnica")}
+            {seccion("�rea T�cnica")}
             {!esCsp && (
             <div>
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Dominio Propiedad</label>
@@ -2188,19 +2188,19 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
               const lbl = (t) => <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{t}</label>;
               return (<>
                 <div>{lbl("FJS")} <input type="text" value={prefijo} placeholder="FJS" onChange={e => upd(e.target.value, numero, anio)} style={estilo} /></div>
-                <div>{lbl("N°")} <input type="text" value={numero} placeholder="25" onChange={e => upd(prefijo, e.target.value, anio)} style={estilo} /></div>
-                <div>{lbl("Año")} <input type="text" value={anio} placeholder="2026" onChange={e => upd(prefijo, numero, e.target.value)} style={estilo} /></div>
+                <div>{lbl("N�")} <input type="text" value={numero} placeholder="25" onChange={e => upd(prefijo, e.target.value, anio)} style={estilo} /></div>
+                <div>{lbl("A�o")} <input type="text" value={anio} placeholder="2026" onChange={e => upd(prefijo, numero, e.target.value)} style={estilo} /></div>
               </>);
             })()}
             {!esCsp && inp("Sistema de Agua Potable", "sistemaAgua")}
-            {!esCsp && inp("N° Servicio Agua", "nServicioAgua")}
-            {!esCsp && inp("Proveedor Eléctrico", "proveedorElectrico")}
+            {!esCsp && inp("N� Servicio Agua", "nServicioAgua")}
+            {!esCsp && inp("Proveedor El�ctrico", "proveedorElectrico")}
             {esCsp ? (
               <div>
-                <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>N° Cliente Electricidad</label>
-                <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#555" }}>{form.nClienteElectricidad || <span style={{ color: "#9ca3af" }}>— (se sincroniza desde la solicitud)</span>}</div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>N� Cliente Electricidad</label>
+                <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#555" }}>{form.nClienteElectricidad || <span style={{ color: "#9ca3af" }}>� (se sincroniza desde la solicitud)</span>}</div>
               </div>
-            ) : inp("N° Cliente Electricidad", "nClienteElectricidad")}
+            ) : inp("N� Cliente Electricidad", "nClienteElectricidad")}
             {!esCsp && inp("Inf. Previas", "infPrevias")}
             {!esCsp && inp("Antecedentes de la Vivienda", "antecedentesVivienda")}
             {!esCsp && (
@@ -2215,16 +2215,16 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
               </select>
             </div>
             )}
-            {!esCsp && inp("Avalúo Fiscal", "avaluoFiscal")}
-            {inp("Permiso Edificación", "permisoEdificacion")}
-            {inp("Recepción Definitiva", "recepcionDefinitiva")}
+            {!esCsp && inp("Aval�o Fiscal", "avaluoFiscal")}
+            {inp("Permiso Edificaci�n", "permisoEdificacion")}
+            {inp("Recepci�n Definitiva", "recepcionDefinitiva")}
             {inp("Constructora Seleccionada", "constructoraSeleccionada")}
             {inp("Metros Viv. Original", "metrosOriginal")}
-            {inp("Metros Ampliación", "metrosAmpl")}
+            {inp("Metros Ampliaci�n", "metrosAmpl")}
             {inp("Metros No Regularizados", "metrosNoRegul")}
             {inp("Total Metros", "totalMetros")}
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Modalidad Postulación</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Modalidad Postulaci�n</label>
               <select value={form.modalidadPostulacion || ""} onChange={e => setForm({...form, modalidadPostulacion: e.target.value})}
                 style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
                 <option value="">-- Seleccionar --</option>
@@ -2235,7 +2235,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
               </select>
             </div>
 
-            {seccion("Área Social")}
+            {seccion("�rea Social")}
             {!esCsp && (() => {
               const discNoAplica = form.discapacidad === "N/A" || (form.discapacidad || "").toLowerCase().includes("sin");
               const lockStyle = { padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#6b7280" };
@@ -2249,13 +2249,13 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
                 setForm({ ...form, discapacidad: val, ...(noAplica ? { movilidadReducida: "N/A", credencialDiscapacidad: "N/A" } : {}) });
               }} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, background: "#fff" }}>
                 <option value="">-- Seleccionar --</option>
-                <option value="S">S - Sí</option>
+                <option value="S">S - S�</option>
                 <option value="N">N - No</option>
                 <option value="N/A">N/A</option>
               </select>
             </div>
             {discNoAplica ? (
-              <div>{lockLabel("Movilidad Reducida")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+              <div>{lockLabel("Movilidad Reducida")}<div style={lockStyle}>N/A � sin discapacidad</div></div>
             ) : (
               <div>
                 {lockLabel("Movilidad Reducida")}
@@ -2267,10 +2267,10 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
                 </select>
               </div>
             )}
-            {inp("N° Cuenta de Ahorro", "cuentaAhorro")}
+            {inp("N� Cuenta de Ahorro", "cuentaAhorro")}
             {inp("Banco", "banco")}
             {discNoAplica ? (
-              <div>{lockLabel("Credencial/Cert. Discapacidad")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+              <div>{lockLabel("Credencial/Cert. Discapacidad")}<div style={lockStyle}>N/A � sin discapacidad</div></div>
             ) : inp("Credencial/Cert. Discapacidad", "credencialDiscapacidad")}
               </>);
             })()}
@@ -2295,7 +2295,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   );
 }
 
-// ─── FICHA URBANA ─────────────────────────────────────────────────────────────
+// --- FICHA URBANA -------------------------------------------------------------
 function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   const [modo, setModo] = useState("ver");
   const [form, setForm] = useState({ ...persona });
@@ -2308,7 +2308,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   }, [persona, modo]);
 
   const guardar = () => {
-    setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Urbana?", fn: async () => {
+    setConfirmModal({ msg: "�Guardar los cambios de la Ficha Urbana?", fn: async () => {
       const formFinal = protegerDatosFicha(form, persona, {
         adultoMayor: textoAdultoMayor(form.fechaNacimiento) || form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
@@ -2346,7 +2346,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   const campo = (label, valor) => (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 13, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 500 : 600, padding: "5px 0", borderBottom: "1px solid #f0ede8" }}>{valor || "⚠ Falta"}</div>
+      <div style={{ fontSize: 13, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 500 : 600, padding: "5px 0", borderBottom: "1px solid #f0ede8" }}>{valor || "? Falta"}</div>
     </div>
   );
 
@@ -2374,7 +2374,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   return (
     <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
       <div style={{ background: "#ECFDF5", borderBottom: "3px solid #059669", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: "#059669" }}>🏙️ Ficha Urbana — {persona.comite}</div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#059669" }}>??? Ficha Urbana � {persona.comite}</div>
         <div style={{ display: "flex", gap: 8 }}>
           {[["ver","Ver"],["editar","Editar"]].map(([k,l]) => (
             <button key={k} onClick={() => { setForm({...persona}); if (k==="ver") setCamposDesbloqueados(false); setModo(k); }}
@@ -2386,51 +2386,51 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
       <div style={{ padding: "20px 24px" }}>
         {modo === "ver" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <div style={sectionTitleStyle}>Información General</div>
-            {campo("Nombre del Comité", persona.comite)}
-            {campo("Cargo en el Comité", inferirCargo(persona.nombre, persona.comiteId, comites) || persona.cargo_comite)}
+            <div style={sectionTitleStyle}>Informaci�n General</div>
+            {campo("Nombre del Comit�", persona.comite)}
+            {campo("Cargo en el Comit�", inferirCargo(persona.nombre, persona.comiteId, comites) || persona.cargo_comite)}
             {campo("Nombre Postulante", persona.nombre)}
-            {campo("Cédula de identidad", persona.rut)}
+            {campo("C�dula de identidad", persona.rut)}
             {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
             {campo("Fecha de Nacimiento", fmtFecha(fechaNacFicha))}
-            {campo("Dirección", persona.direccion)}
+            {campo("Direcci�n", persona.direccion)}
             {campo("Coordenadas", persona.coordenadas)}
             {campo("Rol", persona.rol)}
-            {campo("Teléfono", persona.telefono)}
-            {campo("Correo electrónico", persona.email)}
+            {campo("Tel�fono", persona.telefono)}
+            {campo("Correo electr�nico", persona.email)}
             {campo("RSH %", rshFicha ? String(rshFicha).replace("%", "") + "%" : "")}
             {campo("Comuna RSH", persona.comuna)}
-            {campo("N° Integrantes", persona.integrantesFamiliares)}
+            {campo("N� Integrantes", persona.integrantesFamiliares)}
             {campo("Estado Civil", persona.estadoCivil)}
             {(() => {
               const val = textoAdultoMayor(fechaNacFicha) || persona.adultoMayor || "";
               return campo("Adulto Mayor", val);
             })()}
 
-            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Técnica</div>
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>�rea T�cnica</div>
             {campo("Dominio Propiedad", persona.dominiopropiedad)}
-            {campo("N° FJS / Año", persona.nFJS)}
+            {campo("N� FJS / A�o", persona.nFJS)}
             {campo("Informaciones Previas", persona.informacionesPrevias || "N/A")}
             {campo("Antecedentes de la Vivienda", persona.antecedentesVivienda || "N/A")}
             {campo("Sistema de Agua Potable", persona.sistemaAgua)}
-            {campo("N° Servicio Agua", persona.nServicioAgua)}
-            {campo("Proveedor Eléctrico", persona.proveedorElectrico)}
-            {campo("N° Cliente Electricidad", persona.nClienteElectricidad)}
-            {campo("Avalúo Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
-            {campo("Permiso Edificación", persona.permisoEdificacion)}
-            {campo("Recepción Definitiva", persona.recepcionDefinitiva)}
+            {campo("N� Servicio Agua", persona.nServicioAgua)}
+            {campo("Proveedor El�ctrico", persona.proveedorElectrico)}
+            {campo("N� Cliente Electricidad", persona.nClienteElectricidad)}
+            {campo("Aval�o Fiscal", formatPesosChilenos(persona.avaluoFiscal))}
+            {campo("Permiso Edificaci�n", persona.permisoEdificacion)}
+            {campo("Recepci�n Definitiva", persona.recepcionDefinitiva)}
             {campo("Constructora Seleccionada", constructoraDeComite(persona, comites))}
             {campo("Metros Viv. Original", persona.metrosOriginal)}
-            {campo("Metros Ampliación", persona.metrosAmpl)}
+            {campo("Metros Ampliaci�n", persona.metrosAmpl)}
             {campo("Metros No Regularizados", persona.metrosNoRegul)}
             {campo("Total Metros", persona.totalMetros)}
-            {campo("Modalidad Postulación", persona.modalidadPostulacion)}
+            {campo("Modalidad Postulaci�n", persona.modalidadPostulacion)}
 
-            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>Área Social</div>
+            <div style={{ ...sectionTitleStyle, marginTop: 10 }}>�rea Social</div>
             {campo("Discapacidad", persona.discapacidad)}
             {campo("Movilidad Reducida", persona.movilidadReducida)}
             {campo("Credencial/Cert. Discapacidad", persona.credencialDiscapacidad)}
-            {campo("N° Cuenta de Ahorro", persona.cuentaAhorro)}
+            {campo("N� Cuenta de Ahorro", persona.cuentaAhorro)}
             {campo("Banco", persona.banco)}
             {campo("Subsidio Anterior", mostrarSiNo(persona.subsidioAnterior))}
             {campo("Ahorro para Postular (UF)", persona.ahorroPostular || calcularAhorro(rshFicha))}
@@ -2440,25 +2440,25 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
 
         {modo === "editar" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-            {seccion("Información General")}
+            {seccion("Informaci�n General")}
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comité</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Cargo en el Comit�</label>
               <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#374151", fontWeight: 600 }}>
                 {inferirCargo(form.nombre, persona.comiteId, comites)}
-                <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(automático)</span>
+                <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400, marginLeft: 6 }}>(autom�tico)</span>
               </div>
             </div>
             {inp("Nombre Postulante", "nombre")}
-            {!esCsp && inp("Cédula de identidad", "rut")}
+            {!esCsp && inp("C�dula de identidad", "rut")}
             {!esCsp && inp("Fecha de Nacimiento", "fechaNacimiento", "date")}
-            {inp("Dirección", "direccion")}
+            {inp("Direcci�n", "direccion")}
             {inp("Coordenadas", "coordenadas")}
             {!esCsp && inp("Rol", "rol")}
-            {inp("Teléfono", "telefono")}
-            {inp("Correo electrónico", "email")}
+            {inp("Tel�fono", "telefono")}
+            {inp("Correo electr�nico", "email")}
             {!esCsp && inp("RSH %", "puntajeRSH")}
             {!esCsp && inp("Comuna RSH", "comuna")}
-            {!esCsp && inp("N° Integrantes", "integrantesFamiliares")}
+            {!esCsp && inp("N� Integrantes", "integrantesFamiliares")}
             {!esCsp && (
             <div>
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Estado Civil</label>
@@ -2476,7 +2476,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
                 const val = textoAdultoMayor(form.fechaNacimiento);
                 return val ? (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: e >= 60 ? "#ECFDF5" : "#f9fafb", border: "1.5px solid " + (e >= 60 ? "#059669" : "#e5e7eb"), fontSize: 13, fontWeight: 700, color: e >= 60 ? "#059669" : "#6b7280" }}>
-                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>(calculado automáticamente)</span>
+                    {val} <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>(calculado autom�ticamente)</span>
                   </div>
                 ) : (
                   <div style={{ padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#9ca3af" }}>
@@ -2486,7 +2486,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
               })()}
             </div>}
 
-            {seccion("Área Técnica")}
+            {seccion("�rea T�cnica")}
             {!esCsp && (
             <div>
               <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Dominio Propiedad</label>
@@ -2514,30 +2514,30 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
               const lbl = (t) => <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{t}</label>;
               return (<>
                 <div>{lbl("FJS")} <input type="text" value={prefijo} placeholder="FJS" onChange={e => upd(e.target.value, numero, anio)} style={estilo} /></div>
-                <div>{lbl("N°")} <input type="text" value={numero} placeholder="25" onChange={e => upd(prefijo, e.target.value, anio)} style={estilo} /></div>
-                <div>{lbl("Año")} <input type="text" value={anio} placeholder="2026" onChange={e => upd(prefijo, numero, e.target.value)} style={estilo} /></div>
+                <div>{lbl("N�")} <input type="text" value={numero} placeholder="25" onChange={e => upd(prefijo, e.target.value, anio)} style={estilo} /></div>
+                <div>{lbl("A�o")} <input type="text" value={anio} placeholder="2026" onChange={e => upd(prefijo, numero, e.target.value)} style={estilo} /></div>
               </>);
             })()}
             {!esCsp && inp("Antecedentes de la Vivienda", "antecedentesVivienda")}
             {!esCsp && inp("Sistema de Agua Potable", "sistemaAgua")}
-            {!esCsp && inp("N° Servicio Agua", "nServicioAgua")}
-            {!esCsp && inp("Proveedor Eléctrico", "proveedorElectrico")}
+            {!esCsp && inp("N� Servicio Agua", "nServicioAgua")}
+            {!esCsp && inp("Proveedor El�ctrico", "proveedorElectrico")}
             {esCsp ? (
               <div>
-                <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>N° Cliente Electricidad</label>
-                <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#555" }}>{form.nClienteElectricidad || <span style={{ color: "#9ca3af" }}>— (se sincroniza desde la solicitud)</span>}</div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>N� Cliente Electricidad</label>
+                <div style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#f9fafb", color: "#555" }}>{form.nClienteElectricidad || <span style={{ color: "#9ca3af" }}>� (se sincroniza desde la solicitud)</span>}</div>
               </div>
-            ) : inp("N° Cliente Electricidad", "nClienteElectricidad")}
-            {!esCsp && inp("Avalúo Fiscal", "avaluoFiscal")}
-            {inp("Permiso Edificación", "permisoEdificacion")}
-            {inp("Recepción Definitiva", "recepcionDefinitiva")}
+            ) : inp("N� Cliente Electricidad", "nClienteElectricidad")}
+            {!esCsp && inp("Aval�o Fiscal", "avaluoFiscal")}
+            {inp("Permiso Edificaci�n", "permisoEdificacion")}
+            {inp("Recepci�n Definitiva", "recepcionDefinitiva")}
             {inp("Constructora Seleccionada", "constructoraSeleccionada")}
             {inp("Metros Viv. Original", "metrosOriginal")}
-            {inp("Metros Ampliación", "metrosAmpl")}
+            {inp("Metros Ampliaci�n", "metrosAmpl")}
             {inp("Metros No Regularizados", "metrosNoRegul")}
             {inp("Total Metros", "totalMetros")}
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Modalidad Postulación</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Modalidad Postulaci�n</label>
               <select value={form.modalidadPostulacion || ""} onChange={e => setForm({...form, modalidadPostulacion: e.target.value})}
                 style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, background: "#fff" }}>
                 <option value="">-- Seleccionar --</option>
@@ -2546,7 +2546,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
               </select>
             </div>
 
-            {seccion("Área Social")}
+            {seccion("�rea Social")}
             {!esCsp && (() => {
               const discNoAplica = form.discapacidad === "N/A" || (form.discapacidad || "").toLowerCase().includes("sin");
               const lockStyle = { padding: "7px 10px", borderRadius: 7, background: "#f9fafb", border: "1.5px solid #e5e7eb", fontSize: 13, color: "#6b7280" };
@@ -2560,13 +2560,13 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
                 setForm({ ...form, discapacidad: val, ...(noAplica ? { movilidadReducida: "N/A", credencialDiscapacidad: "N/A" } : {}) });
               }} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, background: "#fff" }}>
                 <option value="">-- Seleccionar --</option>
-                <option value="S">S - Sí</option>
+                <option value="S">S - S�</option>
                 <option value="N">N - No</option>
                 <option value="N/A">N/A</option>
               </select>
             </div>
             {discNoAplica ? (
-              <div>{lockLabel("Movilidad Reducida")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+              <div>{lockLabel("Movilidad Reducida")}<div style={lockStyle}>N/A � sin discapacidad</div></div>
             ) : (
               <div>
                 {lockLabel("Movilidad Reducida")}
@@ -2578,10 +2578,10 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
                 </select>
               </div>
             )}
-            {inp("N° Cuenta de Ahorro", "cuentaAhorro")}
+            {inp("N� Cuenta de Ahorro", "cuentaAhorro")}
             {inp("Banco", "banco")}
             {discNoAplica ? (
-              <div>{lockLabel("Credencial/Cert. Discapacidad")}<div style={lockStyle}>N/A — sin discapacidad</div></div>
+              <div>{lockLabel("Credencial/Cert. Discapacidad")}<div style={lockStyle}>N/A � sin discapacidad</div></div>
             ) : inp("Credencial/Cert. Discapacidad", "credencialDiscapacidad")}
               </>);
             })()}
@@ -2643,24 +2643,24 @@ function FichaProgramaCustom({ persona, programa, solicitud }) {
 
   const datos = [
     dato("Nombre", persona.nombre),
-    dato("Cédula de identidad", persona.rut),
+    dato("C�dula de identidad", persona.rut),
     dato("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(solicitud ? [solicitud] : [])),
     dato("Fecha de ingreso", persona.fechaIngreso || persona.fecha_ingreso),
     dato("Fecha de nacimiento", persona.fechaNacimiento || persona.fecha_nacimiento),
-    dato("Teléfono", persona.telefono),
-    dato("Dirección", persona.direccion),
+    dato("Tel�fono", persona.telefono),
+    dato("Direcci�n", persona.direccion),
     dato("Correo", persona.email || persona.correo),
     dato("Comuna", persona.comuna),
-    dato("Comité", persona.comite),
+    dato("Comit�", persona.comite),
     dato("RSH", persona.puntajeRSH || persona.puntaje_rsh),
     dato("Estado civil", persona.estadoCivil || persona.estadocivil || persona.estado_civil),
-    dato("N° integrantes", persona.integrantesFamiliares || persona.integrantes_familiares),
-    dato("N° cuenta ahorro", persona.numero_cuenta_ahorro || persona.cuentaAhorro || persona.cuentaahorro),
+    dato("N� integrantes", persona.integrantesFamiliares || persona.integrantes_familiares),
+    dato("N� cuenta ahorro", persona.numero_cuenta_ahorro || persona.cuentaAhorro || persona.cuentaahorro),
     dato("Banco", persona.banco),
     dato("Ingreso familiar UF", persona.ingreso_familiar_uf),
     dato("Subsidio anterior", mostrarSiNo(persona.subsidioAnterior || persona.subsidio_anterior)),
     dato("Rol propiedad", persona.rol_propiedad || persona.rol),
-    dato("Avalúo fiscal", persona.avaluoFiscal || persona.avaluofiscal),
+    dato("Aval�o fiscal", persona.avaluoFiscal || persona.avaluofiscal),
     dato("Coordenadas", persona.coordenadas),
     dato("Observaciones", persona.observaciones),
   ].filter(Boolean);
@@ -2685,7 +2685,7 @@ function FichaProgramaCustom({ persona, programa, solicitud }) {
         </div>
       ) : (
         <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 14, color: "#94a3b8", fontSize: 13 }}>
-          Aún no hay datos cargados para mostrar en esta ficha.
+          A�n no hay datos cargados para mostrar en esta ficha.
         </div>
       )}
 
@@ -2726,7 +2726,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [subiendo, setSubiendo] = useState(false);
   const [showModalComprobante, setShowModalComprobante] = useState(false);
   const [showDesbloquearRespuesta, setShowDesbloquearRespuesta] = useState(false);
-  const [solsEditando, setSolsEditando] = useState({}); // {solId: true} para habilitar edición
+  const [solsEditando, setSolsEditando] = useState({}); // {solId: true} para habilitar edici�n
   const [showModalEmigrar, setShowModalEmigrar] = useState(false);
   const [programaEmigrar, setProgramaEmigrar] = useState("");
   const [showDesbloquearPrograma, setShowDesbloquearPrograma] = useState(false);
@@ -2756,12 +2756,12 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     problemas: [],
     nuevoProblema: "",
     deTipo: "marcelo",
-    deNombre: "MARCELO CIFUENTES VÁSQUEZ",
+    deNombre: "MARCELO CIFUENTES V�SQUEZ",
     deCargo: "ENCARGADO ENTIDAD PATROCINANTE",
     deInstitucion: "MUNICIPALIDAD DE LAUTARO",
     deIniciales: "MCV/mcv",
     aTipo: "eduardo",
-    aNombre: "SEÑOR EDUARDO BUSTOS VALDEBENITO",
+    aNombre: "SE�OR EDUARDO BUSTOS VALDEBENITO",
     aCargo: "DIRECTOR DE OBRAS",
     aInstitucion: "MUNICIPALIDAD DE LAUTARO",
     aTrato: "PRESENTE."
@@ -2770,14 +2770,14 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const cartaInicial = {
     numero: "",
     deTipo: "marcelo",
-    deNombre: "MARCELO CIFUENTES VÁSQUEZ",
+    deNombre: "MARCELO CIFUENTES V�SQUEZ",
     deCargo: "ENCARGADO ENTIDAD PATROCINANTE",
     deInstitucion: "MUNICIPALIDAD DE LAUTARO",
     deIniciales: "MCV/mcv",
     aTipo: "marco",
-    aNombre: "SEÑOR MARCO SEGUEL REYES",
+    aNombre: "SE�OR MARCO SEGUEL REYES",
     aCargo: "DIRECTOR DE SERVIU (S)",
-    aInstitucion: "REGIÓN DE LA ARAUCANIA",
+    aInstitucion: "REGI�N DE LA ARAUCANIA",
     aTrato: "PRESENTE."
   };
   const [formCarta, setFormCarta] = useState(cartaInicial);
@@ -2867,7 +2867,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
 
   const guardarFechaVisitaDesmarque = async (sol, fecha) => {
     const fechaAnterior = fechaVisitaSolicitud(sol);
-    if (!fecha && fechaAnterior && !window.confirm("¿Quitar la fecha de visita registrada?")) {
+    if (!fecha && fechaAnterior && !window.confirm("�Quitar la fecha de visita registrada?")) {
       onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior }));
       return false;
     }
@@ -2885,7 +2885,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       console.warn("[fecha visita documentos] error:", docsError.message);
       const docsAnteriores = documentosConFechaVisita(sol.documentos || [], fechaAnterior);
       onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior, documentos: docsAnteriores }));
-      alert("No se pudo guardar la fecha de visita. No se modificó el registro.");
+      alert("No se pudo guardar la fecha de visita. No se modific� el registro.");
       return false;
     }
 
@@ -2938,7 +2938,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     try {
       const { data, error } = await supabase.from("visitas").select("*").eq("persona_id", personaId).order("fecha", { ascending: false });
       if (error) {
-        if (error.code === "PGRST205") console.warn("[visitas] Tabla 'visitas' no existe aún. Ejecuta supabase_migration.sql en el Dashboard.");
+        if (error.code === "PGRST205") console.warn("[visitas] Tabla 'visitas' no existe a�n. Ejecuta supabase_migration.sql en el Dashboard.");
         else console.warn("[visitas] error:", error.message);
         setVisitas(prev => fusionarVisitas(prev, respaldo));
         return;
@@ -2947,7 +2947,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       setVisitas(combinadas);
       if (respaldo.length < combinadas.length) respaldarVisitasEnSolicitud(combinadas).catch(() => {});
     } catch (err) {
-      console.warn("[cargarVisitas] excepción:", err.message);
+      console.warn("[cargarVisitas] excepci�n:", err.message);
       setVisitas(prev => fusionarVisitas(prev, respaldo));
     }
   };
@@ -2959,8 +2959,8 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     const buildLineas = (checks) => progDocs
       .filter(d => checks[d.id])
       .map(d => d.subopciones && typeof checks[d.id] === "string"
-        ? `• ${d.label} (${checks[d.id]})`
-        : `• ${d.label}`);
+        ? `� ${d.label} (${checks[d.id]})`
+        : `� ${d.label}`);
     const lineas = buildLineas(formVisita.checksDocs);
     if (formVisita.otrosSolicitud.trim()) lineas.push(`Otros: ${formVisita.otrosSolicitud.trim()}`);
     const recibidosLineas = buildLineas(formVisita.checksDocsRecibidos);
@@ -2993,7 +2993,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     const listaFinal = fusionarVisitas([nueva], visitas);
     const persistidaRespaldo = await respaldarVisitasEnSolicitud(listaFinal);
     if (!persistidaTabla && !persistidaRespaldo) {
-      alert("No se pudo guardar la visita en Supabase. No se cerrará el formulario para evitar pérdida de datos.");
+      alert("No se pudo guardar la visita en Supabase. No se cerrar� el formulario para evitar p�rdida de datos.");
       setGuardandoVisita(false);
       return;
     }
@@ -3005,7 +3005,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   };
 
   const asignarComite = async () => {
-    const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
+    const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[`-?]/g,"").replace(/\s+/g," ");
     const todosComites = [
       ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo })),
       ...(comites||[]).filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
@@ -3020,7 +3020,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   };
 
   const eliminarVisita = async (id) => {
-    if (!window.confirm("¿Eliminar esta visita?")) return;
+    if (!window.confirm("�Eliminar esta visita?")) return;
     const { error } = await supabase.from("visitas").delete().eq("id", id);
     if (error) console.warn("[visitas delete] error:", error.message);
     const restantes = visitas.filter(v => v.id !== id);
@@ -3031,7 +3031,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const imprimirVisita = (v) => {
     const win = window.open("", "_blank", "width=820,height=700");
     win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Visita — ${persona.nombre}</title>
+<title>Visita � ${persona.nombre}</title>
 <style>
   @page { margin: 2.2cm 2cm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3072,14 +3072,14 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   </div>
   <div class="field">
     <div class="field-label">RUT</div>
-    <div class="field-value">${persona.rut || "—"}</div>
+    <div class="field-value">${persona.rut || "�"}</div>
   </div>
   <div class="field">
     <div class="field-label">Fecha de visita</div>
     <div class="field-value">${fmtFecha(v.fecha)}</div>
   </div>
   <div class="field">
-    <div class="field-label">Profesional que atendió</div>
+    <div class="field-label">Profesional que atendi�</div>
     <div class="field-value">${v.profesional}</div>
   </div>
 </div>
@@ -3088,21 +3088,21 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
 
 <div class="field" style="margin-bottom:16px">
   <div class="field-label" style="margin-bottom:6px">Documentos / solicitudes al postulante</div>
-  <div class="docs-box">${v.solicitud ? v.solicitud.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "—"}</div>
+  <div class="docs-box">${v.solicitud ? v.solicitud.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "�"}</div>
 </div>
 
 <div class="field">
   <div class="field-label" style="margin-bottom:6px">Compromiso del solicitante</div>
-  <div class="comprob-box">${v.compromiso ? v.compromiso.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "—"}</div>
+  <div class="comprob-box">${v.compromiso ? v.compromiso.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "�"}</div>
 </div>
 
 ${v.docs_recibidos || v.profesional_recibio ? `
 <hr class="divider">
 <div class="field" style="margin-bottom:${v.profesional_recibio ? "10px" : "16px"}">
   <div class="field-label" style="margin-bottom:6px;color:#059669">Documentos recibidos en esta visita</div>
-  <div class="docs-box" style="border-left:3px solid #059669">${v.docs_recibidos ? v.docs_recibidos.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "—"}</div>
+  <div class="docs-box" style="border-left:3px solid #059669">${v.docs_recibidos ? v.docs_recibidos.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : "�"}</div>
 </div>
-${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesional que recibió los documentos</div><div class="field-value" style="border-left-color:#059669">${v.profesional_recibio}</div></div>` : ""}
+${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesional que recibi� los documentos</div><div class="field-value" style="border-left-color:#059669">${v.profesional_recibio}</div></div>` : ""}
 ` : ""}
 
 <div class="firmas">
@@ -3110,7 +3110,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   <div class="firma-line">Firma del solicitante<br><span style="font-weight:600">${persona.nombre}</span></div>
 </div>
 
-<div class="footer-note">Unidad de Vivienda · Ilustre Municipalidad de Lautaro · Propietario del software: JACC</div>
+<div class="footer-note">Unidad de Vivienda � Ilustre Municipalidad de Lautaro � Propietario del software: JACC</div>
 </body></html>`);
     win.document.close();
     win.focus();
@@ -3120,13 +3120,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   // Sincroniza campos de persona a Supabase y estado local
   const syncPersona = async (fields) => {
     if (!persona) return;
-    // Mapeo completo camelCase → snake_case para columnas de Supabase
+    // Mapeo completo camelCase ? snake_case para columnas de Supabase
     const snakeMap = {
       fechaNacimiento:       "fecha_nacimiento",
       integrantesFamiliares: "integrantes_familiares",
       puntajeRSH:            "puntaje_rsh",
       comiteId:              "comite_id",
-      // Campos técnicos ficha (DB los guarda en minúsculas)
+      // Campos t�cnicos ficha (DB los guarda en min�sculas)
       nFJS:                  "nfjs",
       sistemaAgua:           "sistemaagua",
       nServicioAgua:         "nservicioagua",
@@ -3163,7 +3163,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     try {
       const { error } = await supabase.from("personas").update(dbFields).eq("id", persona.id);
       if (error) console.warn("[syncPersona] error al actualizar campo(s):", Object.keys(dbFields), error.message);
-    } catch (err) { console.warn("[syncPersona] excepción:", err.message); }
+    } catch (err) { console.warn("[syncPersona] excepci�n:", err.message); }
     onSavePersonas(personas.map(p => {
       if (p.id !== persona.id) return p;
       const actualizado = { ...p, ...fields };
@@ -3176,7 +3176,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const guardarLineaTiempoPersonaCsp = async () => {
     if (!persona) return;
-    if (!window.confirm("¿Está seguro de guardar los cambios de la línea de tiempo de este solicitante?")) return;
+    if (!window.confirm("�Est� seguro de guardar los cambios de la l�nea de tiempo de este solicitante?")) return;
     setGuardandoLineaTiempoPersona(true);
     try {
       await syncPersona({ lineaTiempoCsp: lineaTiempoPersonaCsp, linea_tiempo_csp: lineaTiempoPersonaCsp });
@@ -3186,7 +3186,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       });
     } catch (err) {
       console.warn("[linea tiempo solicitante csp]", err?.message || err);
-      alert("No se pudo guardar la línea de tiempo del solicitante. Revise la conexión e intente nuevamente.");
+      alert("No se pudo guardar la l�nea de tiempo del solicitante. Revise la conexi�n e intente nuevamente.");
     } finally {
       setGuardandoLineaTiempoPersona(false);
       setEditandoLineaTiempoPersona(false);
@@ -3260,8 +3260,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         tipo,
         desc ? "Detalle: " + desc : "",
         fjs ? "Fjs: " + fjs : "",
-        numero ? "N°: " + numero : "",
-        anio ? "Año: " + anio : "",
+        numero ? "N�: " + numero : "",
+        anio ? "A�o: " + anio : "",
       ].filter(Boolean);
       return partes.join(" - ");
     };
@@ -3298,7 +3298,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           agregar(updates, "credencialDiscapacidad", p[5] === "N/A" ? "N/A" : p[5]);
           agregar(updates, "movilidadReducida", p[6]);
         }
-        if (n.includes("avaluo") || n.includes("avalúo")) {
+        if (n.includes("avaluo") || n.includes("aval�o")) {
           const p = valor.split("|");
           const rol = limpiar(p[0]);
           const avaluo = formatPesosChilenos(p[1] || "");
@@ -3443,7 +3443,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       } catch { return []; }
     };
 
-    // 1. Filesystem (servidor local) — falla silenciosamente si el servidor no está
+    // 1. Filesystem (servidor local) � falla silenciosamente si el servidor no est�
     const [nuevos, viejos] = await Promise.all([
       fetchLista(carpeta),
       carpeta !== carpetaVieja ? fetchLista(carpetaVieja) : Promise.resolve([])
@@ -3454,7 +3454,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     nuevos.forEach(f => { rutasMap[f] = carpeta; });
     viejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
 
-    // 2. Supabase — completamente independiente, no afecta al resultado del filesystem
+    // 2. Supabase � completamente independiente, no afecta al resultado del filesystem
     let supaNames = [];
     let { data: supaFiles, error: supaError } = await supabase
       .from("archivos_solicitante")
@@ -3498,7 +3498,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
     });
 
-    // 4. Unión deduplicada: solicitudes/Supabase primero (más reciente), luego filesystem
+    // 4. Uni�n deduplicada: solicitudes/Supabase primero (m�s reciente), luego filesystem
     const fsFiles = [...nuevos, ...viejos.filter(f => !nuevos.includes(f))];
     const datosNames = docsConArchivo.map(d => d.archivo);
     const todos = [...new Set([...datosNames, ...supaNames, ...fsFiles])];
@@ -3508,7 +3508,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
     const hayArchivoAvaluo = todos.some(a => {
       const al = a.toLowerCase();
-      return al.includes("avaluo") || al.includes("avalúo");
+      return al.includes("avaluo") || al.includes("aval�o");
     });
     const actualizadas = solicitudes.map(s => {
       if (s.personaId !== personaId || !Array.isArray(s.documentos)) return s;
@@ -3530,7 +3530,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setSubiendo(true);
     try {
       await subirArchivoServidor(file, carpeta);
-      // Si es comité desmarque, detectar tipo de archivo
+      // Si es comit� desmarque, detectar tipo de archivo
       if (persona.comiteId === "comite_desmarque") {
         const nombreLower = file.name.toLowerCase();
         if (nombreLower.includes("informe") || nombreLower.includes("dom") || nombreLower.includes("inspeccion")) {
@@ -3571,6 +3571,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       if (await urlSirveDocumento(localEstatico)) return localEstatico;
     }
     if (respaldoUrl && !esUrlSupabaseStorage(respaldoUrl) && await urlSirveDocumento(respaldoUrl)) return respaldoUrl;
+    const storagePath = archivoGuardado?.storagePath || storageObjectPath(rutaLocal, nombre);
+    if (storagePath) {
+      try {
+        const { data: sd } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(storagePath, 60);
+        if (sd?.signedUrl) return sd.signedUrl;
+      } catch {}
+    }
     return "";
   };
 
@@ -3578,7 +3585,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const archivoGuardado = archivosDatos[nombre];
     const fileUrl = await urlDocumentoDisponible(nombre);
     if (!fileUrl) {
-      alert("No se pudo abrir el documento. El archivo no está disponible en la carpeta ni en respaldo.");
+      alert("No se pudo abrir el documento. El archivo no est� disponible en la carpeta ni en respaldo.");
       return;
     }
     if (archivoGuardado?.dataUrl && String(archivoGuardado.dataUrl).startsWith("data:")) {
@@ -3609,7 +3616,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const archivoGuardado = archivosDatos[nombre];
     const fileUrl = await urlDocumentoDisponible(nombre);
     if (!fileUrl) {
-      alert("No se pudo imprimir el documento. El archivo no está disponible en la carpeta ni en respaldo.");
+      alert("No se pudo imprimir el documento. El archivo no est� disponible en la carpeta ni en respaldo.");
       return;
     }
     const abrirParaImprimir = (url) => {
@@ -3701,7 +3708,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setDocMenu(null);
     if (errores.length) {
       console.warn("[eliminarArchivo]", errores.join(" | "));
-      alert("Se intentó eliminar el documento, pero hubo una respuesta incompleta: " + errores.join(", ") + ". Si sigue apareciendo, actualice la página e intente nuevamente.");
+      alert("Se intent� eliminar el documento, pero hubo una respuesta incompleta: " + errores.join(", ") + ". Si sigue apareciendo, actualice la p�gina e intente nuevamente.");
     } else if (avisos.length) {
       console.warn("[eliminarArchivo avisos]", avisos.join(" | "));
     }
@@ -3897,7 +3904,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const solActualizada = { ...sol, documentos: docsActualizados, fecha_visita: sol.fecha_visita };
       onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? solActualizada : s));
       await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", sol.id);
-      // Auto-cambiar estado según datos ingresados
+      // Auto-cambiar estado seg�n datos ingresados
       if (!["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
         const nuevoEstado = calcularEstadoDesmarque(solActualizada, persona.estado_desmarque);
         if (nuevoEstado !== persona.estado_desmarque) {
@@ -3909,7 +3916,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setShowFichaEdit(false);
   };
 
-  // Helper: actualiza valor (N°|fecha) en un doc de solicitud sin tocar entregado
+  // Helper: actualiza valor (N�|fecha) en un doc de solicitud sin tocar entregado
   const _actualizarValorDoc = async (nombreDoc, valor) => {
     const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
     const solDb = (solsDb && solsDb[0]) || misSols[0];
@@ -3951,7 +3958,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (error) {
       console.warn("[avance manual desmarque]", error.message);
       onSaveSolicitudes(solicitudes);
-      alert("No se pudo guardar el ajuste manual de avance. No se modificó el registro.");
+      alert("No se pudo guardar el ajuste manual de avance. No se modific� el registro.");
       return;
     }
     await registrarAuditoria?.("ajustar_avance_desmarque", "solicitudes", sol.id, {
@@ -3985,20 +3992,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   const generarMemo = async () => {
-    // Capturar valores del form antes de cualquier operación async (evita closure stale)
+    // Capturar valores del form antes de cualquier operaci�n async (evita closure stale)
     const numero = formMemo.numero;
     const problemas = [
       ...(formMemo.problemas || []),
       ...(formMemo.nuevoProblema && formMemo.nuevoProblema.trim() ? [formMemo.nuevoProblema.trim()] : [])
     ];
     const remitente = {
-      nombre: formMemo.deNombre || "MARCELO CIFUENTES VÁSQUEZ",
+      nombre: formMemo.deNombre || "MARCELO CIFUENTES V�SQUEZ",
       cargo: formMemo.deCargo || "ENCARGADO ENTIDAD PATROCINANTE",
       institucion: formMemo.deInstitucion || "MUNICIPALIDAD DE LAUTARO",
       iniciales: formMemo.deIniciales || ""
     };
     const destinatario = {
-      nombre: formMemo.aNombre || "SEÑOR EDUARDO BUSTOS VALDEBENITO",
+      nombre: formMemo.aNombre || "SE�OR EDUARDO BUSTOS VALDEBENITO",
       cargo: formMemo.aCargo || "DIRECTOR DE OBRAS",
       institucion: formMemo.aInstitucion || "MUNICIPALIDAD DE LAUTARO",
       trato: formMemo.aTrato || "PRESENTE."
@@ -4023,7 +4030,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }).catch(() => {});
       await _registrarArchivoSupa(nombreArch, carpeta);
       await guardarArchivoPersistente(nombreArch, htmlToDataUrl(html), "text/html", carpeta);
-      // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el escaneado)
+      // Copiar N� y fecha al campo � VB NO se activa a�n (solo al subir el escaneado)
       const fechaIso = new Date().toISOString().slice(0, 10);
       await _actualizarValorDoc("Memo DOM", numero + "|" + fechaIso);
       setShowModalMemo(false);
@@ -4035,15 +4042,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const generarCarta = async () => {
     const numero = formCarta.numero;
     const remitente = {
-      nombre: formCarta.deNombre || "MARCELO CIFUENTES VÁSQUEZ",
+      nombre: formCarta.deNombre || "MARCELO CIFUENTES V�SQUEZ",
       cargo: formCarta.deCargo || "ENCARGADO ENTIDAD PATROCINANTE",
       institucion: formCarta.deInstitucion || "MUNICIPALIDAD DE LAUTARO",
       iniciales: formCarta.deIniciales || ""
     };
     const destinatario = {
-      nombre: formCarta.aNombre || "SEÑOR MARCO SEGUEL REYES",
+      nombre: formCarta.aNombre || "SE�OR MARCO SEGUEL REYES",
       cargo: formCarta.aCargo || "DIRECTOR DE SERVIU (S)",
-      institucion: formCarta.aInstitucion || "REGIÓN DE LA ARAUCANIA",
+      institucion: formCarta.aInstitucion || "REGI�N DE LA ARAUCANIA",
       trato: formCarta.aTrato || "PRESENTE."
     };
     setGenerando(true);
@@ -4057,7 +4064,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }).catch(() => {});
       await _registrarArchivoSupa(nombreArch, carpeta);
       await guardarArchivoPersistente(nombreArch, htmlToDataUrl(html), "text/html", carpeta);
-      // Copiar N° y fecha al campo — VB NO se activa aún (solo al subir el comprobante)
+      // Copiar N� y fecha al campo � VB NO se activa a�n (solo al subir el comprobante)
       const fechaIso = new Date().toISOString().slice(0, 10);
       await _actualizarValorDoc("Carta SERVIU", numero + "|" + fechaIso);
       setShowModalCarta(false);
@@ -4177,7 +4184,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     // Documentos que requieren archivo o proceso especial: no se pueden marcar manualmente
     const requiereArchivo = doc.nombre && (
       doc.nombre.toLowerCase().includes('cedula') ||
-      doc.nombre.toLowerCase().includes('título') ||
+      doc.nombre.toLowerCase().includes('t�tulo') ||
       doc.nombre.toLowerCase().includes('titulo') ||
       doc.nombre.toLowerCase().includes('certificado de avaluo') ||
       doc.nombre.toLowerCase().includes('avaluo') ||
@@ -4206,7 +4213,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s, documentos: s.documentos.map((d, i) => {
         if (i !== idx) return d;
-        // Memo, Carta e Informe DOM: requiere N° Y fecha (separados por |)
+        // Memo, Carta e Informe DOM: requiere N� Y fecha (separados por |)
         const necesitaNumYFecha = d.nombre && (d.nombre.includes('Memo DOM') || d.nombre.includes('Carta SERVIU') || d.nombre.includes('Informe DOM'));
         const partes = valor.split("|").map(p => p.trim()).filter(Boolean);
         const completo = necesitaNumYFecha ? partes.length >= 2 && partes[0] && partes[1] : valor.trim() !== '';
@@ -4214,7 +4221,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       })
     });
     onSaveSolicitudes(nuevasSols);
-    // Actualizar estado automático si es desmarque
+    // Actualizar estado autom�tico si es desmarque
     if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
       const sol = nuevasSols.find(s => s.id === solId);
       const nuevoEstado = calcularEstadoDesmarque(sol, persona.estado_desmarque);
@@ -4243,7 +4250,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     await registrarAuditoria?.("actualizar_prioridad", "solicitudes", solId, { persona: persona?.nombre || "", prioridad: valor });
   };
 
-  // Setea la opción especial de un documento (luz/agua/discapacidad)
+  // Setea la opci�n especial de un documento (luz/agua/discapacidad)
   const setDocOpcion = async (solId, idx, opcion, tipoReal) => {
     const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s, documentos: s.documentos.map((d, i) => {
@@ -4276,19 +4283,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   return (
     <div>
-      <button onClick={onBack} style={{ background: "transparent", border: "1px solid #ddd", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 22, cursor: "pointer" }}>← Volver</button>
+      <button onClick={onBack} style={{ background: "transparent", border: "1px solid #ddd", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 22, cursor: "pointer" }}>? Volver</button>
 
       <div style={{ background: esPrioritario ? "#FFFBEB" : "#fff", borderRadius: 14, padding: "24px 28px", marginBottom: 20, border: esPrioritario ? "2px solid #F59E0B" : "1px solid #e8e3de" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <div style={{ width: 58, height: 58, borderRadius: 29, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 24 }}>{persona.nombre[0].toUpperCase()}</div>
           <div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#1e3a5f" }}>{persona.nombre}</div>
-            <div style={{ fontSize: 13, color: "#888" }}>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
+            <div style={{ fontSize: 13, color: "#888" }}>C�dula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
             {(persona.puntajeRSH || persona.integrantesFamiliares) && <div style={{ fontSize: 13, color: "#888" }}>{persona.puntajeRSH ? "RSH: " + persona.puntajeRSH : ""}{persona.integrantesFamiliares ? " - Grupo familiar: " + persona.integrantesFamiliares + " personas" : ""}</div>}
             {(comite || persona.comite) && (
               <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 4, fontWeight: 600 }}>
-                {persona.tipo_comite === "RURAL" ? "🌾" : persona.tipo_comite === "URBANO" ? "🏙️" : "👥"} Comité: {comite ? comite.nombre : persona.comite}
+                {persona.tipo_comite === "RURAL" ? "??" : persona.tipo_comite === "URBANO" ? "???" : "??"} Comit�: {comite ? comite.nombre : persona.comite}
                 {persona.comiteId && COMITES_FIJOS.find(c => c.codigo === persona.comiteId) && (
                   <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 400, background: "#f5f3ff", color: "#7C3AED", borderRadius: 8, padding: "1px 7px" }}>{persona.comiteId}</span>
                 )}
@@ -4298,12 +4305,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               <>
                 {(persona.observaciones || "").startsWith("Pendiente por:") && (
                   <div style={{ marginTop: 5, fontSize: 12, background: "#FFFBEB", color: "#D97706", borderRadius: 8, padding: "4px 10px", display: "inline-block", fontWeight: 600, border: "1px solid #FDE68A" }}>
-                    ⏳ {persona.observaciones}
+                    ? {persona.observaciones}
                   </div>
                 )}
                 <button onClick={() => setShowAsignarComite(true)}
                   style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#f5f3ff", border: "1px solid #ddd8fe", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
-                  + Asignar comité
+                  + Asignar comit�
                 </button>
               </>
             )}
@@ -4363,14 +4370,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         <div style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", marginBottom: 20, border: "1px solid #dbeafe" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f" }}>Línea de tiempo CSP del solicitante</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>{editandoLineaTiempoPersona ? "Modifique las etapas y luego guarde los cambios." : "Presione Modificar línea de tiempo para editar las etapas."}</div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f" }}>L�nea de tiempo CSP del solicitante</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>{editandoLineaTiempoPersona ? "Modifique las etapas y luego guarde los cambios." : "Presione Modificar l�nea de tiempo para editar las etapas."}</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {!editandoLineaTiempoPersona ? (
                 <button onClick={() => setEditandoLineaTiempoPersona(true)}
                   style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
-                  Modificar línea de tiempo
+                  Modificar l�nea de tiempo
                 </button>
               ) : (
                 <>
@@ -4380,7 +4387,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   </button>
                   <button onClick={guardarLineaTiempoPersonaCsp} disabled={guardandoLineaTiempoPersona}
                     style={{ background: guardandoLineaTiempoPersona ? "#94A3B8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
-                    {guardandoLineaTiempoPersona ? "Guardando..." : "Guardar línea de tiempo"}
+                    {guardandoLineaTiempoPersona ? "Guardando..." : "Guardar l�nea de tiempo"}
                   </button>
                 </>
               )}
@@ -4411,7 +4418,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   <button type="button" disabled={bloqueada}
                     onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: !prev[etapa.id] }))}
                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: 0, padding: 0, color: "inherit", cursor: bloqueada ? "not-allowed" : "pointer" }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "✓ " : ""}{etapa.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "? " : ""}{etapa.label}</div>
                   </button>
                   {etapa.detalle && <div style={{ fontSize: 10, marginTop: 3, opacity: .82 }}>{etapa.detalle}</div>}
                   {etapa.decision && (
@@ -4434,7 +4441,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         return (
                           <button key={key} type="button" disabled={bloqueada}
                             onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [key]: !prev[key] }))}
-                            title={`Reunión ${n} - VB`}
+                            title={`Reuni�n ${n} - VB`}
                             style={{ border: 0, borderRadius: 6, padding: "5px 2px", background: vb ? "#059669" : "#E5E7EB", color: vb ? "#fff" : "#475569", fontSize: 10, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
                             R{n}
                           </button>
@@ -4451,16 +4458,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         </div>
       )}
 
-      {/* Modal asignar comité */}
+      {/* Modal asignar comit� */}
       {showAsignarComite && (
-        <Modal title="Asignar comité al solicitante" onClose={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}>
+        <Modal title="Asignar comit� al solicitante" onClose={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: "#555", marginBottom: 12 }}>
-              Selecciona el comité para <strong>{persona.nombre}</strong>:
+              Selecciona el comit� para <strong>{persona.nombre}</strong>:
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               {(() => {
-                const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
+                const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[`-?]/g,"").replace(/\s+/g," ");
                 const lista = [
                   ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, codigo: c.codigo })),
                   ...(comites||[]).filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
@@ -4470,13 +4477,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   <div key={c.id} onClick={() => setComiteParaAsignar(c.id)}
                     style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 9, border: "2px solid " + (comiteParaAsignar === c.id ? "#7C3AED" : "#e5e7eb"), background: comiteParaAsignar === c.id ? "#f5f3ff" : "#fff", cursor: "pointer" }}>
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: comiteParaAsignar === c.id ? "#7C3AED" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: c.codigo ? 11 : 14, fontWeight: 800, color: comiteParaAsignar === c.id ? "#fff" : "#6b7280", fontFamily: "monospace", flexShrink: 0 }}>
-                      {c.codigo || (c.tipo === "URBANO" ? "🏙️" : "🌾")}
+                      {c.codigo || (c.tipo === "URBANO" ? "???" : "??")}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: comiteParaAsignar === c.id ? "#4C1D95" : "#111827" }}>{c.nombre}</div>
-                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{c.tipo === "RURAL" ? "🌾 Rural" : "🏙️ Urbano"}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{c.tipo === "RURAL" ? "?? Rural" : "??? Urbano"}</div>
                     </div>
-                    {comiteParaAsignar === c.id && <span style={{ color: "#7C3AED", fontWeight: 700, fontSize: 16 }}>✓</span>}
+                    {comiteParaAsignar === c.id && <span style={{ color: "#7C3AED", fontWeight: 700, fontSize: 16 }}>?</span>}
                   </div>
                 ));
               })()}
@@ -4487,19 +4494,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
             <button onClick={asignarComite} disabled={!comiteParaAsignar}
               style={{ padding: "9px 22px", borderRadius: 8, background: comiteParaAsignar ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: comiteParaAsignar ? "pointer" : "not-allowed" }}>
-              Confirmar asignación
+              Confirmar asignaci�n
             </button>
           </div>
         </Modal>
       )}
 
-      {/* ── REGISTRO DE VISITAS A OFICINA ─────────────────────────────────── */}
+      {/* -- REGISTRO DE VISITAS A OFICINA ----------------------------------- */}
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
         <div style={{ background: "#f8f7ff", borderBottom: "2px solid #7C3AED", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#4C1D95" }}>📋 Registro de Visitas a Oficina</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#4C1D95" }}>?? Registro de Visitas a Oficina</div>
           <button onClick={() => { setShowFormVisita(v => !v); setFormVisita({ fecha: todayISO(), profesional: currentUser?.nombre || "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: currentUser?.nombre || "" }); }}
             style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-            {showFormVisita ? "✕ Cancelar" : "+ Agregar visita"}
+            {showFormVisita ? "? Cancelar" : "+ Agregar visita"}
           </button>
         </div>
 
@@ -4511,11 +4518,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             : null);
           console.log("[Visitas] programaId detectado:", progId, "| misSols programas:", misSols.map(s => s.programaId));
           const progDocs = progId ? (DOCS_SOLICITUD[progId] || []) : [];
-          const progLabel = progId === "csp_urbano" ? "Construcción Sitio Propio Urbano"
-            : progId === "csp_rural" ? "Construcción Sitio Propio Rural"
+          const progLabel = progId === "csp_urbano" ? "Construcci�n Sitio Propio Urbano"
+            : progId === "csp_rural" ? "Construcci�n Sitio Propio Rural"
             : progId === "habitabilidad" ? "Desmarque de Vivienda"
             : null;
-          const profesionalesBase = ["Priscilla Curín Castro","Jacqueline Ortega","Marcelo Cifuentes Vásquez","Onoria Retamal","Jorge Campos Campos","Jonathan Rodríguez"];
+          const profesionalesBase = ["Priscilla Cur�n Castro","Jacqueline Ortega","Marcelo Cifuentes V�squez","Onoria Retamal","Jorge Campos Campos","Jonathan Rodr�guez"];
           const profesionales = currentUser?.nombre && !profesionalesBase.includes(currentUser.nombre)
             ? [currentUser.nombre, ...profesionalesBase]
             : profesionalesBase;
@@ -4530,10 +4537,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.fecha ? "#7C3AED" : "#ddd"), fontSize: 13, boxSizing: "border-box" }} />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Profesional que atendió *</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Profesional que atendi� *</label>
                 <select value={formVisita.profesional} onChange={e => setFormVisita(f => ({ ...f, profesional: e.target.value }))}
                   style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.profesional ? "#7C3AED" : "#ddd"), fontSize: 13, background: "#fff", boxSizing: "border-box" }}>
-                  <option value="">Seleccionar profesional…</option>
+                  <option value="">Seleccionar profesional�</option>
                   {profesionales.map(p => (
                     <option key={p} value={p}>{p}</option>
                   ))}
@@ -4548,7 +4555,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 {progLabel && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: "#7C3AED", background: "#f5f3ff", borderRadius: 10, padding: "2px 8px" }}>{progLabel}</span>}
               </label>
               {progDocs.length === 0 ? (
-                <div style={{ fontSize: 12, color: "#aaa" }}>Sin programa CSP detectado — use el campo "Otros"</div>
+                <div style={{ fontSize: 12, color: "#aaa" }}>Sin programa CSP detectado � use el campo "Otros"</div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                   {progDocs.map(doc => {
@@ -4559,7 +4566,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
                           onClick={() => setFormVisita(f => ({ ...f, checksDocs: { ...f.checksDocs, [doc.id]: f.checksDocs[doc.id] ? false : (doc.subopciones ? true : true) } }))}>
                           <div style={{ width: 16, height: 16, borderRadius: 4, border: "2px solid " + (checked ? "#7C3AED" : "#d1d5db"), background: checked ? "#7C3AED" : "#fff", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            {checked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>}
+                            {checked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>?</span>}
                           </div>
                           <span style={{ fontSize: 12, color: checked ? "#4C1D95" : "#374151", fontWeight: checked ? 600 : 400 }}>{doc.label}</span>
                         </div>
@@ -4585,13 +4592,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Otros (solicitudes adicionales)</label>
                 <textarea value={formVisita.otrosSolicitud} onChange={e => setFormVisita(f => ({ ...f, otrosSolicitud: e.target.value }))}
-                  placeholder="Solicitudes adicionales no listadas…"
+                  placeholder="Solicitudes adicionales no listadas�"
                   rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Compromiso del solicitante</label>
                 <textarea value={formVisita.compromiso} onChange={e => setFormVisita(f => ({ ...f, compromiso: e.target.value }))}
-                  placeholder="¿Qué comprometió el postulante?"
+                  placeholder="�Qu� comprometi� el postulante?"
                   rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
             </div>
@@ -4614,7 +4621,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
                           onClick={() => setFormVisita(f => ({ ...f, checksDocsRecibidos: { ...f.checksDocsRecibidos, [doc.id]: f.checksDocsRecibidos[doc.id] ? false : true } }))}>
                           <div style={{ width: 16, height: 16, borderRadius: 4, border: "2px solid " + (checked ? "#059669" : "#d1d5db"), background: checked ? "#059669" : "#fff", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            {checked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>}
+                            {checked && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>?</span>}
                           </div>
                           <span style={{ fontSize: 12, color: checked ? "#065f46" : "#374151", fontWeight: checked ? 600 : 400 }}>{doc.label}</span>
                         </div>
@@ -4634,10 +4641,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 </div>
               )}
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Profesional que recibió los documentos</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Profesional que recibi� los documentos</label>
                 <select value={formVisita.profesionalRecibio} onChange={e => setFormVisita(f => ({ ...f, profesionalRecibio: e.target.value }))}
                   style={{ width: "100%", maxWidth: 340, padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.profesionalRecibio ? "#059669" : "#ddd"), fontSize: 13, background: "#fff" }}>
-                  <option value="">Seleccionar profesional…</option>
+                  <option value="">Seleccionar profesional�</option>
                   {profesionales.map(p => (
                     <option key={p} value={p}>{p}</option>
                   ))}
@@ -4646,10 +4653,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             </div>
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              {!canSave && <span style={{ fontSize: 11, color: "#B45309", alignSelf: "center" }}>⚠ Fecha y profesional son obligatorios</span>}
+              {!canSave && <span style={{ fontSize: 11, color: "#B45309", alignSelf: "center" }}>? Fecha y profesional son obligatorios</span>}
               <button onClick={() => agregarVisita(progDocs)} disabled={!canSave || guardandoVisita}
                 style={{ background: canSave ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 700, cursor: canSave ? "pointer" : "not-allowed" }}>
-                {guardandoVisita ? "Guardando…" : "Guardar visita"}
+                {guardandoVisita ? "Guardando�" : "Guardar visita"}
               </button>
             </div>
           </div>
@@ -4673,8 +4680,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   <tr key={v.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
                     <td style={{ padding: "10px 8px", whiteSpace: "nowrap", color: "#1e3a5f", fontWeight: 600 }}>{fmtFecha(v.fecha)}</td>
                     <td style={{ padding: "10px 8px", color: "#374151" }}>{v.profesional}</td>
-                    <td style={{ padding: "10px 8px", color: "#6b7280", maxWidth: 220 }}>{v.solicitud || <span style={{ color: "#d1d5db" }}>—</span>}</td>
-                    <td style={{ padding: "10px 8px", color: "#6b7280", maxWidth: 220 }}>{v.compromiso || <span style={{ color: "#d1d5db" }}>—</span>}</td>
+                    <td style={{ padding: "10px 8px", color: "#6b7280", maxWidth: 220 }}>{v.solicitud || <span style={{ color: "#d1d5db" }}>�</span>}</td>
+                    <td style={{ padding: "10px 8px", color: "#6b7280", maxWidth: 220 }}>{v.compromiso || <span style={{ color: "#d1d5db" }}>�</span>}</td>
                     <td style={{ padding: "10px 8px", maxWidth: 180 }}>
                       {v.docs_recibidos ? (
                         <div>
@@ -4683,12 +4690,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           </div>
                           {v.profesional_recibio && <div style={{ fontSize: 11, color: "#6b7280" }}>{v.profesional_recibio}</div>}
                         </div>
-                      ) : <span style={{ color: "#d1d5db" }}>—</span>}
+                      ) : <span style={{ color: "#d1d5db" }}>�</span>}
                     </td>
                     <td style={{ padding: "10px 8px", textAlign: "right" }}>
                       <button onClick={() => imprimirVisita(v)}
                         style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                        🖨 Imprimir
+                        ?? Imprimir
                       </button>
                     </td>
                   </tr>
@@ -4720,7 +4727,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             const comiteRural = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
               (persona.tipoComite === "Rural" || persona.tipo_comite === "RURAL" ||
                (comite && comite.nombre && comite.nombre.toUpperCase().includes("RURAL")));
-            // Solo usar como fallback cuando NO hay programa asignado todavía
+            // Solo usar como fallback cuando NO hay programa asignado todav�a
             const sinComite = !tienePrograma && (!persona.comiteId || persona.comiteId === "");
             // Si hay programa pero es solo urbano, no mostrar Rural
             if (tienePrograma && !tieneRural) return null;
@@ -4766,7 +4773,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           {persona.comiteId === "comite_desmarque" && (
         <div style={{ background: "#fff", borderRadius: 14, padding: "20px 24px", marginBottom: 20, border: "1px solid #e8e3de" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#1e3a5f" }}>📋 Ficha Desmarque</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#1e3a5f" }}>?? Ficha Desmarque</div>
             <button onClick={() => {
               const sol = misSols[0];
               const docs = sol ? sol.documentos : [];
@@ -4793,13 +4800,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               setCamposDesmarqueDesbloqueados(false);
               setShowFichaEdit(true);
             }}
-              style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>✏️ Editar datos</button>
+              style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>?? Editar datos</button>
           </div>
           {(() => {
             const campo = (label, valor) => (
               <div key={label} style={{ display: "flex", borderBottom: "1px solid #f0f0f0", padding: "7px 0" }}>
                 <div style={{ width: 220, fontSize: 12, fontWeight: 700, color: "#555", flexShrink: 0 }}>{label}</div>
-                <div style={{ fontSize: 12, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 400 : 600 }}>{valor || "⚠ Falta trámite o documento"}</div>
+                <div style={{ fontSize: 12, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 400 : 600 }}>{valor || "? Falta tr�mite o documento"}</div>
               </div>
             );
             const sol = misSols[0];
@@ -4812,24 +4819,24 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             return (
               <div>
                 {campo("Estado", getVal("estado_desmarque","estadoDesmarque"))}
-                {campo("N° Recepción", getVal("numero_recepcion","numeroRecepcion"))}
-                {campo("Fecha Recepción", getVal("fecha_recepcion","fechaRecepcion"))}
+                {campo("N� Recepci�n", getVal("numero_recepcion","numeroRecepcion"))}
+                {campo("Fecha Recepci�n", getVal("fecha_recepcion","fechaRecepcion"))}
                 {campo("Nombre", persona.nombre)}
-                {campo("Cédula de identidad", persona.rut)}
+                {campo("C�dula de identidad", persona.rut)}
                 {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
-                {campo("Teléfono", persona.telefono)}
+                {campo("Tel�fono", persona.telefono)}
                 {campo("U/R", getVal("tipo_comite","tipoComite") || persona.tipo)}
-                {campo("Comunidad/Dirección", persona.direccion)}
+                {campo("Comunidad/Direcci�n", persona.direccion)}
                 {campo("Rol Propiedad", getVal("rol_propiedad","rolPropiedad"))}
                 {campo("Coordenadas", persona.coordenadas)}
                 {campo("Sector", persona.sector)}
                 {campo("RSH", persona.puntajeRSH ? persona.puntajeRSH + "%" : (persona.puntaje_rsh ? persona.puntaje_rsh + "%" : ""))}
                 {campo("Dominio del Terreno", getVal("dominio_terreno","dominioTerreno"))}
-                {campo("Año de Subsidio", getVal("anio_subsidio","anioSubsidio"))}
+                {campo("A�o de Subsidio", getVal("anio_subsidio","anioSubsidio"))}
                 {campo("Fecha Visita", sol && fechaVisitaSolicitud(sol) ? fmtFecha(fechaVisitaSolicitud(sol)) : "")}
-                {campo("N° Informe DOM", informe && informe.valor ? informe.valor : "")}
-                {campo("N° Memorando DOM y Fecha", memo && memo.valor ? memo.valor : "")}
-                {campo("N° Carta SERVIU y Fecha", carta && carta.valor ? carta.valor : "")}
+                {campo("N� Informe DOM", informe && informe.valor ? informe.valor : "")}
+                {campo("N� Memorando DOM y Fecha", memo && memo.valor ? memo.valor : "")}
+                {campo("N� Carta SERVIU y Fecha", carta && carta.valor ? carta.valor : "")}
                 {campo("Observaciones", persona.observaciones)}
               </div>
             );
@@ -4848,12 +4855,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {persona && persona.comiteId === "comite_desmarque" && (
               <>
-                <button onClick={() => { setInformeSubsidioTexto(persona.anio_subsidio || ""); setShowModalInformeJACC(true); }} style={{ background: "#166534", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📋 Generar Informe JACC</button>
-                <button onClick={() => setShowModalMemo(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Memo DOM</button>
-                <button onClick={() => setShowModalCarta(true)} style={{ background: "#0891B2", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Carta SERVIU</button>
-                <button onClick={abrirModalSolicitud} style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>📄 Generar Solicitud</button>
+                <button onClick={() => { setInformeSubsidioTexto(persona.anio_subsidio || ""); setShowModalInformeJACC(true); }} style={{ background: "#166534", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>?? Generar Informe JACC</button>
+                <button onClick={() => setShowModalMemo(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>?? Generar Memo DOM</button>
+                <button onClick={() => setShowModalCarta(true)} style={{ background: "#0891B2", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>?? Generar Carta SERVIU</button>
+                <button onClick={abrirModalSolicitud} style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>?? Generar Solicitud</button>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#DC2626", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  📎 Subir Informe DOM
+                  ?? Subir Informe DOM
                   <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
                     onChange={async e => {
                       const file = e.target.files[0];
@@ -4867,7 +4874,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     }} />
                 </label>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#B45309", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  📎 Subir Respuesta SERVIU
+                  ?? Subir Respuesta SERVIU
                   <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
                     onChange={async e => {
                       const file = e.target.files[0];
@@ -4880,8 +4887,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       finally { setSubiendo(false); e.target.value = ""; }
                     }} />
                 </label>
-                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#7C3AED", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Sube el memorando firmado/recibido — activa el VB automáticamente">
-                  📎 Subir Memo recibido
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#7C3AED", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Sube el memorando firmado/recibido � activa el VB autom�ticamente">
+                  ?? Subir Memo recibido
                   <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
                     onChange={async e => {
                       const file = e.target.files[0];
@@ -4894,8 +4901,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       finally { setSubiendo(false); e.target.value = ""; }
                     }} />
                 </label>
-                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#0891B2", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Sube el comprobante de ingreso SERVIU — activa el VB automáticamente">
-                  📎 Subir comprobante Carta
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#0891B2", color: "#fff", border: "none", borderRadius: 9, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Sube el comprobante de ingreso SERVIU � activa el VB autom�ticamente">
+                  ?? Subir comprobante Carta
                   <input type="file" style={{ display: "none" }} accept=".pdf,.jpg,.jpeg,.png"
                     onChange={async e => {
                       const file = e.target.files[0];
@@ -4912,10 +4919,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             )}
             <input ref={fileRef} type="file" style={{ display: "none" }} onChange={subirArchivo} accept=".pdf,.jpg,.jpeg,.png" />
             <button onClick={() => fileRef.current.click()} disabled={subiendo} style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              {subiendo ? "Subiendo..." : "⬆ Subir documento"}
+              {subiendo ? "Subiendo..." : "? Subir documento"}
             </button>
             <button onClick={() => { setZipSeleccionados([persona]); setShowModalZip(true); }} style={{ background: "#374151", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              🗜 Descargar ZIP
+              ?? Descargar ZIP
             </button>
           </div>
         </div>
@@ -4937,15 +4944,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       onClick={e => { e.stopPropagation(); setDocMenu(isMenuOpen ? null : { arch, x: e.clientX, y: e.clientY }); }}
                       title="Opciones"
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, color: "#1e3a5f", flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0 }}>
-                      {arch.endsWith(".html") ? "🌐 " : arch.endsWith(".pdf") ? "📋 " : "📎 "}{arch}
+                      {arch.endsWith(".html") ? "?? " : arch.endsWith(".pdf") ? "?? " : "?? "}{arch}
                     </button>
-                    <button onClick={() => eliminarArchivo(arch)} style={{ background: "transparent", border: "none", color: "#DC2626", cursor: "pointer", marginLeft: 6, fontSize: 13 }}>✕</button>
+                    <button onClick={() => eliminarArchivo(arch)} style={{ background: "transparent", border: "none", color: "#DC2626", cursor: "pointer", marginLeft: 6, fontSize: 13 }}>?</button>
                     {isMenuOpen && (
                       <div data-docmenu="1" style={{ position: "fixed", top: docMenu.y + 6, left: Math.min(docMenu.x, window.innerWidth - 200), zIndex: 9999, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.13)", minWidth: 180, overflow: "hidden" }}>
                         <div style={{ padding: "6px 0" }}>
                           <button onClick={() => { abrirArchivo(arch); setDocMenu(null); }}
                             style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#1e3a5f", fontWeight: 500 }}>
-                            👁 Ver documento
+                            ?? Ver documento
                           </button>
                           {esGenerado && (
                             <button onClick={() => {
@@ -4956,7 +4963,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               setDocMenu(null);
                             }}
                               style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#059669", fontWeight: 500 }}>
-                              ✏️ Editar / Regenerar
+                              ?? Editar / Regenerar
                             </button>
                           )}
                           <button onClick={() => {
@@ -4964,12 +4971,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             setDocMenu(null);
                           }}
                             style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#B45309", fontWeight: 500 }}>
-                            🖨 Imprimir
+                            ?? Imprimir
                           </button>
                           <div style={{ height: 1, background: "#f0f0f0", margin: "4px 0" }} />
                           <button onClick={() => { eliminarArchivo(arch); setDocMenu(null); }}
                             style={{ display: "block", width: "100%", padding: "9px 18px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#DC2626", fontWeight: 500 }}>
-                            🗑 Eliminar
+                            ?? Eliminar
                           </button>
                         </div>
                       </div>
@@ -5026,7 +5033,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{conteoSol.total}</div>
                 <button onClick={() => setSolsEditando(prev => ({ ...prev, [sol.id]: !prev[sol.id] }))}
                   style={{ padding: "5px 14px", borderRadius: 8, border: "1.5px solid " + (solsEditando[sol.id] ? "#059669" : "#1e3a5f"), background: solsEditando[sol.id] ? "#059669" : "#1e3a5f", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  {solsEditando[sol.id] ? "✓ Editando" : "✏ Editar"}
+                  {solsEditando[sol.id] ? "? Editando" : "? Editar"}
                 </button>
                 {solsEditando[sol.id] && (
                   <button onClick={async () => {
@@ -5038,7 +5045,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       const t = d.tipo || "";
                       const v = d.valor || "";
                       const p = v.split("|");
-                      // Cédula → rut + fecha_nacimiento
+                      // C�dula ? rut + fecha_nacimiento
                       if (n.includes("cedula")) {
                         if (p[0]) { db.rut = p[0].trim(); lc.rut = p[0].trim(); }
                         if (p[1] && p[1].length === 10) {
@@ -5059,7 +5066,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         const adulto = textoAdultoMayor(v);
                         if (adulto) db.adultomayor = lc.adultoMayor = adulto;
                       }
-                      // RSH → puntaje, comuna, estado civil, integrantes, subsidio
+                      // RSH ? puntaje, comuna, estado civil, integrantes, subsidio
                       if (n.includes("registro social") || n.includes("rsh")) {
                         if (p[0]) { db.puntaje_rsh = p[0].trim(); lc.puntajeRSH = p[0].trim(); }
                         if (p[1]) { db.comuna = p[1].trim(); lc.comuna = p[1].trim(); }
@@ -5071,12 +5078,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         if (p[5] === "N/A") { db.discapacidad = "N/A"; lc.discapacidad = "N/A"; }
                         if (p[5] && p[5] !== "N/A") { db.discapacidad = "S"; lc.discapacidad = "S"; }
                       }
-                      // Luz / empalme → proveedor + n° cliente
+                      // Luz / empalme ? proveedor + n� cliente
                       if (t === "luz") {
                         if (p[0]) { db.proveedorelectrico = p[0].trim(); lc.proveedorElectrico = p[0].trim(); }
                         if (p[1]) { db.nclienteelectricidad = p[1].trim(); lc.nClienteElectricidad = p[1].trim(); }
                       }
-                      // Agua con arranque → empresa + n° servicio
+                      // Agua con arranque ? empresa + n� servicio
                       if (t === "agua" && v.includes("|")) {
                         if (p[0]) { db.sistemaagua = p[0].trim(); lc.sistemaAgua = p[0].trim(); }
                         if (p[1]) { db.nservicioagua = p[1].trim(); lc.nServicioAgua = p[1].trim(); }
@@ -5088,7 +5095,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           db.nservicioagua = "N/A"; lc.nServicioAgua = "N/A";
                         }
                       }
-                      // Discapacidad → usa opcionSeleccionada (no d.opcion)
+                      // Discapacidad ? usa opcionSeleccionada (no d.opcion)
                       if (t === "discapacidad") {
                         const opSel = d.opcionSeleccionada || "";
                         if (opSel === "Con discapacidad") {
@@ -5105,20 +5112,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       // Movilidad reducida (doc separado)
                       if (n.includes("movilidad")) {
                         const opSel = d.opcionSeleccionada || v;
-                        if (opSel) { db.movilidadreducida = opSel === "Sí" ? "SI" : opSel; lc.movilidadReducida = db.movilidadreducida; }
+                        if (opSel) { db.movilidadreducida = opSel === "S�" ? "SI" : opSel; lc.movilidadReducida = db.movilidadreducida; }
                       }
-                      // Dominio de la propiedad / Título de dominio
+                      // Dominio de la propiedad / T�tulo de dominio
                       if (n.includes("dominio") || n.includes("titulo") || n.includes("escritura")) {
                         const base = p[0] === "Otro" && p[1] ? "Otro: " + p[1] : p[0];
                         const detalle = [
                           p[2] ? "Fjs: " + p[2].trim() : "",
-                          p[3] ? "N°: " + p[3].trim() : "",
-                          p[4] ? "Año: " + p[4].trim() : "",
+                          p[3] ? "N�: " + p[3].trim() : "",
+                          p[4] ? "A�o: " + p[4].trim() : "",
                         ].filter(Boolean).join(", ");
                         const val = [base, detalle].filter(Boolean).join(" - ");
                         if (val) { db.dominiopropiedad = val; lc.dominiopropiedad = val; }
                       }
-                      // Avalúo fiscal
+                      // Aval�o fiscal
                       if (n.includes("avaluo")) {
                         if (p[0]) { db.rol_propiedad = p[0].trim(); lc.rol_propiedad = p[0].trim(); }
                         if (p[1]) {
@@ -5129,8 +5136,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         if (p[2]) { db.coordenadas = p[2].trim(); lc.coordenadas = p[2].trim(); }
                       }
                       // Certificado ruralidad
-                      if (n.includes("ruralidad") && p[0]) { db.certruralidad = p[0].trim() + (p[1] ? " — " + p[1] : ""); lc.certRuralidad = db.certruralidad; }
-                      // Cuenta de ahorro → número en p[0], banco en p[1]
+                      if (n.includes("ruralidad") && p[0]) { db.certruralidad = p[0].trim() + (p[1] ? " � " + p[1] : ""); lc.certRuralidad = db.certruralidad; }
+                      // Cuenta de ahorro ? n�mero en p[0], banco en p[1]
                       if (n.includes("cuenta de ahorro")) {
                         if (p[0]) { db.cuentaahorro = p[0].trim(); lc.cuentaAhorro = p[0].trim(); }
                         if (p[1]) { db.banco = p[1].trim(); lc.banco = p[1].trim(); }
@@ -5151,10 +5158,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       onSavePersonas(personas.map(p2 => p2.id === persona.id ? { ...p2, ...lc } : p2));
                     }
                     setSolsEditando(prev => ({ ...prev, [sol.id]: false }));
-                    alert("✓ Datos guardados en la ficha del solicitante");
+                    alert("? Datos guardados en la ficha del solicitante");
                   }}
                     style={{ padding: "5px 14px", borderRadius: 8, border: "1.5px solid #059669", background: "#059669", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                    💾 Guardar
+                    ?? Guardar
                   </button>
                 )}
               </div>
@@ -5179,12 +5186,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 {(() => {
                   const st = estadoLineaDesmarque(sol);
                   return <div style={{ marginBottom: 14, padding: "10px 14px", background: st.calificacion.estado === "NO_CALIFICA" ? "#FEF2F2" : st.calificacion.estado === "CALIFICA" ? "#ECFDF5" : "#F9FAFB", borderRadius: 8, border: "1px solid " + (st.calificacion.estado === "NO_CALIFICA" ? "#FCA5A5" : st.calificacion.estado === "CALIFICA" ? "#86EFAC" : "#E5E7EB"), display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <div style={{ fontSize: 11, fontWeight: 900, color: "#374151", textTransform: "uppercase" }}>Calificación manual para visita</div>
+                    <div style={{ fontSize: 11, fontWeight: 900, color: "#374151", textTransform: "uppercase" }}>Calificaci�n manual para visita</div>
                     <button onClick={() => guardarCalificacionDesmarque(sol, "CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#059669", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Califica</button>
                     <button onClick={() => guardarCalificacionDesmarque(sol, "NO_CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#DC2626", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>No califica</button>
-                    {st.calificacion.estado === "CALIFICA" && <span style={{ fontSize: 12, color: "#047857", fontWeight: 800 }}>✓ Solicitante califica para visita</span>}
+                    {st.calificacion.estado === "CALIFICA" && <span style={{ fontSize: 12, color: "#047857", fontWeight: 800 }}>? Solicitante califica para visita</span>}
                     {st.calificacion.estado === "NO_CALIFICA" && <span style={{ fontSize: 12, color: "#B91C1C", fontWeight: 800 }}>NO CALIFICA: {st.calificacion.detalle}</span>}
-                    {!st.calificacion.estado && <span style={{ fontSize: 12, color: "#6B7280" }}>Pendiente de revisión manual</span>}
+                    {!st.calificacion.estado && <span style={{ fontSize: 12, color: "#6B7280" }}>Pendiente de revisi�n manual</span>}
                   </div>;
                 })()}
               </>
@@ -5192,7 +5199,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             {/* Campo Fecha de Visita inline para Desmarque */}
             {sol.programaId === "habitabilidad" && (
               <div style={{ marginBottom: 14, padding: "10px 14px", background: fechaVisitaSolicitud(sol) ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (fechaVisitaSolicitud(sol) ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", whiteSpace: "nowrap" }}>📅 Fecha de Visita</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", whiteSpace: "nowrap" }}>?? Fecha de Visita</div>
                 <input type="date" value={fechaVisitaSolicitud(sol)}
                   onClick={e => e.stopPropagation()}
                   onChange={async e => {
@@ -5209,8 +5216,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   }}
                   style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (fechaVisitaSolicitud(sol) ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
                 {fechaVisitaSolicitud(sol)
-                  ? <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Visita registrada</span>
-                  : <span style={{ fontSize: 11, color: "#B45309" }}>⚠ Sin fecha de visita — estado: No Visitado</span>}
+                  ? <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>? Visita registrada</span>
+                  : <span style={{ fontSize: 11, color: "#B45309" }}>? Sin fecha de visita � estado: No Visitado</span>}
               </div>
             )}
             {solsEditando[sol.id] && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -5220,20 +5227,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 if (!visibles.has(i)) return null;
                 if (doc.interno) return null;
                 if ((doc.nombre || "").toLowerCase().includes("credencial de discapacidad")) return null;
-                // ── PROGRAMA PERSONALIZADO: renderizado genérico ──────────────
+                // -- PROGRAMA PERSONALIZADO: renderizado gen�rico --------------
                 if (esCustom) {
                   const reqArch = !!doc.requiereArchivo;
                   const reqTxt  = !!doc.requiereTexto;
                   const nomDoc  = (doc.nombre || "").toLowerCase();
 
                   // Detectar tipo especial por nombre
-                  const esCedula    = nomDoc.includes("cedula") || nomDoc.includes("cédula") || nomDoc.includes("identidad");
+                  const esCedula    = nomDoc.includes("cedula") || nomDoc.includes("c�dula") || nomDoc.includes("identidad");
                   const esAhorro    = nomDoc.includes("ahorro");
                   const esRsh       = nomDoc.includes("rsh") || nomDoc.includes("registro social");
                   const esIngreso   = nomDoc.includes("ingreso familiar") || nomDoc.includes("ingreso");
                   const esCorreo    = nomDoc.includes("correo") && nomDoc.includes("solicitante");
 
-                  // Valor extra guardado en doc.valor como JSON cuando hay múltiples campos
+                  // Valor extra guardado en doc.valor como JSON cuando hay m�ltiples campos
                   const valObj = (() => { try { return doc.valor ? JSON.parse(doc.valor) : {}; } catch { return { raw: doc.valor }; } })();
 
                   const archivoOk = reqArch || esCedula || esAhorro ? !!doc.archivo || archivos.some(a => {
@@ -5242,7 +5249,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   }) : true;
                   const textoOk = reqTxt ? !!(doc.valor && doc.valor.trim()) : true;
 
-                  // Validaciones específicas. Los archivos se suben solo en Carpeta de documentos;
+                  // Validaciones espec�ficas. Los archivos se suben solo en Carpeta de documentos;
                   // en Solicitudes activas se completan datos y se marca VB.
                   const cedulaOk    = true;
                   const ahorroOk    = esAhorro  ? !!(valObj.numeroCuenta || "").trim() : true;
@@ -5276,41 +5283,41 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     <div key={i} style={{ borderRadius: 9, border: "1.5px solid " + bordeColor, background: bgColor, padding: "10px 14px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                         <div style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (doc.entregado ? "#059669" : requisitosOk ? "#D97706" : "#D1D5DB"), background: doc.entregado ? "#059669" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 13, flexShrink: 0 }}>
-                          {doc.entregado ? "✓" : ""}
+                          {doc.entregado ? "?" : ""}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: doc.entregado ? "#065f46" : "#374151" }}>{doc.nombre}</div>
                           {!doc.obligatorio && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
-                          {requisitosOk && !doc.entregado && <div style={{ fontSize: 10, color: "#D97706", fontWeight: 700 }}>✓ Listo para marcar VB</div>}
+                          {requisitosOk && !doc.entregado && <div style={{ fontSize: 10, color: "#D97706", fontWeight: 700 }}>? Listo para marcar VB</div>}
                           {(reqArch || esCedula || esAhorro) && !doc.entregado && (
                             <div style={{ fontSize: 10, color: archivoOk ? "#059669" : "#B45309", marginTop: 2 }}>
-                              {archivoOk ? "Archivo encontrado en carpeta de documentos" : "Sube el archivo en Carpeta de documentos y marca VB aquí"}
+                              {archivoOk ? "Archivo encontrado en carpeta de documentos" : "Sube el archivo en Carpeta de documentos y marca VB aqu�"}
                             </div>
                           )}
                         </div>
                         {!doc.entregado && requisitosOk && (
-                          <button onClick={marcarVB} style={{ padding: "4px 12px", borderRadius: 6, background: "#059669", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓ VB</button>
+                          <button onClick={marcarVB} style={{ padding: "4px 12px", borderRadius: 6, background: "#059669", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>? VB</button>
                         )}
                       </div>
 
                       {!doc.entregado && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 
-                          {/* CÉDULA: el archivo se sube en Carpeta de documentos */}
+                          {/* C�DULA: el archivo se sube en Carpeta de documentos */}
                           {esCedula && (
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "6px 12px", fontSize: 11, color: archivoOk ? "#059669" : "#B45309", fontWeight: 600 }}>
-                              {archivoOk ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
+                              {archivoOk ? "? Archivo encontrado en carpeta" : "?? Subir archivo en Carpeta de documentos"}
                             </div>
                           )}
 
-                          {/* AHORRO: número de cuenta; archivo solo en Carpeta de documentos */}
+                          {/* AHORRO: n�mero de cuenta; archivo solo en Carpeta de documentos */}
                           {esAhorro && (
                             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                               <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "6px 12px", fontSize: 11, color: archivoOk ? "#059669" : "#B45309", fontWeight: 600 }}>
-                                {archivoOk ? "✓ Comprobante encontrado en carpeta" : "📁 Subir comprobante en Carpeta de documentos"}
+                                {archivoOk ? "? Comprobante encontrado en carpeta" : "?? Subir comprobante en Carpeta de documentos"}
                               </div>
                               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                <input value={valObj.numeroCuenta || ""} placeholder="N° de cuenta de ahorro"
+                                <input value={valObj.numeroCuenta || ""} placeholder="N� de cuenta de ahorro"
                                   onChange={async e => {
                                     const numeroCuenta = e.target.value;
                                     const nuevo = JSON.stringify({ ...valObj, numeroCuenta });
@@ -5318,7 +5325,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                     if (numeroCuenta.trim()) await marcarVB();
                                   }}
                                   style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
-                                {!(valObj.numeroCuenta||"").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° de cuenta</div>}
+                                {!(valObj.numeroCuenta||"").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa N� de cuenta</div>}
                               </div>
                             </div>
                           )}
@@ -5333,7 +5340,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 }}
                                 style={{ width: 100, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
                               <span style={{ fontSize: 11, color: "#555" }}>%</span>
-                              {!(valObj.porcentaje || doc.valor || "").toString().trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa el porcentaje RSH</div>}
+                              {!(valObj.porcentaje || doc.valor || "").toString().trim() && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa el porcentaje RSH</div>}
                             </div>
                           )}
 
@@ -5347,7 +5354,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 }}
                                 style={{ width: 160, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
                               <span style={{ fontSize: 11, color: "#555" }}>UF</span>
-                              {!(valObj.monto || doc.valor || "").toString().trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa el ingreso familiar en UF</div>}
+                              {!(valObj.monto || doc.valor || "").toString().trim() && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa el ingreso familiar en UF</div>}
                             </div>
                           )}
 
@@ -5361,18 +5368,18 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) await marcarVB();
                                 }}
                                 style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
-                              {!correoOk && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa correo válido</div>}
+                              {!correoOk && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa correo v�lido</div>}
                             </div>
                           )}
 
-                          {/* Documento genérico con archivo: se sube en Carpeta de documentos */}
+                          {/* Documento gen�rico con archivo: se sube en Carpeta de documentos */}
                           {reqArch && !esCedula && !esAhorro && (
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: archivoOk ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "6px 12px", fontSize: 11, color: archivoOk ? "#059669" : "#B45309" }}>
-                              {archivoOk ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
+                              {archivoOk ? "? Archivo encontrado en carpeta" : "?? Subir archivo en Carpeta de documentos"}
                             </div>
                           )}
 
-                          {/* Texto adicional genérico */}
+                          {/* Texto adicional gen�rico */}
                           {reqTxt && !esRsh && !esIngreso && !esAhorro && !esCorreo && (
                             <div style={{ display: "flex", gap: 5 }}>
                               <input value={doc.valor || ""} placeholder={doc.etiquetaTexto || "Ingresar valor..."}
@@ -5391,9 +5398,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     </div>
                   );
                 }
-                // ── FIN PROGRAMA PERSONALIZADO ────────────────────────────────
+                // -- FIN PROGRAMA PERSONALIZADO --------------------------------
 
-                // Ocultar documentos obsoletos o duplicados (preservando índice original para updates)
+                // Ocultar documentos obsoletos o duplicados (preservando �ndice original para updates)
                 if (sol.programaId === "csp_urbano") {
                   const n = (doc.nombre || "").toLowerCase();
                   if (n.includes("fecha de nacimiento")) return null;
@@ -5401,7 +5408,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 if (sol.programaId === "csp_rural") {
                   const n = (doc.nombre||"").toLowerCase();
                   if (n.includes("fecha de nacimiento")) return null;
-                  if (n.includes("titulo de dominio") || n.includes("título de dominio")) return null;
+                  if (n.includes("titulo de dominio") || n.includes("t�tulo de dominio")) return null;
                 }
                 // Detectar tipo especial por nombre (independiente del campo tipo)
                 const nom = doc.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -5430,7 +5437,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 // desde Solicitudes activas solo se revisan datos y se marca VB.
                 const esDocArchivo = !esEspecial && doc.nombre && (
                   doc.nombre.toLowerCase().includes("cedula") ||
-                  doc.nombre.toLowerCase().includes("título") ||
+                  doc.nombre.toLowerCase().includes("t�tulo") ||
                   doc.nombre.toLowerCase().includes("titulo") ||
                   doc.nombre.toLowerCase().includes("avaluo") ||
                   doc.nombre.toLowerCase().includes("dominio") ||
@@ -5445,7 +5452,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   const al = a.toLowerCase();
                   const dn = doc.nombre.toLowerCase();
                   if (dn.includes("cedula")) return al.includes("cedula") || al.includes("rut") || al.includes("ci");
-                  if (dn.includes("avaluo")) return al.includes("avaluo") || al.includes("avalúo");
+                  if (dn.includes("avaluo")) return al.includes("avaluo") || al.includes("aval�o");
                   if (dn.includes("dominio") || dn.includes("derecho real") || dn.includes("escritura"))
                     return al.includes("escritura") || al.includes("dru") || al.includes("titulo") || al.includes("dominio") || al.includes("goce") || al.includes("usufructo");
                   if (dn.includes("ruralidad")) return al.includes("ruralidad") || al.includes("rural");
@@ -5464,7 +5471,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   return false;
                 }));
 
-                // Documentos CSP con lógica propia
+                // Documentos CSP con l�gica propia
                 const esRsh = esCsp && nom.includes("registro social de hogares");
                 const esFechaNac = esCsp && nom.includes("fecha de nacimiento");
                 const esSinDiscapacidad = tipoReal === "discapacidad" && opSel === "Sin discapacidad";
@@ -5474,11 +5481,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esCuentaAhorro = esCsp && nom.includes("cuenta de ahorro");
                 const esTituloDominio = !esEspecial && (
                   nom.includes("titulo de dominio") ||
-                  nom.includes("título de dominio") ||
+                  nom.includes("t�tulo de dominio") ||
                   nom.includes("derecho real") ||
                   nom.includes("goce de tierra")
                 );
-                // "Dominio de la propiedad" (nuevo en CSP Rural, reemplaza Título de dominio)
+                // "Dominio de la propiedad" (nuevo en CSP Rural, reemplaza T�tulo de dominio)
                 const esDominioProp = !esTituloDominio && (nom.includes("dominio de la propiedad") || nom.includes("escritura completa"));
                 const esLuz = esCsp && tipoReal === "luz";
                 const luzPartes = esLuz ? (doc.valor || "").split("|") : [];
@@ -5491,7 +5498,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const esCorreoSolicitante = nom.includes("correo") && nom.includes("solicitante");
                 const esTelefonoContacto = esCsp && nom.includes("telefono");
 
-                // Tipo de dominio: "DV" | "DRU" | "Usufructo" | "Goce con resolución" | "Goce sin resolución" | "Otro|descripción"
+                // Tipo de dominio: "DV" | "DRU" | "Usufructo" | "Goce con resoluci�n" | "Goce sin resoluci�n" | "Otro|descripci�n"
                 const tituloPartes = esTituloDominio ? (doc.valor || "").split("|") : [];
                 const tituloTipo = tituloPartes[0] || "";
                 const tituloDesc = tituloPartes[1] || "";
@@ -5510,20 +5517,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   const base = tipo === "Otro" && desc ? "Otro: " + desc.trim() : tipo;
                   const detalle = [
                     fjs ? "Fjs: " + fjs.trim() : "",
-                    numero ? "N°: " + numero.trim() : "",
-                    anio ? "Año: " + anio.trim() : "",
+                    numero ? "N�: " + numero.trim() : "",
+                    anio ? "A�o: " + anio.trim() : "",
                   ].filter(Boolean).join(", ");
                   return [base, detalle].filter(Boolean).join(" - ");
                 };
 
-                // Cédula CSP: "rut|fechaNacimiento" — auto-rellena RUT del solicitante
+                // C�dula CSP: "rut|fechaNacimiento" � auto-rellena RUT del solicitante
                 const cedPartes = esCedula ? (doc.valor || "").split("|") : [];
                 const cedRut = cedPartes[0] || persona.rut || "";
                 // Normalizar fecha a YYYY-MM-DD para el input type="date"
                 const _rawFecha = cedPartes[1] || persona.fechaNacimiento || "";
                 const cedFecha = (() => {
                   if (!_rawFecha) return "";
-                  // Si viene como DD/MM/YYYY → convertir a YYYY-MM-DD
+                  // Si viene como DD/MM/YYYY ? convertir a YYYY-MM-DD
                   if (/^\d{2}\/\d{2}\/\d{4}$/.test(_rawFecha)) {
                     const [d, m, y] = _rawFecha.split("/");
                     return y + "-" + m + "-" + d;
@@ -5532,7 +5539,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 })();
                 const cedRutValido = rutFormatoChilenoValido(cedRut);
                 const cedCompleto = !!(cedRutValido && cedFecha.trim());
-                // Compatibilidad backward (código que usa cedulaRut)
+                // Compatibilidad backward (c�digo que usa cedulaRut)
                 const cedulaRut = cedRut;
 
                 const correoSolicitante = esCorreoSolicitante ? (doc.valor || persona.email || "").trim() : "";
@@ -5544,7 +5551,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const certRuralFecha = certRuralPartes[1] || "";
                 const certRuralCompleto = !!(certRuralNum.trim() && certRuralFecha.trim());
 
-                // Avalúo: doc.valor = "rol|valor$|coordenadas"
+                // Aval�o: doc.valor = "rol|valor$|coordenadas"
                 const avaluoPartes = esAvaluo ? (doc.valor || "").split("|") : [];
                 const avaluoRol = avaluoPartes[0] || "";
                 const avaluoValor = formatPesosChilenos(avaluoPartes[1] || "");
@@ -5555,13 +5562,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 const armarRolAvaluo = (primero, segundo) => [primero, segundo].map(x => x.trim()).filter(Boolean).join("-");
                 const avaluoCompleto = !!(avaluoRol.trim() && avaluoValor.trim());
 
-                // Informaciones previas: doc.valor = "numero|año"
+                // Informaciones previas: doc.valor = "numero|a�o"
                 const infoPartes = esInfoPrevias ? (doc.valor || "").split("|") : [];
                 const infoNumero = infoPartes[0] || "";
                 const infoAnio = infoPartes[1] || "";
                 const infoCompleto = !!(infoNumero.trim() && infoAnio.trim());
 
-                // Antecedentes de la vivienda: CSP urbano usa N/A o N°/fecha; Ampliación guarda permiso, recepción y m2.
+                // Antecedentes de la vivienda: CSP urbano usa N/A o N�/fecha; Ampliaci�n guarda permiso, recepci�n y m2.
                 const antecPartes = esAntecedentesVivienda ? (doc.valor || "").split("|") : [];
                 const antecNumero = antecPartes[0] || "";
                 const antecAnio = antecPartes[1] || "";
@@ -5576,7 +5583,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   ? !!(antecNumero.trim() && antecAnio.trim() && antecRecepcionNumero.trim() && antecRecepcionFecha.trim() && antecM2.trim())
                   : antecEsNA || !!(antecNumeroVisible.trim() && antecAnio.trim());
 
-                // Documentos de trámite Desmarque: "numero|YYYY-MM-DD"
+                // Documentos de tr�mite Desmarque: "numero|YYYY-MM-DD"
                 const esInformeDOM = !esCsp && doc.nombre && doc.nombre.includes("Informe DOM");
                 const esMemoDOM    = !esCsp && doc.nombre && doc.nombre.includes("Memo DOM");
                 const esCartaServiu= !esCsp && doc.nombre && doc.nombre.includes("Carta SERVIU");
@@ -5660,19 +5667,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   if (solActualizada) supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", sol.id);
                 };
 
-                // Tooltip según el motivo del bloqueo
+                // Tooltip seg�n el motivo del bloqueo
                 const tooltipBloqueado = esRsh ? "Ingresa el RSH primero"
                   : esFechaNac ? "Ingresa la fecha primero"
                   : esTituloDominio && !tituloTipo ? "Selecciona el tipo de dominio primero"
                   : esDominioProp && !dominioTipo ? "Selecciona el tipo de dominio primero"
-                  : esCedula && !cedCompleto ? "Ingresa cédula chilena válida con puntos, guion, dígito verificador y fecha de nacimiento"
-                  : esCertRuralidad && !certRuralCompleto ? "Ingresa N° y fecha del certificado primero"
-                  : esAvaluo && !avaluoCompleto ? "Ingresa rol y valor de avalúo primero"
-                  : esInfoPrevias && !infoCompleto ? "Ingresa N° y fecha del documento primero"
-                  : esAntecedentesVivienda && !antecCompleto ? (esAmpliacion ? "Ingresa permiso, recepción y m2 primero" : "Ingresa N° y fecha del certificado primero")
-                  : esCorreoSolicitante && !correoCompleto ? "Ingresa correo electrónico válido"
-                  : esTelefonoContacto && !(doc.valor || "").trim() ? "Ingresa teléfono de contacto"
-                  : esLuz && !nClienteLuz.trim() ? "Ingresa el N° de cliente de electricidad primero"
+                  : esCedula && !cedCompleto ? "Ingresa c�dula chilena v�lida con puntos, guion, d�gito verificador y fecha de nacimiento"
+                  : esCertRuralidad && !certRuralCompleto ? "Ingresa N� y fecha del certificado primero"
+                  : esAvaluo && !avaluoCompleto ? "Ingresa rol y valor de aval�o primero"
+                  : esInfoPrevias && !infoCompleto ? "Ingresa N� y fecha del documento primero"
+                  : esAntecedentesVivienda && !antecCompleto ? (esAmpliacion ? "Ingresa permiso, recepci�n y m2 primero" : "Ingresa N� y fecha del certificado primero")
+                  : esCorreoSolicitante && !correoCompleto ? "Ingresa correo electr�nico v�lido"
+                  : esTelefonoContacto && !(doc.valor || "").trim() ? "Ingresa tel�fono de contacto"
+                  : esLuz && !nClienteLuz.trim() ? "Ingresa el N� de cliente de electricidad primero"
                   : "Completa los datos requeridos primero";
 
                 // Checkbox bloqueado solo si faltan datos requeridos. Los archivos se suben en Carpeta de documentos.
@@ -5708,7 +5715,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           toggleDoc(sol.id, i);
                         }
                         if (esDocArchivo && !doc.entregado) {
-                          if (sol.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
+                          if (sol.programaId === "csp_urbano") return; // CSP Urbano: VB solo via bot�n "Marcar VB ?"
                           marcarDocEntregado(sol.id, i, true);
                         }
                         if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, i, true);
@@ -5717,19 +5724,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>N/A</span>
                       ) : (
                         <div title={bloqueadoPorArchivo ? tooltipBloqueado : ""} style={{ width: 22, height: 22, borderRadius: 6, border: "2px solid " + (doc.entregado ? "#059669" : bloqueadoPorArchivo ? "#9ca3af" : "#D1D5DB"), background: doc.entregado ? "#059669" : bloqueadoPorArchivo ? "#f3f4f6" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0, fontSize: 13, opacity: bloqueadoPorArchivo ? 0.5 : 1 }}>
-                          {doc.entregado ? "✓" : ""}
+                          {doc.entregado ? "?" : ""}
                         </div>
                       )}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, color: doc.entregado ? "#065f46" : "#374151", fontWeight: 600 }}>{nombreVisibleDoc}</div>
                         {bloqueadoPorArchivo && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{tooltipBloqueado}</div>}
                         {doc.etiqueta && !esSinDiscapacidad && <div style={{ fontSize: 12, fontWeight: 800, color: "#059669", marginTop: 2 }}>{doc.etiqueta}</div>}
-                        {esSinDiscapacidad && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>Sin discapacidad — no requiere documento</div>}
+                        {esSinDiscapacidad && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>Sin discapacidad � no requiere documento</div>}
                         {!doc.obligatorio && !opSel && !bloqueadoPorArchivo && <div style={{ fontSize: 10, color: "#aaa" }}>Opcional</div>}
                       </div>
                     </div>
 
-                    {/* Botones de opción para docs especiales — siempre visibles */}
+                    {/* Botones de opci�n para docs especiales � siempre visibles */}
                     {esEspecial && opcionesReal && (
                       <div style={{ display: "flex", gap: 6, marginBottom: esLuz ? 6 : 4 }}>
                         {opcionesReal.map((op, oi) => (
@@ -5754,10 +5761,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       </div>
                     )}
 
-                    {/* Selector proveedor eléctrico + N° cliente (Boleta de luz CSP) */}
+                    {/* Selector proveedor el�ctrico + N� cliente (Boleta de luz CSP) */}
                     {esLuz && (
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
-                        <input type="text" placeholder="N° de cliente electricidad (obligatorio)" value={nClienteLuz}
+                        <input type="text" placeholder="N� de cliente electricidad (obligatorio)" value={nClienteLuz}
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const val = e.target.value;
@@ -5766,7 +5773,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (val.trim()) await syncPersona({ nClienteElectricidad: val.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (nClienteLuz.trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!nClienteLuz.trim() && <div style={{ fontSize: 10, color: "#B45309", marginTop: 1 }}>⚠ Ingresa el N° de cliente para habilitar el VB</div>}
+                        {!nClienteLuz.trim() && <div style={{ fontSize: 10, color: "#B45309", marginTop: 1 }}>? Ingresa el N� de cliente para habilitar el VB</div>}
                         <select value={proveedorLuz} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const val = e.target.value;
@@ -5775,10 +5782,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (val) await syncPersona({ proveedorElectrico: val });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (proveedorLuz ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
-                          <option value="">Seleccionar proveedor eléctrico…</option>
+                          <option value="">Seleccionar proveedor el�ctrico�</option>
                           {["CODINER","FRONTEL","CGE"].map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
-                        {proveedorLuz && <div style={{ fontSize: 10, color: "#059669", marginTop: 2 }}>✓ Proveedor: {proveedorLuz}</div>}
+                        {proveedorLuz && <div style={{ fontSize: 10, color: "#059669", marginTop: 2 }}>? Proveedor: {proveedorLuz}</div>}
                       </div>
                     )}
 
@@ -5823,14 +5830,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshOtraComuna.trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         )}
-                        {rshComunaEsOtra && !rshOtraComuna.trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa el nombre de la comuna para habilitar el VB</div>}
+                        {rshComunaEsOtra && !rshOtraComuna.trim() && <div style={{ fontSize: 10, color: "#B45309" }}>? Completa el nombre de la comuna para habilitar el VB</div>}
                         <select value={rshEstCivil} onClick={e => e.stopPropagation()}
                           onChange={async e => { setRsh(2, e.target.value); if (e.target.value) await syncPersona({ estadoCivil: e.target.value }); }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshEstCivil ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
-                          <option value="">Estado civil…</option>
+                          <option value="">Estado civil�</option>
                           {["SOLTERO/A","CASADO/A","CONVIVIENTE CIVIL","DIVORCIADO/A","VIUDO/A"].map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
-                        <input type="number" min="1" placeholder="N° integrantes grupo familiar" value={rshIntegrantes}
+                        <input type="number" min="1" placeholder="N� integrantes grupo familiar" value={rshIntegrantes}
                           onClick={e => e.stopPropagation()}
                           onChange={async e => { setRsh(3, e.target.value); if (e.target.value.trim()) await syncPersona({ integrantesFamiliares: e.target.value.trim() }); }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshIntegrantes.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -5839,7 +5846,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           {["S","N"].map(op => (
                             <button key={op} onClick={async e => { e.stopPropagation(); setRsh(4, op); await syncPersona({ subsidioAnterior: op }); }}
                               style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshSubsidio === op ? "#1e3a5f" : "#ddd"), background: rshSubsidio === op ? "#1e3a5f" : "#fff", color: rshSubsidio === op ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              {op === "S" ? "S — Sí" : "N — No"}
+                              {op === "S" ? "S � S�" : "N � No"}
                             </button>
                           ))}
                         </div>
@@ -5847,16 +5854,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <div style={{ display: "flex", gap: 6 }}>
                           <button onClick={async e => { e.stopPropagation(); setRshMultiple({ 5: "N/A", 6: "N/A" }); await syncPersona({ discapacidad: "N/A", credencialDiscapacidad: "N/A", movilidadReducida: "N/A" }); }}
                             style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshDiscapacidad === "N/A" ? "#1e3a5f" : "#ddd"), background: rshDiscapacidad === "N/A" ? "#1e3a5f" : "#fff", color: rshDiscapacidad === "N/A" ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                            No — N/A
+                            No � N/A
                           </button>
                           <button onClick={async e => { e.stopPropagation(); setRshMultiple({ 5: rshDiscapacidad === "N/A" ? "" : rshDiscapacidad, 6: rshDiscapacidad === "N/A" ? "" : rshMovilidad }); await syncPersona({ discapacidad: "S" }); }}
                             style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (rshDiscapacidad && rshDiscapacidad !== "N/A" ? "#1e3a5f" : "#ddd"), background: rshDiscapacidad && rshDiscapacidad !== "N/A" ? "#1e3a5f" : "#fff", color: rshDiscapacidad && rshDiscapacidad !== "N/A" ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                            Sí
+                            S�
                           </button>
                         </div>
                         {rshDiscapacidad !== "N/A" && (
                           <>
-                            <input type="text" placeholder="N° credencial discapacidad" value={rshDiscapacidad}
+                            <input type="text" placeholder="N� credencial discapacidad" value={rshDiscapacidad}
                               onClick={e => e.stopPropagation()}
                               onChange={async e => { setRsh(5, e.target.value); if (e.target.value.trim()) await syncPersona({ discapacidad: "S", credencialDiscapacidad: e.target.value.trim() }); }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshDiscapacidad.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -5874,17 +5881,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         {esAmpliacion && (
                           <>
                             <div style={{ fontSize: 10, color: "#6b7280" }}>Hacinamiento:</div>
-                            <input type="number" min="0" placeholder="N° dormitorios" value={rshDormitorios}
+                            <input type="number" min="0" placeholder="N� dormitorios" value={rshDormitorios}
                               onClick={e => e.stopPropagation()}
                               onChange={e => setRsh(7, e.target.value)}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshDormitorios.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            <input type="number" min="1" placeholder="Integrantes del núcleo familiar" value={rshIntegrantesNucleo}
+                            <input type="number" min="1" placeholder="Integrantes del n�cleo familiar" value={rshIntegrantesNucleo}
                               onClick={e => e.stopPropagation()}
                               onChange={e => setRsh(8, e.target.value)}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (rshIntegrantesNucleo.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                           </>
                         )}
-                        {!rshCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa todos los campos para habilitar el VB</div>}
+                        {!rshCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Completa todos los campos para habilitar el VB</div>}
                       </div>
                     )}
 
@@ -5906,8 +5913,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           onClick={e => e.stopPropagation()}
                           onChange={e => guardarFecha(e.target.value)}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (fechaValor ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!doc.valor && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Ingresa la fecha para habilitar el VB</div>}
-                        {fechaValor && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {fmtFecha(fechaValor)}</div>}
+                        {!doc.valor && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>? Ingresa la fecha para habilitar el VB</div>}
+                        {fechaValor && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>? {fmtFecha(fechaValor)}</div>}
                       </div>
                       );
                     })()}
@@ -5923,21 +5930,21 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (e.target.value.trim()) await syncPersona({ sistemaAgua: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (aprNombre.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        <input type="text" placeholder="N° de servicio agua" value={aprServicio} onClick={e => e.stopPropagation()}
+                        <input type="text" placeholder="N� de servicio agua" value={aprServicio} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = aprNombre + "|" + e.target.value;
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ nServicioAgua: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (aprServicio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!aprCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa nombre empresa sanitaria y N° servicio</div>}
+                        {!aprCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Completa nombre empresa sanitaria y N� servicio</div>}
                       </div>
                     )}
 
                     {/* Inputs discapacidad Con discapacidad */}
                     {esConDiscapacidad && (
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
-                        <input type="text" placeholder="N° de folio credencial" value={discFolio} onClick={e => e.stopPropagation()}
+                        <input type="text" placeholder="N� de folio credencial" value={discFolio} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = e.target.value + "|" + discMovilidad;
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
@@ -5946,7 +5953,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (discFolio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>Movilidad reducida:</div>
                         <div style={{ display: "flex", gap: 6 }}>
-                          {["Sí", "No"].map(op => (
+                          {["S�", "No"].map(op => (
                             <button key={op} onClick={async e => { e.stopPropagation();
                               const newValor = discFolio + "|" + op;
                               onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
@@ -5957,20 +5964,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             </button>
                           ))}
                         </div>
-                        {!discCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa el folio y la movilidad reducida</div>}
+                        {!discCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa el folio y la movilidad reducida</div>}
                       </div>
                     )}
 
-                    {/* Certificado de Ruralidad: N° + Fecha */}
+                    {/* Certificado de Ruralidad: N� + Fecha */}
                     {esCertRuralidad && (
                       <div style={{ marginBottom: 4, display: "grid", gap: 4 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>N° Certificado</div>
-                        <input type="text" placeholder="N° certificado (ej: 25/2026)" value={certRuralNum}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>N� Certificado</div>
+                        <input type="text" placeholder="N� certificado (ej: 25/2026)" value={certRuralNum}
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = e.target.value + "|" + certRuralFecha;
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
-                            if (e.target.value.trim()) await syncPersona({ certRuralidad: e.target.value.trim() + (certRuralFecha ? " — " + certRuralFecha : "") });
+                            if (e.target.value.trim()) await syncPersona({ certRuralidad: e.target.value.trim() + (certRuralFecha ? " � " + certRuralFecha : "") });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (certRuralNum.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha del Certificado</div>
@@ -5982,15 +5989,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (certRuralFecha ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {certRuralCompleto
-                          ? <div style={{ fontSize: 10, color: "#059669" }}>✓ N° {certRuralNum} — {certRuralFecha}</div>
-                          : <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para marcar VB</div>}
+                          ? <div style={{ fontSize: 10, color: "#059669" }}>? N� {certRuralNum} � {certRuralFecha}</div>
+                          : <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa N� y fecha para marcar VB</div>}
                       </div>
                     )}
 
-                    {/* Cuenta de ahorro — archivo + número + banco */}
+                    {/* Cuenta de ahorro � archivo + n�mero + banco */}
                     {esCuentaAhorro && !doc.entregado && (
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
-                        <input type="text" placeholder="N° cuenta de ahorro" value={cuentaNum} onClick={e => e.stopPropagation()}
+                        <input type="text" placeholder="N� cuenta de ahorro" value={cuentaNum} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = e.target.value + "|" + cuentaBanco;
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
@@ -6004,35 +6011,35 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (e.target.value) await syncPersona({ banco: e.target.value });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaBanco.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
-                          <option value="">Seleccionar banco…</option>
-                          {["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","Itaú","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"].map(b => <option key={b} value={b}>{b}</option>)}
+                          <option value="">Seleccionar banco�</option>
+                          {["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","Ita�","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"].map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                         <div style={{ fontSize: 10, color: tieneArchivoCuenta ? "#059669" : "#B45309", fontWeight: 600 }}>
-                          {tieneArchivoCuenta ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir cartola/certificado en Carpeta de documentos"}
+                          {tieneArchivoCuenta ? "? Archivo encontrado en Carpeta de documentos" : "?? Subir cartola/certificado en Carpeta de documentos"}
                         </div>
                         {cuentaNum.trim() && cuentaBanco.trim() && (
                           <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                             style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
-                            Marcar VB ✓
+                            Marcar VB ?
                           </button>
                         )}
                         {(!cuentaNum.trim() || !cuentaBanco.trim()) && (
-                          <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa N° cuenta y banco para marcar VB</div>
+                          <div style={{ fontSize: 10, color: "#B45309" }}>? Completa N� cuenta y banco para marcar VB</div>
                         )}
                       </div>
                     )}
                     {esCuentaAhorro && doc.entregado && (
-                      <div style={{ fontSize: 11, color: "#059669", marginTop: 4 }}>✓ Cuenta: {cuentaNum} — {cuentaBanco}</div>
+                      <div style={{ fontSize: 11, color: "#059669", marginTop: 4 }}>? Cuenta: {cuentaNum} � {cuentaBanco}</div>
                     )}
 
-                    {/* Campos N°+Fecha para Informe DOM, Memo DOM, Carta SERVIU (Desmarque) */}
+                    {/* Campos N�+Fecha para Informe DOM, Memo DOM, Carta SERVIU (Desmarque) */}
                     {esTramite && (
                       <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
                         <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.3px" }}>
-                          {esInformeDOM ? "N° Informe DOM" : esMemoDOM ? "N° Memorando DOM" : "N° Carta SERVIU"}
+                          {esInformeDOM ? "N� Informe DOM" : esMemoDOM ? "N� Memorando DOM" : "N� Carta SERVIU"}
                         </div>
                         <input type="text"
-                          placeholder={esInformeDOM ? "N° del informe (ej: 15/2026)" : esMemoDOM ? "N° del memorando (ej: 25/2026)" : "N° de la carta (ej: 45/2026)"}
+                          placeholder={esInformeDOM ? "N� del informe (ej: 15/2026)" : esMemoDOM ? "N� del memorando (ej: 25/2026)" : "N� de la carta (ej: 45/2026)"}
                           value={tramiteNum}
                           onChange={e => { const v = e.target.value + "|" + tramiteFecha; setDocValor(sol.id, i, v); }}
                           onClick={e => e.stopPropagation()}
@@ -6044,17 +6051,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           onClick={e => e.stopPropagation()}
                           style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid " + (tramiteFecha?"#059669":"#ddd"), fontSize:12, background:"#fff", boxSizing:"border-box" }} />
                         {tramiteCompleto
-                          ? <div style={{ fontSize:10, color:"#059669" }}>✓ {tramiteNum} — {tramiteFecha}</div>
-                          : <div style={{ fontSize:10, color:"#B45309" }}>⚠ Ingresa N° y fecha para activar el VB</div>}
+                          ? <div style={{ fontSize:10, color:"#059669" }}>? {tramiteNum} � {tramiteFecha}</div>
+                          : <div style={{ fontSize:10, color:"#B45309" }}>? Ingresa N� y fecha para activar el VB</div>}
                       </div>
                     )}
 
-                    {/* Sección especial Respuesta SERVIU */}
+                    {/* Secci�n especial Respuesta SERVIU */}
                     {doc.nombre && doc.nombre.includes("Respuesta SERVIU") && (
                       <div style={{ marginTop: 8 }}>
                         {!doc.entregado && (
                           <div style={{ marginBottom: 6, display: "grid", gap: 4 }}>
-                            <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>N° Ordinario (opcional)</div>
+                            <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>N� Ordinario (opcional)</div>
                             <input type="text" placeholder="Ej: 1234/2026" value={doc.num_ord || ""}
                               onClick={e => e.stopPropagation()}
                               onChange={e => onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
@@ -6069,19 +6076,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               }))}
                               style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, boxSizing:"border-box" }} />
                             <div style={{ fontSize: 11, color: "#B45309", fontWeight: 600, marginTop: 2 }}>
-                              ⚠ Use el botón "Subir Respuesta SERVIU" para registrar el resultado
+                              ? Use el bot�n "Subir Respuesta SERVIU" para registrar el resultado
                             </div>
                           </div>
                         )}
                         {doc.entregado && (
                           <div style={{ background: doc.valor && doc.valor.includes("APROBADO") ? "#E0F7FA" : "#FEF2F2", borderRadius: 7, padding: "8px 12px" }}>
                             <div style={{ fontSize: 12, color: doc.valor && doc.valor.includes("APROBADO") ? "#0891B2" : "#DC2626", fontWeight: 700, marginBottom: 4 }}>
-                              {doc.valor && doc.valor.includes("APROBADO") ? "✅" : "❌"} {doc.valor}
+                              {doc.valor && doc.valor.includes("APROBADO") ? "?" : "?"} {doc.valor}
                             </div>
                             {(doc.num_ord || doc.fecha_resp) && (
                               <div style={{ fontSize: 10, color: "#555", marginBottom: 4 }}>
-                                {doc.num_ord && <span>N° Ord: {doc.num_ord} </span>}
-                                {doc.fecha_resp && <span>· Fecha: {doc.fecha_resp}</span>}
+                                {doc.num_ord && <span>N� Ord: {doc.num_ord} </span>}
+                                {doc.fecha_resp && <span>� Fecha: {doc.fecha_resp}</span>}
                               </div>
                             )}
                             <button onClick={async () => {
@@ -6098,7 +6105,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       </div>
                     )}
 
-                    {/* Selector tipo de dominio para Título de dominio CSP */}
+                    {/* Selector tipo de dominio para T�tulo de dominio CSP */}
                     {esTituloDominio && (
                       <div style={{ marginTop: 8, marginBottom: 4 }}>
                         <select value={tituloTipo} onClick={e => e.stopPropagation()}
@@ -6111,11 +6118,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (tipo) await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tipo, tipo === "Otro" ? tituloDesc : "", tituloFjs, tituloNumero, tituloAnio) });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloTipo ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
-                          <option value="">Selecciona tipo de dominio…</option>
-                          {["D.V.", "DRU", "Usufructo", "Goce con resolución", "Goce sin resolución", "Otro"].map(o => <option key={o} value={o}>{o}</option>)}
+                          <option value="">Selecciona tipo de dominio�</option>
+                          {["D.V.", "DRU", "Usufructo", "Goce con resoluci�n", "Goce sin resoluci�n", "Otro"].map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                         {tituloTipo === "Otro" && (
-                          <input type="text" placeholder="Describe el tipo de dominio…" value={tituloDesc}
+                          <input type="text" placeholder="Describe el tipo de dominio�" value={tituloDesc}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = ["Otro", e.target.value, tituloFjs, tituloNumero, tituloAnio].join("|");
@@ -6135,7 +6142,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, e.target.value, tituloNumero, tituloAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloFjs.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                          <input type="text" placeholder="N°: 120" value={tituloNumero}
+                          <input type="text" placeholder="N�: 120" value={tituloNumero}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [tituloTipo, tituloDesc, tituloFjs, e.target.value, tituloAnio].join("|");
@@ -6143,7 +6150,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, e.target.value, tituloAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                          <input type="text" placeholder="Año: 2025" value={tituloAnio}
+                          <input type="text" placeholder="A�o: 2025" value={tituloAnio}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [tituloTipo, tituloDesc, tituloFjs, tituloNumero, e.target.value].join("|");
@@ -6152,8 +6159,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         </div>
-                        {!tituloTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para marcar VB</div>}
-                        {tituloTipo && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, tituloNumero, tituloAnio)}</div>}
+                        {!tituloTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>? Selecciona el tipo para marcar VB</div>}
+                        {tituloTipo && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>? {resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, tituloNumero, tituloAnio)}</div>}
                       </div>
                     )}
 
@@ -6174,15 +6181,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (val) await syncPersona({ email: val });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (correoCompleto ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!correoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa correo electrónico válido para habilitar el VB</div>}
-                        {correoCompleto && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✓ Correo guardado en ficha</div>}
+                        {!correoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa correo electr�nico v�lido para habilitar el VB</div>}
+                        {correoCompleto && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>? Correo guardado en ficha</div>}
                       </div>
                     )}
 
-                    {/* Teléfono de contacto */}
+                    {/* Tel�fono de contacto */}
                     {esTelefonoContacto && (
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
-                        <input type="text" placeholder="Teléfono de contacto" value={doc.valor || persona.telefono || ""}
+                        <input type="text" placeholder="Tel�fono de contacto" value={doc.valor || persona.telefono || ""}
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const val = e.target.value.replace(/[^\d+ ]/g, "");
@@ -6195,12 +6202,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (val.trim()) await syncPersona({ telefono: val.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + ((doc.valor || persona.telefono || "").trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!(doc.valor || persona.telefono || "").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa teléfono para habilitar el VB</div>}
-                        {(doc.valor || persona.telefono || "").trim() && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✓ Teléfono guardado en ficha</div>}
+                        {!(doc.valor || persona.telefono || "").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa tel�fono para habilitar el VB</div>}
+                        {(doc.valor || persona.telefono || "").trim() && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>? Tel�fono guardado en ficha</div>}
                       </div>
                     )}
 
-                    {/* Cédula: cédula de identidad + Fecha de Nacimiento */}
+                    {/* C�dula: c�dula de identidad + Fecha de Nacimiento */}
                     {esCedula && (() => {
                       const cedPartes2 = (doc.valor || "").split("|");
                       const rut2 = cedPartes2[0] || persona.rut || "";
@@ -6222,7 +6229,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       const rut2Valido = rutFormatoChilenoValido(rut2);
                       return (
                       <div style={{ marginTop: 8, marginBottom: 4, display: "grid", gap: 5 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>Cédula de identidad del solicitante</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>C�dula de identidad del solicitante</div>
                         <input type="text" placeholder="ej: 10.398.338-K" value={formatRut(rut2)}
                           onClick={e => e.stopPropagation()}
                           onChange={e => guardarCedula(e.target.value, fechaCedula)}
@@ -6232,9 +6239,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           onClick={e => e.stopPropagation()}
                           onChange={e => guardarCedula(rut2, e.target.value)}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (fechaCedula ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!rut2Valido && <div style={{ fontSize: 10, color: "#DC2626", marginTop: 2 }}>⚠ La cédula debe ser chilena válida, con puntos, guion y dígito verificador correcto.</div>}
-                        {!(rut2Valido && fechaCedula) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>⚠ Ingresa cédula de identidad válida y fecha completa para marcar VB</div>}
-                        {rut2Valido && fechaCedula && <div style={{ fontSize: 10, color: "#059669" }}>✓ Cédula de identidad: {formatRut(rut2)} — Nacimiento: {fmtFecha(fechaCedula)}</div>}
+                        {!rut2Valido && <div style={{ fontSize: 10, color: "#DC2626", marginTop: 2 }}>? La c�dula debe ser chilena v�lida, con puntos, guion y d�gito verificador correcto.</div>}
+                        {!(rut2Valido && fechaCedula) && <div style={{ fontSize: 10, color: "#B45309", marginTop: 2 }}>? Ingresa c�dula de identidad v�lida y fecha completa para marcar VB</div>}
+                        {rut2Valido && fechaCedula && <div style={{ fontSize: 10, color: "#059669" }}>? C�dula de identidad: {formatRut(rut2)} � Nacimiento: {fmtFecha(fechaCedula)}</div>}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginTop: 2 }}>
                           {[
                             ["RUT colores", "ok"],
@@ -6275,11 +6282,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (tipo) await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tipo, tipo === "Otro" ? dominioDesc : "", dominioFjs, dominioNumero, dominioAnio) });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioTipo ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
-                          <option value="">Selecciona tipo de dominio…</option>
-                          {["D.V.","DRU","Goce con resolución","Goce sin resolución","Usufructo","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
+                          <option value="">Selecciona tipo de dominio�</option>
+                          {["D.V.","DRU","Goce con resoluci�n","Goce sin resoluci�n","Usufructo","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                         {dominioTipo === "Otro" && (
-                          <input type="text" placeholder="Describe el tipo de dominio…" value={dominioDesc}
+                          <input type="text" placeholder="Describe el tipo de dominio�" value={dominioDesc}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = ["Otro", e.target.value, dominioFjs, dominioNumero, dominioAnio].join("|");
@@ -6299,7 +6306,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, e.target.value, dominioNumero, dominioAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioFjs.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                          <input type="text" placeholder="N°: 120" value={dominioNumero}
+                          <input type="text" placeholder="N�: 120" value={dominioNumero}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [dominioTipo, dominioDesc, dominioFjs, e.target.value, dominioAnio].join("|");
@@ -6307,7 +6314,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, e.target.value, dominioAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                          <input type="text" placeholder="Año: 2025" value={dominioAnio}
+                          <input type="text" placeholder="A�o: 2025" value={dominioAnio}
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [dominioTipo, dominioDesc, dominioFjs, dominioNumero, e.target.value].join("|");
@@ -6316,12 +6323,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         </div>
-                        {!dominioTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>⚠ Selecciona el tipo para marcar VB</div>}
-                        {dominioTipo && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>✓ {resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, dominioNumero, dominioAnio)}</div>}
+                        {!dominioTipo && <div style={{ fontSize: 10, color: "#B45309", marginTop: 3 }}>? Selecciona el tipo para marcar VB</div>}
+                        {dominioTipo && <div style={{ fontSize: 10, color: "#059669", marginTop: 3 }}>? {resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, dominioNumero, dominioAnio)}</div>}
                       </div>
                     )}
 
-                    {/* Campos rol + valor de avalúo antes del upload */}
+                    {/* Campos rol + valor de aval�o antes del upload */}
                     {esAvaluo && (
                       <div style={{ display: "grid", gap: 5, marginTop: 8, marginBottom: 4 }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5 }}>
@@ -6378,7 +6385,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <div style={{ fontSize: 10, color: "#6b7280" }}>
                           En SII Mapas pega en este orden: LAUTARO, {avaluoRolPrimero || "___"}, {avaluoRolSegundo || "___"}.
                         </div>
-                        <input type="text" placeholder="Valor $ del avalúo (ej: $45.000.000)" value={avaluoValor}
+                        <input type="text" placeholder="Valor $ del aval�o (ej: $45.000.000)" value={avaluoValor}
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const valorFormateado = formatPesosChilenos(e.target.value);
@@ -6395,7 +6402,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             if (e.target.value.trim()) await syncPersona({ coordenadas: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoCoordenadas.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!avaluoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa rol y valor de avalúo para marcar VB</div>}
+                        {!avaluoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Completa rol y valor de aval�o para marcar VB</div>}
                       </div>
                     )}
 
@@ -6404,7 +6411,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       <div style={{ marginTop: 8, marginBottom: 4 }}>
                         {esAmpliacion ? (
                           <div style={{ display: "grid", gap: 5 }}>
-                            <input type="text" placeholder="N° permiso de edificación" value={antecNumero}
+                            <input type="text" placeholder="N� permiso de edificaci�n" value={antecNumero}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = e.target.value + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + antecM2;
@@ -6418,14 +6425,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            <input type="text" placeholder="N° recepción" value={antecRecepcionNumero}
+                            <input type="text" placeholder="N� recepci�n" value={antecRecepcionNumero}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = antecNumero + "|" + antecAnio + "|" + e.target.value + "|" + antecRecepcionFecha + "|" + antecM2;
                                 onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecRecepcionNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            <input type="text" placeholder="Fecha recepción (ej: 01/02/2026)" value={antecRecepcionFecha}
+                            <input type="text" placeholder="Fecha recepci�n (ej: 01/02/2026)" value={antecRecepcionFecha}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = antecNumero + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + e.target.value + "|" + antecM2;
@@ -6438,17 +6445,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 const newValor = antecNumero + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + e.target.value;
                                 onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                                 if (antecNumero.trim() && antecAnio.trim() && antecRecepcionNumero.trim() && antecRecepcionFecha.trim() && e.target.value.trim()) {
-                                  await syncPersona({ antecedentesVivienda: `Permiso ${antecNumero.trim()} ${antecAnio.trim()} / Recepción ${antecRecepcionNumero.trim()} ${antecRecepcionFecha.trim()} / ${e.target.value.trim()} m2` });
+                                  await syncPersona({ antecedentesVivienda: `Permiso ${antecNumero.trim()} ${antecAnio.trim()} / Recepci�n ${antecRecepcionNumero.trim()} ${antecRecepcionFecha.trim()} / ${e.target.value.trim()} m2` });
                                 }
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecM2.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                             {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Antecedentes completos. Marca VB y sube el respaldo en Carpeta de documentos.</div>}
-                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa permiso, recepción y m2 para marcar VB</div>}
+                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa permiso, recepci�n y m2 para marcar VB</div>}
                           </div>
                         ) : (
                           <>
                             <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                              {[["NA","N/A — No aplica"],["SI","SÍ — Tiene documento"]].map(([op, lbl]) => (
+                              {[["NA","N/A � No aplica"],["SI","S� � Tiene documento"]].map(([op, lbl]) => (
                                 <button key={op} onClick={e => {
                                   e.stopPropagation();
                                   if (op === "NA") {
@@ -6469,10 +6476,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 </button>
                               ))}
                             </div>
-                            {antecEsNA && <div style={{ fontSize:10, color:"#059669", fontWeight:600 }}>✓ Marcado como N/A — VB activado sin archivo</div>}
+                            {antecEsNA && <div style={{ fontSize:10, color:"#059669", fontWeight:600 }}>? Marcado como N/A � VB activado sin archivo</div>}
                             {antecOpcion === "SI" && (
                           <div style={{ display: "grid", gap: 5 }}>
-                            <input type="text" placeholder="N° del certificado (ej: 25)" value={antecNumeroVisible}
+                            <input type="text" placeholder="N� del certificado (ej: 25)" value={antecNumeroVisible}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = e.target.value + "|" + antecAnio;
@@ -6485,12 +6492,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 const newValor = antecNumeroVisible + "|" + e.target.value;
                                 onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
                                 if (antecNumeroVisible.trim() && e.target.value.trim()) {
-                                  await syncPersona({ antecedentesVivienda: "Certificado N° " + antecNumeroVisible.trim() + " Fecha " + fmtFecha(e.target.value.trim()) });
+                                  await syncPersona({ antecedentesVivienda: "Certificado N� " + antecNumeroVisible.trim() + " Fecha " + fmtFecha(e.target.value.trim()) });
                                 }
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: Certificado N° {antecNumeroVisible} Fecha {fmtFecha(antecAnio)}</div>}
-                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para marcar VB</div>}
+                            {antecCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardar� como: Certificado N� {antecNumeroVisible} Fecha {fmtFecha(antecAnio)}</div>}
+                            {!antecCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa N� y fecha para marcar VB</div>}
                           </div>
                             )}
                           </>
@@ -6498,10 +6505,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       </div>
                     )}
 
-                    {/* Campos N° + año de informaciones previas antes del upload */}
+                    {/* Campos N� + a�o de informaciones previas antes del upload */}
                     {esInfoPrevias && (
                       <div style={{ display: "grid", gap: 5, marginTop: 8, marginBottom: 4 }}>
-                        <input type="text" placeholder="N° del documento (ej: 25)" value={infoNumero}
+                        <input type="text" placeholder="N� del documento (ej: 25)" value={infoNumero}
                           onClick={e => e.stopPropagation()}
                           onChange={e => {
                             const newValor = e.target.value + "|" + infoAnio;
@@ -6519,8 +6526,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                             }
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (infoAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {infoCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardará como: {infoNumero}/{infoAnio}</div>}
-                        {!infoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° y fecha para marcar VB</div>}
+                        {infoCompleto && <div style={{ fontSize: 10, color: "#6b7280" }}>Se guardar� como: {infoNumero}/{infoAnio}</div>}
+                        {!infoCompleto && <div style={{ fontSize: 10, color: "#B45309" }}>? Ingresa N� y fecha para marcar VB</div>}
                       </div>
                     )}
 
@@ -6535,42 +6542,42 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       (!esAntecedentesVivienda || antecCompleto) && (
                       <div style={{ marginTop: 8 }}>
                         <div style={{ fontSize: 11, color: tieneArchivo ? "#059669" : "#B45309", marginBottom: 4, fontWeight: 600 }}>
-                          {tieneArchivo ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir respaldo en Carpeta de documentos"}
+                          {tieneArchivo ? "? Archivo encontrado en Carpeta de documentos" : "?? Subir respaldo en Carpeta de documentos"}
                         </div>
                         <button onClick={() => { marcarDocEntregado(sol.id, i, true); }}
                           style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                          Marcar VB ✓
+                          Marcar VB ?
                         </button>
                       </div>
                     )}
 
-                    {/* Mensaje según opción seleccionada */}
+                    {/* Mensaje seg�n opci�n seleccionada */}
                     {necesitaArchivo && !doc.entregado && !esSinDiscapacidad && (
                       <>{esCsp ? (
                         /* CSP: archivo en carpeta, VB desde solicitudes */
                         <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: tieneArchivoEspecial ? "#ECFDF5" : "#FFFBEB", borderRadius: 6, padding: "5px 10px" }}>
                           <span style={{ fontSize: 11, color: tieneArchivoEspecial ? "#059669" : "#B45309", fontWeight: 700 }}>
-                            {tieneArchivoEspecial ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
+                            {tieneArchivoEspecial ? "? Archivo encontrado en carpeta" : "?? Subir archivo en Carpeta de documentos"}
                           </span>
                           <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
-                            Marcar VB ✓
+                            Marcar VB ?
                           </button>
                         </div>
                       ) : (
                         /* Otros programas: archivo en carpeta, VB desde solicitudes */
                         <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
-                          <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>📁 Subir archivo en Carpeta de documentos</span>
+                          <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>?? Subir archivo en Carpeta de documentos</span>
                           <button onClick={() => marcarDocEntregado(sol.id, i, true)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
-                            Marcar VB ✓
+                            Marcar VB ?
                           </button>
                         </div>
                       )}
                     </> )}
                     {necesitaArchivo && doc.entregado && !esSinDiscapacidad && (
                       <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#F0FDF4", borderRadius: 6, padding: "5px 8px" }}>
-                        <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ VB marcado</span>
+                        <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>? VB marcado</span>
                       </div>
                     )}
                   </div>
@@ -6586,15 +6593,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         <Modal title="Editar Ficha Desmarque" onClose={() => setShowFichaEdit(false)}>
           <div style={{ display: "grid", gap: 10, maxHeight: "70vh", overflowY: "auto", paddingRight: 8 }}>
             {[
-              ["rut","Cédula de identidad","Ej: 10398338-K"],
-              ["direccion","Comunidad/Dirección",""],
-              ["telefono","Teléfono",""],
+              ["rut","C�dula de identidad","Ej: 10398338-K"],
+              ["direccion","Comunidad/Direcci�n",""],
+              ["telefono","Tel�fono",""],
               ["sector","Sector *",""],
               ["coordenadas","Coordenadas (opcional)","Ej: C=-38.516023,-72.374214"],
               ["puntaje_rsh","RSH (%)","Ej: 40"],
-              ["anio_subsidio","Año de Subsidio *","Ej: 1989"],
+              ["anio_subsidio","A�o de Subsidio *","Ej: 1989"],
               ["rol_propiedad","Rol de la Propiedad","Ej: 300-39"],
-              ["numero_informe_dom","N° Informe DOM","Ej: N°15 del 10-03-2025"],
+              ["numero_informe_dom","N� Informe DOM","Ej: N�15 del 10-03-2025"],
             ].map(([key, label, ph]) => {
               return (
                 <div key={key}>
@@ -6609,7 +6616,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 3 }}>Fecha Visita</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 7, border: "1.5px solid #e5e7eb", background: "#f9fafb", fontSize: 13, color: fichaForm.fecha_visita ? "#1e3a5f" : "#9ca3af" }}>
                 <span style={{ flex: 1 }}>{fmtFecha(fichaForm.fecha_visita) || "No registrada"}</span>
-                <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>🔒 Solo desde Solicitudes activas</span>
+                <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>?? Solo desde Solicitudes activas</span>
               </div>
             </div>
             <div>
@@ -6641,7 +6648,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
             <button onClick={() => setShowFichaEdit(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-            <button onClick={() => { if (window["confirm"]("¿Está seguro de guardar los cambios?")) guardarFichaDesmarque(); }}
+            <button onClick={() => { if (window["confirm"]("�Est� seguro de guardar los cambios?")) guardarFichaDesmarque(); }}
               style={{ padding: "9px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Guardar</button>
           </div>
           {/* clave desmarque eliminada */}
@@ -6652,7 +6659,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         <Modal title="Generar Memorando DOM" onClose={() => setShowModalMemo(false)}>
           <div style={{ display: "grid", gap: 12 }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>N° del Memorando *</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>N� del Memorando *</div>
               <input value={formMemo.numero} onChange={e => setFormMemo({...formMemo, numero: e.target.value})}
                 placeholder="Ej: 15/2026"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
@@ -6667,21 +6674,21 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     setFormMemo({
                       ...formMemo,
                       deTipo: e.target.value,
-                      deNombre: esMarcelo ? "MARCELO CIFUENTES VÁSQUEZ" : "",
+                      deNombre: esMarcelo ? "MARCELO CIFUENTES V�SQUEZ" : "",
                       deCargo: esMarcelo ? "ENCARGADO ENTIDAD PATROCINANTE" : "",
                       deInstitucion: esMarcelo ? "MUNICIPALIDAD DE LAUTARO" : "",
                       deIniciales: esMarcelo ? "MCV/mcv" : ""
                     });
                   }}
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, marginBottom: 8 }}>
-                  <option value="marcelo">Marcelo Cifuentes Vásquez</option>
+                  <option value="marcelo">Marcelo Cifuentes V�squez</option>
                   <option value="otro">Otro</option>
                 </select>
                 {formMemo.deTipo === "otro" && (
                   <div style={{ display: "grid", gap: 7 }}>
                     <input value={formMemo.deNombre} onChange={e => setFormMemo({...formMemo, deNombre: e.target.value})} placeholder="Nombre completo" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
                     <input value={formMemo.deCargo} onChange={e => setFormMemo({...formMemo, deCargo: e.target.value})} placeholder="Cargo" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
-                    <input value={formMemo.deInstitucion} onChange={e => setFormMemo({...formMemo, deInstitucion: e.target.value})} placeholder="Institución" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
+                    <input value={formMemo.deInstitucion} onChange={e => setFormMemo({...formMemo, deInstitucion: e.target.value})} placeholder="Instituci�n" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
                     <input value={formMemo.deIniciales} onChange={e => setFormMemo({...formMemo, deIniciales: e.target.value})} placeholder="Iniciales, ej: MCV/mcv" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
                   </div>
                 )}
@@ -6695,21 +6702,21 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     setFormMemo({
                       ...formMemo,
                       aTipo: e.target.value,
-                      aNombre: esEduardo ? "SEÑOR EDUARDO BUSTOS VALDEBENITO" : "",
+                      aNombre: esEduardo ? "SE�OR EDUARDO BUSTOS VALDEBENITO" : "",
                       aCargo: esEduardo ? "DIRECTOR DE OBRAS" : "",
                       aInstitucion: esEduardo ? "MUNICIPALIDAD DE LAUTARO" : "",
                       aTrato: esEduardo ? "PRESENTE." : "PRESENTE."
                     });
                   }}
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, marginBottom: 8 }}>
-                  <option value="eduardo">Señor Eduardo Bustos Valdebenito</option>
+                  <option value="eduardo">Se�or Eduardo Bustos Valdebenito</option>
                   <option value="otro">Otro</option>
                 </select>
                 {formMemo.aTipo === "otro" && (
                   <div style={{ display: "grid", gap: 7 }}>
                     <input value={formMemo.aNombre} onChange={e => setFormMemo({...formMemo, aNombre: e.target.value})} placeholder="Nombre completo" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
                     <input value={formMemo.aCargo} onChange={e => setFormMemo({...formMemo, aCargo: e.target.value})} placeholder="Cargo" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
-                    <input value={formMemo.aInstitucion} onChange={e => setFormMemo({...formMemo, aInstitucion: e.target.value})} placeholder="Institución" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
+                    <input value={formMemo.aInstitucion} onChange={e => setFormMemo({...formMemo, aInstitucion: e.target.value})} placeholder="Instituci�n" style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
                     <input value={formMemo.aTrato} onChange={e => setFormMemo({...formMemo, aTrato: e.target.value})} placeholder="Trato final, ej: PRESENTE." style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
                   </div>
                 )}
@@ -6727,7 +6734,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       <span style={{ fontWeight: 700, color: "#7C3AED", whiteSpace: "nowrap", minWidth: 28 }}>{i + 1}.-</span>
                       <span style={{ flex: 1, color: "#333" }}>{p}</span>
                       <button onClick={() => setFormMemo({...formMemo, problemas: formMemo.problemas.filter((_, j) => j !== i)})}
-                        style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>✕</button>
+                        style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>?</button>
                     </div>
                   ))}
                 </div>
@@ -6757,8 +6764,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             </div>
             <div style={{ background: "#F5F3FF", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#7C3AED" }}>
               <div><strong>Nombre:</strong> {persona.nombre}</div>
-              <div><strong>Cédula de identidad:</strong> {persona.rut}</div>
-              <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
+              <div><strong>C�dula de identidad:</strong> {persona.rut}</div>
+              <div><strong>Direcci�n:</strong> {persona.direccion || "-"}</div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setShowModalMemo(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
@@ -6775,7 +6782,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         <Modal title="Generar Carta SERVIU" onClose={() => setShowModalCarta(false)}>
           <div style={{ display: "grid", gap: 12 }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>N° de la Carta *</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>N� de la Carta *</div>
               <input value={formCarta.numero} onChange={e => setFormCarta({...formCarta, numero: e.target.value})}
                 placeholder="Ej: 45/2026"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
@@ -6790,7 +6797,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     setFormCarta({
                       ...formCarta,
                       deTipo: e.target.value,
-                      deNombre: esMarcelo ? "MARCELO CIFUENTES VÁSQUEZ" : "",
+                      deNombre: esMarcelo ? "MARCELO CIFUENTES V�SQUEZ" : "",
                       deCargo: esMarcelo ? "ENCARGADO ENTIDAD PATROCINANTE" : "",
                       deInstitucion: esMarcelo ? "MUNICIPALIDAD DE LAUTARO" : "",
                       deIniciales: esMarcelo ? "MCV/mcv" : ""
@@ -6798,14 +6805,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                   }}
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #7DD3FC", fontSize: 13, marginBottom: 8 }}
                 >
-                  <option value="marcelo">Marcelo Cifuentes Vásquez</option>
+                  <option value="marcelo">Marcelo Cifuentes V�squez</option>
                   <option value="otro">Otro</option>
                 </select>
                 {formCarta.deTipo === "otro" && (
                   <div style={{ display: "grid", gap: 8 }}>
                     <input value={formCarta.deNombre} onChange={e => setFormCarta({...formCarta, deNombre: e.target.value})} placeholder="Nombre remitente" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
                     <input value={formCarta.deCargo} onChange={e => setFormCarta({...formCarta, deCargo: e.target.value})} placeholder="Cargo remitente" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
-                    <input value={formCarta.deInstitucion} onChange={e => setFormCarta({...formCarta, deInstitucion: e.target.value})} placeholder="Institución remitente" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.deInstitucion} onChange={e => setFormCarta({...formCarta, deInstitucion: e.target.value})} placeholder="Instituci�n remitente" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
                     <input value={formCarta.deIniciales} onChange={e => setFormCarta({...formCarta, deIniciales: e.target.value})} placeholder="Iniciales, ej: MCV/mcv" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
                   </div>
                 )}
@@ -6819,22 +6826,22 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     setFormCarta({
                       ...formCarta,
                       aTipo: e.target.value,
-                      aNombre: esMarco ? "SEÑOR MARCO SEGUEL REYES" : "",
+                      aNombre: esMarco ? "SE�OR MARCO SEGUEL REYES" : "",
                       aCargo: esMarco ? "DIRECTOR DE SERVIU (S)" : "",
-                      aInstitucion: esMarco ? "REGIÓN DE LA ARAUCANIA" : "",
+                      aInstitucion: esMarco ? "REGI�N DE LA ARAUCANIA" : "",
                       aTrato: esMarco ? "PRESENTE." : ""
                     });
                   }}
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #67E8F9", fontSize: 13, marginBottom: 8 }}
                 >
-                  <option value="marco">Señor Marco Seguel Reyes</option>
+                  <option value="marco">Se�or Marco Seguel Reyes</option>
                   <option value="otro">Otro</option>
                 </select>
                 {formCarta.aTipo === "otro" && (
                   <div style={{ display: "grid", gap: 8 }}>
                     <input value={formCarta.aNombre} onChange={e => setFormCarta({...formCarta, aNombre: e.target.value})} placeholder="Nombre destinatario" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
                     <input value={formCarta.aCargo} onChange={e => setFormCarta({...formCarta, aCargo: e.target.value})} placeholder="Cargo destinatario" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
-                    <input value={formCarta.aInstitucion} onChange={e => setFormCarta({...formCarta, aInstitucion: e.target.value})} placeholder="Institución / región" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
+                    <input value={formCarta.aInstitucion} onChange={e => setFormCarta({...formCarta, aInstitucion: e.target.value})} placeholder="Instituci�n / regi�n" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
                     <input value={formCarta.aTrato} onChange={e => setFormCarta({...formCarta, aTrato: e.target.value})} placeholder="PRESENTE." style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
                   </div>
                 )}
@@ -6842,7 +6849,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             </div>
             <div style={{ background: "#E0F7FA", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#0891B2" }}>
               <div><strong>Nombre:</strong> {persona.nombre}</div>
-              <div><strong>Cédula de identidad:</strong> {persona.rut}</div>
+              <div><strong>C�dula de identidad:</strong> {persona.rut}</div>
               <div><strong>Fecha:</strong> {new Date().toLocaleDateString("es-CL")}</div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
@@ -6866,20 +6873,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Año del Subsidio *</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>A�o del Subsidio *</div>
               <input value={formSolicitud.anioSubsidio} onChange={e => setFormSolicitud({...formSolicitud, anioSubsidio: e.target.value})}
                 placeholder="Ej: 1989"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
             </div>
             <div style={{ background: "#ECFDF5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#059669" }}>
-              <div><strong>Plantilla oficial:</strong> Formulario Solicitud Habilitación Inhabitabilidad 2026</div>
-              <div>Se generará un PDF oficial completado automáticamente.</div>
+              <div><strong>Plantilla oficial:</strong> Formulario Solicitud Habilitaci�n Inhabitabilidad 2026</div>
+              <div>Se generar� un PDF oficial completado autom�ticamente.</div>
               <div><a href={SOLICITUD_2026_PDF} target="_blank" rel="noopener noreferrer" style={{ color: "#047857", fontWeight: 700 }}>Ver archivo oficial usado</a></div>
               <hr style={{ border: 0, borderTop: "1px solid #BBF7D0", margin: "8px 0" }} />
               <div><strong>Nombre:</strong> {persona.nombre}</div>
-              <div><strong>Cédula de identidad:</strong> {persona.rut}</div>
-              <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
-              <div><strong>Teléfono:</strong> {persona.telefono || "-"}</div>
+              <div><strong>C�dula de identidad:</strong> {persona.rut}</div>
+              <div><strong>Direcci�n:</strong> {persona.direccion || "-"}</div>
+              <div><strong>Tel�fono:</strong> {persona.telefono || "-"}</div>
               <div><strong>Correo:</strong> Jcampos@munilautaro.cl</div>
               <div><strong>Comuna:</strong> LAUTARO</div>
             </div>
@@ -6899,18 +6906,18 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           <div style={{ display: "grid", gap: 14 }}>
             <div style={{ background: "#F0FDF4", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#166534", lineHeight: 1.7 }}>
               <div><strong>Beneficiario:</strong> {persona.nombre || ""}</div>
-              <div><strong>Cédula de identidad:</strong> {persona.rut || "-"}</div>
-              <div><strong>Teléfono:</strong> {persona.telefono || "-"}</div>
-              <div><strong>Dirección:</strong> {persona.direccion || "-"}</div>
+              <div><strong>C�dula de identidad:</strong> {persona.rut || "-"}</div>
+              <div><strong>Tel�fono:</strong> {persona.telefono || "-"}</div>
+              <div><strong>Direcci�n:</strong> {persona.direccion || "-"}</div>
               <div><strong>Coordenadas:</strong> {persona.coordenadas || "-"}</div>
               <div><strong>Fecha de visita:</strong> {(() => { const s = misSols[0]; const f = s ? fechaVisitaSolicitud(s) : ""; return f ? f : <span style={{ color: "#dc2626" }}>No registrada en la ficha</span>; })()}</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Año y Tipo de Subsidio</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>A�o y Tipo de Subsidio</div>
               <input
                 value={informeSubsidioTexto}
                 onChange={e => setInformeSubsidioTexto(e.target.value)}
-                placeholder="Ej: SUBSIDIOS RURALES TITULO I Llamado N°1 Año 1992"
+                placeholder="Ej: SUBSIDIOS RURALES TITULO I Llamado N�1 A�o 1992"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }}
               />
             </div>
@@ -6924,14 +6931,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 8 }}>Fotografías de la vivienda</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 8 }}>Fotograf�as de la vivienda</div>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: "#1e3a5f", color: "#fff" }}>
-                      <th style={{ padding: "7px 10px", textAlign: "center", width: 36 }}>N°</th>
+                      <th style={{ padding: "7px 10px", textAlign: "center", width: 36 }}>N�</th>
                       <th style={{ padding: "7px 10px", textAlign: "left" }}>Estado de la vivienda</th>
-                      <th style={{ padding: "7px 10px", textAlign: "left", width: 155 }}>Fotografía</th>
+                      <th style={{ padding: "7px 10px", textAlign: "left", width: 155 }}>Fotograf�a</th>
                       <th style={{ padding: "7px 10px", width: 32 }}></th>
                     </tr>
                   </thead>
@@ -6950,14 +6957,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <td style={{ padding: "8px 10px" }}>
                           {fila.imagenNombre ? (
                             <div style={{ fontSize: 11, color: "#059669", display: "flex", alignItems: "center", gap: 4 }}>
-                              <span>✓</span>
+                              <span>?</span>
                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 }}>{fila.imagenNombre}</span>
                               <button onClick={() => setFilasInforme(prev => prev.map(f => f.id === fila.id ? { ...f, imagenBase64: null, imagenNombre: "", mimeType: "" } : f))}
-                                style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 13, flexShrink: 0 }}>✕</button>
+                                style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 13, flexShrink: 0 }}>?</button>
                             </div>
                           ) : (
                             <label style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#f0f0f0", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 12, color: "#555" }}>
-                              📷 Buscar
+                              ?? Buscar
                               <input type="file" accept="image/*" style={{ display: "none" }}
                                 onChange={e => handleImagenFilaJACC(fila.id, e.target.files[0])} />
                             </label>
@@ -6966,7 +6973,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <td style={{ padding: "8px 6px", textAlign: "center" }}>
                           {filasInforme.length > 1 && (
                             <button onClick={() => setFilasInforme(prev => prev.filter(f => f.id !== fila.id))}
-                              style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16 }}>✕</button>
+                              style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16 }}>?</button>
                           )}
                         </td>
                       </tr>
@@ -6993,12 +7000,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
       {showModalInformeDom && (
         <Modal title="Resultado Informe DOM" onClose={() => { setShowModalInformeDom(false); setResultadoInformeDom(""); setNotaResultado(""); }}>
-          <div style={{ fontSize: 14, color: "#444", marginBottom: 16 }}>¿Cuál es el resultado del <strong>Informe DOM</strong>?</div>
+          <div style={{ fontSize: 14, color: "#444", marginBottom: 16 }}>�Cu�l es el resultado del <strong>Informe DOM</strong>?</div>
           <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
             {[
-              { k: "APROBADO", label: "✅ Aprobado", color: "#059669", bg: "#ECFDF5" },
-              { k: "RECHAZADO_APELABLE", label: "🟡 Rechazado - Apelable", color: "#B45309", bg: "#FFFBEB" },
-              { k: "RECHAZADO_SIN_APELACION", label: "🔴 Rechazado Sin Apelación", color: "#DC2626", bg: "#FEF2F2" },
+              { k: "APROBADO", label: "? Aprobado", color: "#059669", bg: "#ECFDF5" },
+              { k: "RECHAZADO_APELABLE", label: "?? Rechazado - Apelable", color: "#B45309", bg: "#FFFBEB" },
+              { k: "RECHAZADO_SIN_APELACION", label: "?? Rechazado Sin Apelaci�n", color: "#DC2626", bg: "#FEF2F2" },
             ].map(op => (
               <div key={op.k} onClick={() => setResultadoInformeDom(op.k)}
                 style={{ padding: "12px 16px", borderRadius: 10, border: "2px solid " + (resultadoInformeDom === op.k ? op.color : "#e5e7eb"),
@@ -7009,9 +7016,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           </div>
           {(resultadoInformeDom === "RECHAZADO_APELABLE" || resultadoInformeDom === "RECHAZADO_SIN_APELACION") && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Razón del rechazo (opcional)</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Raz�n del rechazo (opcional)</div>
               <textarea value={notaResultado} onChange={e => setNotaResultado(e.target.value)}
-                placeholder="Ingrese la razón del rechazo..."
+                placeholder="Ingrese la raz�n del rechazo..."
                 style={{ width: "100%", minHeight: 70, borderRadius: 8, border: "1.5px solid #ddd", padding: "8px 10px", fontSize: 13, resize: "vertical" }} />
             </div>
           )}
@@ -7026,12 +7033,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
       {showModalRespuestaServiu && (
         <Modal title="Resultado Respuesta SERVIU" onClose={() => { setShowModalRespuestaServiu(false); setResultadoRespuestaServiu(""); setNotaResultado(""); }}>
-          <div style={{ fontSize: 14, color: "#444", marginBottom: 16 }}>¿Cuál es el resultado de la <strong>Respuesta SERVIU</strong>?</div>
+          <div style={{ fontSize: 14, color: "#444", marginBottom: 16 }}>�Cu�l es el resultado de la <strong>Respuesta SERVIU</strong>?</div>
           <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
             {[
-              { k: "APROBADO", label: "✅ Aprobado — Desmarcado", color: "#0891B2", bg: "#E0F7FA" },
-              { k: "RECHAZADO_APELABLE", label: "🟡 Rechazado — Para Apelar", color: "#B45309", bg: "#FFFBEB" },
-              { k: "RECHAZADO_SIN_APELACION", label: "🔴 Rechazado Sin Apelación", color: "#DC2626", bg: "#FEF2F2" },
+              { k: "APROBADO", label: "? Aprobado � Desmarcado", color: "#0891B2", bg: "#E0F7FA" },
+              { k: "RECHAZADO_APELABLE", label: "?? Rechazado � Para Apelar", color: "#B45309", bg: "#FFFBEB" },
+              { k: "RECHAZADO_SIN_APELACION", label: "?? Rechazado Sin Apelaci�n", color: "#DC2626", bg: "#FEF2F2" },
             ].map(op => (
               <div key={op.k} onClick={() => setResultadoRespuestaServiu(op.k)}
                 style={{ padding: "12px 16px", borderRadius: 10, border: "2px solid " + (resultadoRespuestaServiu === op.k ? op.color : "#e5e7eb"),
@@ -7059,12 +7066,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
       {showModalComprobante && (
         <Modal title="Resultado Comprobante SERVIU" onClose={() => { setShowModalComprobante(false); setNotaRechazo(""); setResultadoComp(""); }}>
-          <div style={{ fontSize: 14, color: "#444", marginBottom: 20 }}>¿Cuál es el resultado del Comprobante SERVIU para <strong>{persona.nombre}</strong>?</div>
+          <div style={{ fontSize: 14, color: "#444", marginBottom: 20 }}>�Cu�l es el resultado del Comprobante SERVIU para <strong>{persona.nombre}</strong>?</div>
           <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
             {[
-              { k: "DESMARCADO", label: "✅ Desmarcado", color: "#0891B2", bg: "#E0F7FA" },
-              { k: "APELAR SERVIU", label: "🟡 Apelar SERVIU", color: "#B45309", bg: "#FFFBEB" },
-              { k: "NO CALIFICA", label: "🔴 No Califica", color: "#DC2626", bg: "#FEF2F2" },
+              { k: "DESMARCADO", label: "? Desmarcado", color: "#0891B2", bg: "#E0F7FA" },
+              { k: "APELAR SERVIU", label: "?? Apelar SERVIU", color: "#B45309", bg: "#FFFBEB" },
+              { k: "NO CALIFICA", label: "?? No Califica", color: "#DC2626", bg: "#FEF2F2" },
             ].map(op => (
               <div key={op.k} onClick={() => setResultadoComp(op.k)}
                 style={{ padding: "14px 18px", borderRadius: 10, border: "2px solid " + (resultadoComp === op.k ? op.color : "#e5e7eb"),
@@ -7076,10 +7083,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           {(resultadoComp === "APELAR SERVIU" || resultadoComp === "NO CALIFICA") && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 6 }}>
-                {resultadoComp === "APELAR SERVIU" ? "Medidas para apelar:" : "Razón de rechazo:"}
+                {resultadoComp === "APELAR SERVIU" ? "Medidas para apelar:" : "Raz�n de rechazo:"}
               </div>
               <textarea value={notaRechazo} onChange={e => setNotaRechazo(e.target.value)}
-                placeholder={resultadoComp === "APELAR SERVIU" ? "Ingrese las medidas para apelar..." : "Ingrese la razón de rechazo..."}
+                placeholder={resultadoComp === "APELAR SERVIU" ? "Ingrese las medidas para apelar..." : "Ingrese la raz�n de rechazo..."}
                 style={{ width: "100%", minHeight: 80, borderRadius: 8, border: "1.5px solid #ddd", padding: "10px 12px", fontSize: 13, resize: "vertical" }} />
             </div>
           )}
@@ -7115,17 +7122,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
       {/* claves VB eliminadas */}
 
-      {/* modales clave programa y tipo comité eliminados */}
+      {/* modales clave programa y tipo comit� eliminados */}
 
       {/* MODAL DESBLOQUEAR RESPUESTA SERVIU */}
       {/* modal clave Respuesta SERVIU eliminado */}
 
       {/* MODAL EMIGRAR A PROGRAMA */}
       {showModalEmigrar && (
-        <Modal title="Solicitante Aprobado — Emigrar a Programa" onClose={() => { setShowModalEmigrar(false); setProgramaEmigrar(""); }}>
+        <Modal title="Solicitante Aprobado � Emigrar a Programa" onClose={() => { setShowModalEmigrar(false); setProgramaEmigrar(""); }}>
           <div style={{ background: "#E0F7FA", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#0891B2", fontWeight: 600 }}>
-            ✅ {persona.nombre} fue Aprobado/Desmarcado.<br />
-            <span style={{ fontWeight: 400, color: "#555" }}>Seleccione el programa al que emigrará este solicitante:</span>
+            ? {persona.nombre} fue Aprobado/Desmarcado.<br />
+            <span style={{ fontWeight: 400, color: "#555" }}>Seleccione el programa al que emigrar� este solicitante:</span>
           </div>
           <div style={{ display: "grid", gap: 12, marginBottom: 20 }}>
             {todosProgramas.filter(p => p.id !== "habitabilidad").map(p => (
@@ -7140,7 +7147,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             ))}
             <div onClick={() => setProgramaEmigrar("sin_programa")}
               style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", borderRadius: 11, border: "2px solid " + (programaEmigrar === "sin_programa" ? "#555" : "#e5e7eb"), background: programaEmigrar === "sin_programa" ? "#f5f5f5" : "#fff", cursor: "pointer" }}>
-              <div style={{ width: 40, height: 40, borderRadius: 20, background: "#f0ede8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>—</div>
+              <div style={{ width: 40, height: 40, borderRadius: 20, background: "#f0ede8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>�</div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: "#555" }}>Solo desbloquear / Sin emigrar</div>
                 <div style={{ fontSize: 12, color: "#888" }}>Desbloquear la ficha sin asignar nuevo programa</div>
@@ -7199,7 +7206,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       {showModalZip && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9500, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowModalZip(false)}>
           <div style={{ background: "#fff", borderRadius: 18, padding: "28px 32px", width: 560, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: "#1e3a5f", marginBottom: 6 }}>🗜 Descargar ZIP de documentos</div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#1e3a5f", marginBottom: 6 }}>?? Descargar ZIP de documentos</div>
             <div style={{ fontSize: 13, color: "#666", marginBottom: 18 }}>Selecciona los solicitantes cuyos documentos quieres incluir en el ZIP.</div>
 
             {/* Buscador */}
@@ -7229,7 +7236,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         if (!yaSelec) setZipSeleccionados(prev => [...prev, p]);
                       }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: yaSelec ? "default" : "pointer", background: yaSelec ? "#F0FDF4" : "#fff", borderBottom: "1px solid #f0f0f0" }}>
                         <div style={{ width: 20, height: 20, borderRadius: 5, border: "2px solid " + (yaSelec ? "#059669" : "#D1D5DB"), background: yaSelec ? "#059669" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, flexShrink: 0 }}>
-                          {yaSelec ? "✓" : ""}
+                          {yaSelec ? "?" : ""}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: "#1e3a5f" }}>{p.nombre}</div>
@@ -7261,7 +7268,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                         <div style={{ fontSize: 11, color: "#6B7280" }}>{p.rut}</div>
                       </div>
                       <button onClick={() => setZipSeleccionados(prev => prev.filter(s => s.id !== p.id))}
-                        style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>✕</button>
+                        style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>?</button>
                     </div>
                   ))}
                 </div>
@@ -7272,7 +7279,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               <button onClick={() => { setShowModalZip(false); setZipSearch(""); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
               <button onClick={descargarZip} disabled={zipSeleccionados.length === 0 || generandoZip}
                 style={{ padding: "9px 22px", borderRadius: 8, background: zipSeleccionados.length > 0 && !generandoZip ? "#1e3a5f" : "#aaa", color: "#fff", border: "none", fontSize: 14, fontWeight: 700, cursor: zipSeleccionados.length > 0 && !generandoZip ? "pointer" : "not-allowed" }}>
-                {generandoZip ? "Generando ZIP..." : `🗜 Descargar ZIP (${zipSeleccionados.length})`}
+                {generandoZip ? "Generando ZIP..." : `?? Descargar ZIP (${zipSeleccionados.length})`}
               </button>
             </div>
           </div>
@@ -7282,17 +7289,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       {(htmlPreview || filePreview) && (
         <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", background: "#111" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", background: "#1e3a5f", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
-            <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>📄 Vista previa del documento</div>
+            <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>?? Vista previa del documento</div>
             <div style={{ display: "flex", gap: 10 }}>
               <button
                 onClick={() => { if (iframePreviewRef.current) iframePreviewRef.current.contentWindow.print(); }}
                 style={{ padding: "8px 22px", borderRadius: 7, background: "#fff", color: "#1e3a5f", border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                🖨 Imprimir
+                ?? Imprimir
               </button>
               <button
                 onClick={() => { setHtmlPreview(null); setFilePreview(null); }}
                 style={{ padding: "8px 16px", borderRadius: 7, background: "rgba(255,255,255,0.18)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                ✕ Cerrar
+                ? Cerrar
               </button>
             </div>
           </div>
@@ -7309,7 +7316,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   );
 }
 
-// ─── VISTA PROGRAMAS ─────────────────────────────────────────────────────────
+// --- VISTA PROGRAMAS ---------------------------------------------------------
 const COLORES_PROG = [
   { color: "#2563EB", colorLight: "#EFF6FF" },
   { color: "#059669", colorLight: "#ECFDF5" },
@@ -7330,7 +7337,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
   const [pedirClave, setPedirClave] = useState(false);
   const [claveError, setClaveError] = useState(false);
   const [accionPendiente, setAccionPendiente] = useState(null);
-  const [editandoProg, setEditandoProg] = useState(null); // prog que se está editando
+  const [editandoProg, setEditandoProg] = useState(null); // prog que se est� editando
   const [formEdit, setFormEdit] = useState(null);
   const pedirClaveAdmin = (tipo, progId, prog) => { setAccionPendiente({ tipo, progId, prog }); setClaveAdmin(""); setClaveError(false); setPedirClave(true); };
   const confirmarClave = async () => {
@@ -7395,11 +7402,11 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
         <div style="font-size:9pt;color:#666;margin-top:6px">Generado el ${new Date().toLocaleDateString("es-CL")}</div>
       </div>
       <table>
-        <thead><tr><th>N°</th><th>Documento requerido</th><th>Tipo</th><th>Acción requerida</th></tr></thead>
+        <thead><tr><th>N�</th><th>Documento requerido</th><th>Tipo</th><th>Acci�n requerida</th></tr></thead>
         <tbody>${docs || `<tr><td colspan="4" style="text-align:center">Sin documentos registrados.</td></tr>`}</tbody>
       </table>
       <div style="margin-top:24px;font-size:9pt;color:#555">
-        Estos requisitos corresponden a la configuración vigente del programa en el sistema.
+        Estos requisitos corresponden a la configuraci�n vigente del programa en el sistema.
       </div>
     `;
     win.document.write(_wrap("Requisitos del programa", cuerpo));
@@ -7438,12 +7445,12 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
             </div>
             <div style={{ display:"flex", gap:6 }}>
               <button onClick={() => imprimirRequisitos(prog)}
-                style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", color:"#047857", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Imprimir requisitos">🖨 Imprimir</button>
+                style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", color:"#047857", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Imprimir requisitos">?? Imprimir</button>
               <button onClick={() => pedirClaveAdmin("editar", prog.id, prog)}
-                style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", color:"#1e3a5f", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Editar programa">✏ Editar</button>
+                style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", color:"#1e3a5f", cursor:"pointer", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:700 }} title="Editar programa">? Editar</button>
               {prog.esCustom && (
                 <button onClick={() => pedirClaveAdmin("eliminar", prog.id, null)}
-                  style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 18, lineHeight: 1 }} title="Eliminar programa">✕</button>
+                  style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 18, lineHeight: 1 }} title="Eliminar programa">?</button>
               )}
             </div>
           </div>
@@ -7451,7 +7458,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
         <div style={{ padding: "18px 24px" }}>
           {editandoProg === prog.id && formEdit ? (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#1e3a5f", marginBottom: 14 }}>✏ Editando programa</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#1e3a5f", marginBottom: 14 }}>? Editando programa</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Nombre *</div>
@@ -7459,12 +7466,12 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
                     style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:"1.5px solid #ddd", fontSize:13, boxSizing:"border-box" }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Descripción</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Descripci�n</div>
                   <input value={formEdit.descripcion} onChange={e => setFormEdit(f => ({ ...f, descripcion: e.target.value }))}
                     style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:"1.5px solid #ddd", fontSize:13, boxSizing:"border-box" }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>Ícono</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#555", marginBottom: 3 }}>�cono</div>
                   <input value={formEdit.icon} maxLength={2} onChange={e => setFormEdit(f => ({ ...f, icon: e.target.value.toUpperCase() }))}
                     style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:"1.5px solid #ddd", fontSize:13, boxSizing:"border-box" }} />
                 </div>
@@ -7485,17 +7492,17 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
                     <input value={doc.nombre} onChange={e => setDocEdit(i, "nombre", e.target.value)} placeholder={`Documento ${i+1}`}
                       style={{ padding:"6px 9px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12 }} />
                     <button onClick={() => removeDocEdit(i)} disabled={formEdit.documentos.length===1}
-                      style={{ background: formEdit.documentos.length===1?"#f0f0f0":"#FEF2F2", border:"none", borderRadius:6, color: formEdit.documentos.length===1?"#aaa":"#DC2626", cursor: formEdit.documentos.length===1?"default":"pointer", padding:"0 10px", fontWeight:700 }}>✕</button>
+                      style={{ background: formEdit.documentos.length===1?"#f0f0f0":"#FEF2F2", border:"none", borderRadius:6, color: formEdit.documentos.length===1?"#aaa":"#DC2626", cursor: formEdit.documentos.length===1?"default":"pointer", padding:"0 10px", fontWeight:700 }}>?</button>
                   </div>
                   <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
                     <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, cursor:"pointer" }}>
                       <input type="checkbox" checked={doc.obligatorio} onChange={e => setDocEdit(i,"obligatorio",e.target.checked)} /> Obligatorio
                     </label>
                     <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, cursor:"pointer" }}>
-                      <input type="checkbox" checked={doc.requiereArchivo} onChange={e => setDocEdit(i,"requiereArchivo",e.target.checked)} /> 📎 Archivo
+                      <input type="checkbox" checked={doc.requiereArchivo} onChange={e => setDocEdit(i,"requiereArchivo",e.target.checked)} /> ?? Archivo
                     </label>
                     <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, cursor:"pointer" }}>
-                      <input type="checkbox" checked={doc.requiereTexto} onChange={e => setDocEdit(i,"requiereTexto",e.target.checked)} /> 📝 Texto
+                      <input type="checkbox" checked={doc.requiereTexto} onChange={e => setDocEdit(i,"requiereTexto",e.target.checked)} /> ?? Texto
                     </label>
                   </div>
                 </div>
@@ -7503,7 +7510,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
               <button onClick={addDocEdit} style={{ padding:"6px 14px", borderRadius:7, border:"1.5px dashed #1e3a5f", background:"transparent", color:"#1e3a5f", fontSize:12, fontWeight:600, cursor:"pointer", marginBottom:12 }}>+ Agregar documento</button>
               <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
                 <button onClick={() => { setEditandoProg(null); setFormEdit(null); }} style={{ padding:"7px 16px", borderRadius:7, border:"1px solid #ddd", background:"#fff", fontSize:13, cursor:"pointer" }}>Cancelar</button>
-                <button onClick={guardarEdicion} style={{ padding:"7px 18px", borderRadius:7, background:"#059669", color:"#fff", border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>💾 Guardar cambios</button>
+                <button onClick={guardarEdicion} style={{ padding:"7px 18px", borderRadius:7, background:"#059669", color:"#fff", border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>?? Guardar cambios</button>
               </div>
             </div>
           ) : (
@@ -7516,9 +7523,9 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
                     <div>
                       <div style={{ fontSize: 12, color: "#374151" }}>{doc.nombre}</div>
                       <div style={{ fontSize: 10, color: "#aaa" }}>
-                        {!doc.obligatorio && "Opcional · "}
-                        {doc.requiereArchivo && "📎 Archivo · "}
-                        {doc.requiereTexto && "📝 Texto"}
+                        {!doc.obligatorio && "Opcional � "}
+                        {doc.requiereArchivo && "?? Archivo � "}
+                        {doc.requiereTexto && "?? Texto"}
                         {!doc.requiereArchivo && !doc.requiereTexto && "Checkbox"}
                       </div>
                     </div>
@@ -7541,7 +7548,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
         </div>
         <button onClick={() => { if (mostrarForm) setMostrarForm(false); else pedirClaveAdmin("agregar", null); }}
           style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-          {mostrarForm ? "✕ Cancelar" : "+ Agregar Programa"}
+          {mostrarForm ? "? Cancelar" : "+ Agregar Programa"}
         </button>
       </div>
 
@@ -7555,12 +7562,12 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
             </div>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Descripción</div>
-              <input value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Breve descripción del programa"
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Descripci�n</div>
+              <input value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Breve descripci�n del programa"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
             </div>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Ícono (letra)</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>�cono (letra)</div>
               <input value={form.icon} maxLength={2} onChange={e => setForm(f => ({ ...f, icon: e.target.value.toUpperCase() }))} placeholder="Ej: S"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13, boxSizing: "border-box" }} />
             </div>
@@ -7589,7 +7596,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
                   <input value={doc.nombre} onChange={e => setDoc(i, "nombre", e.target.value)} placeholder={`Nombre del documento ${i + 1}`}
                     style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13 }} />
                   <button onClick={() => removeDoc(i)} disabled={form.documentos.length === 1}
-                    style={{ background: form.documentos.length === 1 ? "#f0f0f0" : "#FEF2F2", border: "none", borderRadius: 7, color: form.documentos.length === 1 ? "#aaa" : "#DC2626", cursor: form.documentos.length === 1 ? "default" : "pointer", padding: "0 12px", fontWeight: 700 }}>✕</button>
+                    style={{ background: form.documentos.length === 1 ? "#f0f0f0" : "#FEF2F2", border: "none", borderRadius: 7, color: form.documentos.length === 1 ? "#aaa" : "#DC2626", cursor: form.documentos.length === 1 ? "default" : "pointer", padding: "0 12px", fontWeight: 700 }}>?</button>
                 </div>
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer" }}>
@@ -7598,11 +7605,11 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
                   </label>
                   <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer" }}>
                     <input type="checkbox" checked={doc.requiereArchivo} onChange={e => setDoc(i, "requiereArchivo", e.target.checked)} />
-                    📎 Requiere subir archivo
+                    ?? Requiere subir archivo
                   </label>
                   <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer" }}>
                     <input type="checkbox" checked={doc.requiereTexto} onChange={e => setDoc(i, "requiereTexto", e.target.checked)} />
-                    📝 Requiere texto adicional
+                    ?? Requiere texto adicional
                   </label>
                   {doc.requiereTexto && (
                     <input value={doc.etiquetaTexto} onChange={e => setDoc(i, "etiquetaTexto", e.target.value)} placeholder="Etiqueta del campo texto"
@@ -7629,7 +7636,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
 
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", padding: "22px 26px", marginBottom: 18 }}>
         <div style={{ fontSize: 24, fontWeight: 900, color: "#1e3a5f", marginBottom: 8 }}>Solicitante registrador</div>
-        <div style={{ fontSize: 14, fontWeight: 800, color: "#333", marginBottom: 14 }}>¿Programa de solicitud? *</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#333", marginBottom: 14 }}>�Programa de solicitud? *</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
           {todosProg.map(prog => {
             const activo = progSeleccionado === prog.id;
@@ -7638,7 +7645,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
                 style={{ minHeight: 190, padding: "18px 16px", borderRadius: 12, border: "3px solid " + (activo ? (prog.color || "#1e3a5f") : "#ddd"), background: activo ? (prog.colorLight || "#F8FAFC") : "#fafafa", cursor: "pointer", textAlign: "center", boxShadow: activo ? "0 10px 24px rgba(30,58,95,0.12)" : "none" }}>
                 <ProgramaFigura programa={prog} size={66} />
                 <div style={{ fontSize: 17, fontWeight: 900, color: "#333", marginTop: 10, lineHeight: 1.25 }}>{prog.nombre}</div>
-                <div style={{ fontSize: 13, color: "#888", marginTop: 5, lineHeight: 1.35 }}>{prog.descripcion || "Con comité"}</div>
+                <div style={{ fontSize: 13, color: "#888", marginTop: 5, lineHeight: 1.35 }}>{prog.descripcion || "Con comit�"}</div>
                 <div style={{ fontSize: 11, color: prog.esCustom ? "#7C3AED" : "#059669", fontWeight: 800, marginTop: 8 }}>{prog.esCustom ? "Personalizado" : "Base"}</div>
               </button>
             );
@@ -7655,7 +7662,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:3000 }}
           onClick={() => setPedirClave(false)}>
           <div style={{ background:"#fff", borderRadius:14, padding:"28px 32px", width:360, boxShadow:"0 24px 64px rgba(0,0,0,0.3)" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:16, fontWeight:800, color:"#1e3a5f", marginBottom:8 }}>🔒 Clave de administrador</div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#1e3a5f", marginBottom:8 }}>?? Clave de administrador</div>
             <div style={{ fontSize:13, color:"#555", marginBottom:16 }}>
               {accionPendiente?.tipo === "eliminar"
                 ? "Ingresa la clave para eliminar este programa."
@@ -7680,7 +7687,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
   );
 }
 
-// ─── VISTA SIN COMITÉ ─────────────────────────────────────────────────────────
+// --- VISTA SIN COMIT� ---------------------------------------------------------
 function SinComiteView({ personas, comites, solicitudes, programasCustom = [], onSavePersonas, onSaveSolicitudes, onDetail }) {
   const [search, setSearch] = useState("");
   const [filtroSector, setFiltroSector] = useState("");
@@ -7719,7 +7726,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   const comitesPersonaPorCedula = (p) => comitesPorCedula.get(rutKey(p.rut)) || [];
   const textoComitesPersona = (p) => {
     const nombres = comitesPersonaPorCedula(p);
-    return nombres.length ? nombres.map(nombre => `Comité: ${nombre}`).join(" | ") : "SIN COMITE";
+    return nombres.length ? nombres.map(nombre => `Comit�: ${nombre}`).join(" | ") : "SIN COMITE";
   };
   const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => s.personaId === personaId && s.programaId === "habitabilidad");
   const solicitudDesmarquePersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
@@ -7784,8 +7791,8 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
         .sin{color:#b91c1c;font-weight:700}
       </style></head><body>
       <h1>Informe Habitabilidad de Vivienda (DESMARQUE DE VIVIENDA)</h1>
-      <div class="sub">Estados: DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. Búsqueda de comité realizada solo por cédula de identidad.</div>
-      <table><thead><tr><th>Cédula de identidad</th><th>Solicitante</th><th>Estado</th><th>Comités encontrados</th><th>Línea solicitada</th></tr></thead><tbody>
+      <div class="sub">Estados: DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. B�squeda de comit� realizada solo por c�dula de identidad.</div>
+      <table><thead><tr><th>C�dula de identidad</th><th>Solicitante</th><th>Estado</th><th>Comit�s encontrados</th><th>L�nea solicitada</th></tr></thead><tbody>
       ${filas.map(f => `<tr><td>${esc(f.rut)}</td><td>${esc(f.nombre)}</td><td>${esc(f.estado)}</td><td class="${f.comite === "SIN COMITE" ? "sin" : ""}">${esc(f.comite)}</td><td>${esc(`${f.rut}= Estado=${f.estado}=${f.comite}`)}</td></tr>`).join("")}
       </tbody></table></body></html>`;
     const win = window.open("", "_blank");
@@ -7830,7 +7837,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     for (const id of seleccionados) {
       await sb.from("personas").update({ comite_id: comiteDestino, comite: comite ? comite.nombre : "" }).eq("id", id);
     }
-    // Si el comité es de un programa, crear solicitudes automáticamente
+    // Si el comit� es de un programa, crear solicitudes autom�ticamente
     if (comite && comite.programaId) {
       const prog = todosProgramas.find(p2 => p2.id === comite.programaId);
       if (prog) {
@@ -7865,22 +7872,22 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     setClaveMigrar("");
     setClavePaso(false);
     setMigrando(false);
-    alert(`✅ ${seleccionados.length} solicitante(s) migrado(s) al comité "${comite ? comite.nombre : comiteDestino}"`);
+    alert(`? ${seleccionados.length} solicitante(s) migrado(s) al comit� "${comite ? comite.nombre : comiteDestino}"`);
   };
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Sin Comité</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Sin Comit�</div>
           <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>
-            {sinComite.length} solicitante(s) pendientes de asignación
+            {sinComite.length} solicitante(s) pendientes de asignaci�n
           </div>
         </div>
         {seleccionados.length > 0 && (
           <button onClick={() => setShowModalMigrar(true)}
             style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-            📦 Migrar {seleccionados.length} seleccionado(s)
+            ?? Migrar {seleccionados.length} seleccionado(s)
           </button>
         )}
       </div>
@@ -7905,7 +7912,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 4 }}>Seguimiento Desmarque</div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>Solicitantes en DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. La revisión de comité usa solo la cédula de identidad.</div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>Solicitantes en DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. La revisi�n de comit� usa solo la c�dula de identidad.</div>
           </div>
           {seguimientoDesmarque.length > 0 && (
             <button onClick={imprimirSeguimientoDesmarque}
@@ -7932,7 +7939,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
 
       {filtered.length === 0 && (
         <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>
-          {sinComite.length === 0 ? "✅ Todos los solicitantes tienen comité asignado." : "No hay resultados para la búsqueda."}
+          {sinComite.length === 0 ? "? Todos los solicitantes tienen comit� asignado." : "No hay resultados para la b�squeda."}
         </div>
       )}
 
@@ -7954,7 +7961,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
                 width: 22, height: 22, borderRadius: 6, border: "2px solid " + (sel ? "#2563EB" : "#ccc"),
                 background: sel ? "#2563EB" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
               }}>
-                {sel && <span style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>✓</span>}
+                {sel && <span style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>?</span>}
               </div>
               <div style={{ width: 40, height: 40, borderRadius: 20, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
                 {p.nombre[0].toUpperCase()}
@@ -7962,12 +7969,12 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: "#1e3a5f" }}>{p.nombre}</div>
                 <div style={{ fontSize: 13, color: "#888" }}>
-                  RUT: {p.rut}{p.comuna ? " · " + p.comuna : ""}
-                  {p.fechaIngreso || p.fecha_ingreso ? " · Ingreso: " + (p.fechaIngreso || p.fecha_ingreso) : ""}
+                  RUT: {p.rut}{p.comuna ? " � " + p.comuna : ""}
+                  {p.fechaIngreso || p.fecha_ingreso ? " � Ingreso: " + (p.fechaIngreso || p.fecha_ingreso) : ""}
                 </div>
                 {misSols.length > 0 && (
                   <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 2 }}>
-                    📋 {misSols.length} programa(s) asignado(s): {misSols.map(s => {
+                    ?? {misSols.length} programa(s) asignado(s): {misSols.map(s => {
                       const prog = todosProgramas.find(pr => pr.id === s.programaId);
                       return prog ? prog.nombre.split(" ")[0] : s.programaId;
                     }).join(", ")}
@@ -7992,11 +7999,11 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
 
       {/* MODAL MIGRAR */}
       {showModalMigrar && (
-        <Modal title="Migrar solicitantes a comité" onClose={() => { setShowModalMigrar(false); setClaveMigrar(""); setClavePaso(false); }}>
+        <Modal title="Migrar solicitantes a comit�" onClose={() => { setShowModalMigrar(false); setClaveMigrar(""); setClavePaso(false); }}>
           {!clavePaso ? (
             <div>
               <div style={{ background: "#FFF3CD", borderRadius: 10, padding: "12px 16px", marginBottom: 18, fontSize: 13, color: "#856404" }}>
-                ⚠️ Esta acción moverá <strong>{seleccionados.length}</strong> solicitante(s) a un comité.<br />Ingrese la clave de seguridad para continuar.
+                ?? Esta acci�n mover� <strong>{seleccionados.length}</strong> solicitante(s) a un comit�.<br />Ingrese la clave de seguridad para continuar.
               </div>
               <input
                 type="password" autoComplete="new-password"
@@ -8024,11 +8031,11 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
           ) : (
             <div>
               <div style={{ background: "#E0F7FA", borderRadius: 10, padding: "12px 16px", marginBottom: 18, fontSize: 13, color: "#0891B2", fontWeight: 600 }}>
-                ✅ Clave correcta. Seleccione el comité de destino para {seleccionados.length} solicitante(s):
+                ? Clave correcta. Seleccione el comit� de destino para {seleccionados.length} solicitante(s):
               </div>
               <select value={comiteDestino} onChange={e => setComiteDestino(e.target.value)}
                 style={{ width: "100%", padding: "10px 14px", borderRadius: 9, border: "1.5px solid #ddd", fontSize: 14, background: "#fff", marginBottom: 14, boxSizing: "border-box" }}>
-                <option value="">-- Seleccionar comité --</option>
+                <option value="">-- Seleccionar comit� --</option>
                 {comites.map(c => {
                   const prog = todosProgramas.find(p2 => p2.id === c.programaId);
                   return (
@@ -8040,11 +8047,11 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
               </select>
               {comiteDestino && (
                 <div style={{ background: "#F0FDF4", borderRadius: 9, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#059669" }}>
-                  📋 Comité seleccionado: <strong>{comites.find(c => c.id === comiteDestino)?.nombre}</strong>
+                  ?? Comit� seleccionado: <strong>{comites.find(c => c.id === comiteDestino)?.nombre}</strong>
                   {(() => {
                     const c = comites.find(c2 => c2.id === comiteDestino);
                     const prog = c ? todosProgramas.find(p2 => p2.id === c.programaId) : null;
-                    return prog ? <span> · Programa: <strong>{prog.nombre}</strong></span> : null;
+                    return prog ? <span> � Programa: <strong>{prog.nombre}</strong></span> : null;
                   })()}
                 </div>
               )}
@@ -8053,7 +8060,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
                   style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
                 <button onClick={migrar} disabled={!comiteDestino || migrando}
                   style={{ padding: "9px 20px", borderRadius: 8, background: comiteDestino ? "#059669" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: comiteDestino ? "pointer" : "not-allowed" }}>
-                  {migrando ? "Migrando..." : "✅ Migrar al comité"}
+                  {migrando ? "Migrando..." : "? Migrar al comit�"}
                 </button>
               </div>
             </div>
@@ -8064,7 +8071,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   );
 }
 
-// ─── VISTA SOLICITUDES ────────────────────────────────────────────────────────
+// --- VISTA SOLICITUDES --------------------------------------------------------
 function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onDetail }) {
   const [filtProg, setFiltProg] = useState("todos");
   const [filtEst, setFiltEst] = useState("todos");
@@ -8134,7 +8141,7 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
     <div>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>Solicitudes</div>
-        <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>Busca un solicitante por nombre o cédula de identidad para ver sus solicitudes, programas y documentos.</div>
+        <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>Busca un solicitante por nombre o c�dula de identidad para ver sus solicitudes, programas y documentos.</div>
       </div>
 
       <div style={{ background: "#fff", borderRadius: 14, padding: 18, border: "1px solid #e8e3de", marginBottom: 18 }}>
@@ -8143,7 +8150,7 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
           <input
             value={search}
             onChange={e => { setSearch(e.target.value); if (personaSelId) setPersonaSelId(null); }}
-            placeholder="Escribe nombre o cédula/RUT"
+            placeholder="Escribe nombre o c�dula/RUT"
             style={{ padding: "11px 14px", borderRadius: 8, border: "1px solid " + (buscaPorCedula && !cedulaBusquedaValida ? "#DC2626" : "#ddd"), fontSize: 14, background: "#fff" }}
           />
           <button onClick={limpiarPersona} style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid #ddd", background: "#f8fafc", color: "#555", fontWeight: 700, cursor: "pointer" }}>
@@ -8157,13 +8164,13 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
 
         {!personaSeleccionada && buscaPorCedula && !cedulaBusquedaValida && (
           <div style={{ marginTop: 10, fontSize: 12, color: "#DC2626", fontWeight: 700 }}>
-            La cédula ingresada no es válida para Chile. Debe tener dígito verificador correcto.
+            La c�dula ingresada no es v�lida para Chile. Debe tener d�gito verificador correcto.
           </div>
         )}
 
         {!personaSeleccionada && buscaPorCedula && cedulaBusquedaValida && (
           <div style={{ marginTop: 10, fontSize: 12, color: "#059669", fontWeight: 700 }}>
-            Cédula válida: {formatRut(search)}
+            C�dula v�lida: {formatRut(search)}
           </div>
         )}
 
@@ -8182,9 +8189,9 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
                   style={{ textAlign: "left", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                   <span>
                     <span style={{ display: "block", fontWeight: 800, color: "#111827" }}>{p.nombre}</span>
-                    <span style={{ display: "block", fontSize: 12, color: "#6b7280" }}>Cédula: {p.rut || "—"} · {p.comite || "Sin comité"}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "#6b7280" }}>C�dula: {p.rut || "�"} � {p.comite || "Sin comit�"}</span>
                   </span>
-                  <span style={{ fontSize: 12, color: "#1e3a5f", fontWeight: 800 }}>{solsPersona.length} programa(s) · {entregados}/{docsPersona.length} docs</span>
+                  <span style={{ fontSize: 12, color: "#1e3a5f", fontWeight: 800 }}>{solsPersona.length} programa(s) � {entregados}/{docsPersona.length} docs</span>
                 </button>
               );
             })}
@@ -8192,7 +8199,7 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
         )}
 
         {!personaSeleccionada && term.length >= 2 && resultadosPersonas.length === 0 && (
-          <div style={{ marginTop: 12, color: "#999", fontSize: 13 }}>No se encontraron solicitantes con esa búsqueda.</div>
+          <div style={{ marginTop: 12, color: "#999", fontSize: 13 }}>No se encontraron solicitantes con esa b�squeda.</div>
         )}
 
         {personaSeleccionada && (
@@ -8201,10 +8208,10 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
               <div>
                 <div style={{ fontSize: 18, fontWeight: 900, color: "#1e3a5f" }}>{personaSeleccionada.nombre}</div>
                 <div style={{ fontSize: 13, color: "#475569", marginTop: 3 }}>
-                  Cédula: {personaSeleccionada.rut || "—"} · Comité: {personaSeleccionada.comite || "Sin comité"}
+                  C�dula: {personaSeleccionada.rut || "�"} � Comit�: {personaSeleccionada.comite || "Sin comit�"}
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                  Solicitudes activas: {solicitudesBase.length} · Documentos: {docsEntregados}/{docsTotal} · Pendientes: {docsPendientes}
+                  Solicitudes activas: {solicitudesBase.length} � Documentos: {docsEntregados}/{docsTotal} � Pendientes: {docsPendientes}
                 </div>
               </div>
               {onDetail && (
@@ -8296,7 +8303,7 @@ function SolicitudesView({ solicitudes, personas = [], programasCustom = [], onD
   );
 }
 
-// ─── DETALLE COMITÉ ───────────────────────────────────────────────────────────
+// --- DETALLE COMIT� -----------------------------------------------------------
 function DetalleComite({ comiteId, comites, personas, solicitudes, programasCustom = [], onBack, onSaveComites, onSavePersonas, onSaveSolicitudes, onDetail, currentUser, registrarAuditoria }) {
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
@@ -8381,7 +8388,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       !st.desmarcado;
   };
   const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
-  // El comité ya fue validado arriba; este efecto completa documentos livianos del listado.
+  // El comit� ya fue validado arriba; este efecto completa documentos livianos del listado.
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     let cancelado = false;
@@ -8415,7 +8422,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             };
           }
         } catch (err) {
-          console.warn("[detalle comité] No se pudo completar documentos:", sol.id, err?.message || err);
+          console.warn("[detalle comit�] No se pudo completar documentos:", sol.id, err?.message || err);
         }
       }
       if (!cancelado && Object.keys(nuevas).length) {
@@ -8488,7 +8495,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       </style></head><body>
       <h1>Solicitantes listos para visita - DESMARQUE DE VIVIENDA</h1>
       <div class="sub">Filtro: ${esc(tipoFiltro)}${sectorFiltro ? " | Sector: " + esc(sectorFiltro) : ""} | Total: ${filas.length}</div>
-      <table><thead><tr><th class="n">N°</th><th>Solicitante</th><th>Teléfono</th><th>${esImpresionUrbana ? "Comunidad/Dirección" : "Coordenadas"}</th><th>Sector</th><th>Año de Subsidio</th></tr></thead><tbody>
+      <table><thead><tr><th class="n">N�</th><th>Solicitante</th><th>Tel�fono</th><th>${esImpresionUrbana ? "Comunidad/Direcci�n" : "Coordenadas"}</th><th>Sector</th><th>A�o de Subsidio</th></tr></thead><tbody>
       ${filas.map((f, idx) => `<tr><td class="n">${idx + 1}</td><td><b>${esc(f.nombre)}</b><br>${esc(f.rut)}</td><td>${esc(f.telefono)}</td><td>${esc(esImpresionUrbana ? f.direccion : f.coordenadas)}</td><td>${esc(f.sector)}</td><td>${esc(f.subsidio)}</td></tr>`).join("")}
       </tbody></table></body></html>`;
     const win = window.open("", "_blank");
@@ -8523,7 +8530,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       </style></head><body>
       <h1>Solicitantes condicionales - DESMARQUE DE VIVIENDA</h1>
       <div class="sub">Total: ${filas.length}</div>
-      <table><thead><tr><th class="n">N°</th><th>Solicitante</th><th>Cédula de identidad</th><th>Teléfono</th><th>Estado actual</th><th>Última constancia</th></tr></thead><tbody>
+      <table><thead><tr><th class="n">N�</th><th>Solicitante</th><th>C�dula de identidad</th><th>Tel�fono</th><th>Estado actual</th><th>�ltima constancia</th></tr></thead><tbody>
       ${filas.map((f, idx) => `<tr><td class="n">${idx + 1}</td><td><b>${esc(f.nombre)}</b></td><td>${esc(f.rut)}</td><td>${esc(f.telefono)}</td><td>${esc(f.estado)}</td><td>${esc(f.constancia)}</td></tr>`).join("")}
       </tbody></table></body></html>`;
     const win = window.open("", "_blank");
@@ -8546,7 +8553,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const guardarPersona = async () => {
     if (!form.nombre.trim() || !form.rut.trim()) { alert("Nombre y RUT son obligatorios."); return; }
     if (!rutFormatoChilenoValido(form.rut)) {
-      alert("La cédula de identidad no es válida. Debe ingresar una cédula chilena con puntos, guion y dígito verificador correcto. Ejemplo: 10.398.338-K");
+      alert("La c�dula de identidad no es v�lida. Debe ingresar una c�dula chilena con puntos, guion y d�gito verificador correcto. Ejemplo: 10.398.338-K");
       return;
     }
     const fechaSistema = today();
@@ -8615,16 +8622,16 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const motivo = motivoMovimiento.trim();
     if (!personaMover || !comiteDestinoMover) return;
     if (motivo.length < 8) {
-      alert("Debe escribir una razón clara del cambio antes de mover al solicitante.");
+      alert("Debe escribir una raz�n clara del cambio antes de mover al solicitante.");
       return;
     }
     const destino = comitesDestino.find(c => c.id === comiteDestinoMover);
     if (!destino) return;
     setMoviendoPersona(true);
     try {
-      const origenNombre = comite?.nombre || personaMover.comite || personaMover.comiteId || "Sin comité anterior";
+      const origenNombre = comite?.nombre || personaMover.comite || personaMover.comiteId || "Sin comit� anterior";
       const usuario = currentUser?.nombre || "Usuario no identificado";
-      const nota = `[${today()}] Cambio de comité/programa: ${origenNombre} -> ${destino.nombre}. Motivo: ${motivo}. Usuario: ${usuario}`;
+      const nota = `[${today()}] Cambio de comit�/programa: ${origenNombre} -> ${destino.nombre}. Motivo: ${motivo}. Usuario: ${usuario}`;
       const observaciones = [personaMover.observaciones, nota].filter(Boolean).join("\n");
       const tipoDestino = destino.tipo || (destino.programaId === "csp_urbano" ? "URBANO" : destino.programaId === "csp_rural" ? "RURAL" : "");
       const personaActualizada = {
@@ -8683,10 +8690,10 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       setPersonaMover(null);
       setComiteDestinoMover("");
       setMotivoMovimiento("");
-      alert("Solicitante movido correctamente. La razón del cambio quedó guardada en observaciones.");
+      alert("Solicitante movido correctamente. La raz�n del cambio qued� guardada en observaciones.");
     } catch (err) {
       console.error("Error moviendo solicitante", err);
-      alert("No se pudo mover el solicitante. Revise la conexión e intente nuevamente. Detalle: " + (err.message || "error desconocido"));
+      alert("No se pudo mover el solicitante. Revise la conexi�n e intente nuevamente. Detalle: " + (err.message || "error desconocido"));
     } finally {
       setMoviendoPersona(false);
     }
@@ -8706,7 +8713,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const esMarcar = accion === "condicional";
     const nota = notaCondicional.trim();
     if (esMarcar && nota.length < 8) {
-      alert("Debe escribir una nota clara con la razón de la condicionalidad.");
+      alert("Debe escribir una nota clara con la raz�n de la condicionalidad.");
       return;
     }
     setGuardandoCondicional(true);
@@ -8726,10 +8733,10 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       });
       setPersonaCondicional(null);
       setNotaCondicional("");
-      alert(esMarcar ? "Solicitante marcado como condicional. La nota quedó guardada." : "Solicitante dejado como aprobado. La constancia quedó guardada.");
+      alert(esMarcar ? "Solicitante marcado como condicional. La nota qued� guardada." : "Solicitante dejado como aprobado. La constancia qued� guardada.");
     } catch (err) {
       console.error("Error guardando condicionalidad", err);
-      alert("No se pudo guardar la condicionalidad. Revisa la conexión e intenta nuevamente.");
+      alert("No se pudo guardar la condicionalidad. Revisa la conexi�n e intenta nuevamente.");
     } finally {
       setGuardandoCondicional(false);
     }
@@ -8742,9 +8749,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
 
   return (
     <div>
-      <button onClick={onBack} style={{ background: "transparent", border: "1px solid #ddd", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 22, cursor: "pointer" }}>← Volver a Comités</button>
+      <button onClick={onBack} style={{ background: "transparent", border: "1px solid #ddd", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 22, cursor: "pointer" }}>? Volver a Comit�s</button>
 
-      {/* Encabezado del comité */}
+      {/* Encabezado del comit� */}
       <div style={{ background: "#fff", borderRadius: 14, padding: "24px 28px", marginBottom: 24, border: "1px solid #e8e3de" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <div style={{ width: 58, height: 58, borderRadius: 14, background: "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 26 }}>C</div>
@@ -8764,8 +8771,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       {/* Lista de integrantes */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: "#1e3a5f" }}>Integrantes del comité</div>
-          {cargandoDocsComite && <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Cargando documentos completos del comité...</div>}
+          <div style={{ fontSize: 17, fontWeight: 700, color: "#1e3a5f" }}>Integrantes del comit�</div>
+          {cargandoDocsComite && <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Cargando documentos completos del comit�...</div>}
         </div>
         <button onClick={abrirNuevoIntegranteConClave} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo integrante</button>
       </div>
@@ -8817,7 +8824,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         </div>
       )}
 
-      {/* Filtros por estado si es comité desmarque */}
+      {/* Filtros por estado si es comit� desmarque */}
       {esComiteDesmarque && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
           {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).filter(([k]) => k !== "NO VISITADO").map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
@@ -8841,7 +8848,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
 
       {filtered.length === 0 && (
         <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>
-          {miembros.length === 0 ? "Este comité no tiene integrantes aún." : "No se encontraron resultados."}
+          {miembros.length === 0 ? "Este comit� no tiene integrantes a�n." : "No se encontraron resultados."}
         </div>
       )}
 
@@ -8871,7 +8878,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 <div style={{ width: 44, height: 44, borderRadius: 22, background: condicional ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{(p.nombre || "?")[0].toUpperCase()}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
-                  <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
+                  <div style={{ fontSize: 13, color: "#888" }}>C�dula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
                   {estadoDesmarqueVisible && (
                     <span style={{ display:"inline-block", marginTop:4, background: estadoDesmarqueVisible.bg, color: estadoDesmarqueVisible.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
                       {estadoDesmarqueVisible.label}
@@ -8879,7 +8886,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                   )}
                   {desmarqueEnTramite && (
                     <div style={{ display: "inline-block", marginTop: 4, marginLeft: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
-                      ⚠ Desmarque en trámite
+                      ? Desmarque en tr�mite
                     </div>
                   )}
                   {condicional && (
@@ -8898,7 +8905,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 )}
                 <div style={{ background: sols > 0 ? "#F5F3FF" : "#f5f5f5", color: sols > 0 ? "#7C3AED" : "#999", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 700 }}>{sols} solicitudes</div>
                 <button onClick={(e) => abrirCondicionalidad(e, p)} style={{ background: condicional ? "#FEF3C7" : "#F8FAFC", color: condicional ? "#92400E" : "#334155", border: "1px solid " + (condicional ? "#F59E0B" : "#CBD5E1"), borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
-                  {condicional ? "Ver condición" : "Condicional"}
+                  {condicional ? "Ver condici�n" : "Condicional"}
                 </button>
                 <button onClick={(e) => abrirMover(e, p)} style={{ background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Mover</button>
               </div>
@@ -8914,9 +8921,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       )}
 
       {personaMover && (
-        <Modal title="Mover solicitante a otro comité" onClose={() => !moviendoPersona && setPersonaMover(null)}>
+        <Modal title="Mover solicitante a otro comit�" onClose={() => !moviendoPersona && setPersonaMover(null)}>
           <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: 10, padding: "12px 14px", marginBottom: 16, color: "#92400E", fontSize: 13, lineHeight: 1.5 }}>
-            Este cambio no borra datos. Las solicitudes y documentos existentes se conservan, y la razón quedará guardada en observaciones del solicitante.
+            Este cambio no borra datos. Las solicitudes y documentos existentes se conservan, y la raz�n quedar� guardada en observaciones del solicitante.
           </div>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Solicitante</div>
@@ -8925,7 +8932,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Comité / programa de destino</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Comit� / programa de destino</div>
             <select value={comiteDestinoMover} onChange={e => setComiteDestinoMover(e.target.value)}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #ddd", background: "#fff", fontSize: 14, boxSizing: "border-box" }}>
               <option value="">-- Seleccionar destino --</option>
@@ -8936,9 +8943,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             </select>
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626", textTransform: "uppercase", marginBottom: 5 }}>Razón del cambio *</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626", textTransform: "uppercase", marginBottom: 5 }}>Raz�n del cambio *</div>
             <textarea value={motivoMovimiento} onChange={e => setMotivoMovimiento(e.target.value)}
-              placeholder="Ejemplo: se cambia por solicitud del postulante, corrección de programa, comité anterior no corresponde, etc."
+              placeholder="Ejemplo: se cambia por solicitud del postulante, correcci�n de programa, comit� anterior no corresponde, etc."
               rows={4}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid " + (motivoMovimiento.trim() ? "#F59E0B" : "#ddd"), fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }} />
           </div>
@@ -8972,16 +8979,16 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           </div>
           {ultimaLineaCondicionalidad(personaCondicional) && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Última constancia</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>�ltima constancia</div>
               <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 9, padding: "10px 12px", fontSize: 13, color: "#334155", lineHeight: 1.5 }}>
                 {ultimaLineaCondicionalidad(personaCondicional)}
               </div>
             </div>
           )}
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626", textTransform: "uppercase", marginBottom: 5 }}>Razón de la condicionalidad *</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626", textTransform: "uppercase", marginBottom: 5 }}>Raz�n de la condicionalidad *</div>
             <textarea value={notaCondicional} onChange={e => setNotaCondicional(e.target.value)}
-              placeholder="Ejemplo: falta regularizar antecedente, documento requiere corrección, debe completar observación técnica, etc."
+              placeholder="Ejemplo: falta regularizar antecedente, documento requiere correcci�n, debe completar observaci�n t�cnica, etc."
               rows={4}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid " + (notaCondicional.trim() ? "#F59E0B" : "#ddd"), fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }} />
           </div>
@@ -9006,16 +9013,16 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }}
           onClick={() => setPendingDeleteId(null)}>
           <div style={{ background:"#fff", borderRadius:14, padding:"28px 32px", width:400, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:16, fontWeight:700, color:"#DC2626", marginBottom:8 }}>🗑 Eliminar solicitante</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#DC2626", marginBottom:8 }}>?? Eliminar solicitante</div>
             <div style={{ fontSize:13, color:"#555", marginBottom:18, lineHeight:1.6 }}>
-              Esta acción es irreversible. Ingresa la clave de administrador para confirmar la eliminación.
+              Esta acci�n es irreversible. Ingresa la clave de administrador para confirmar la eliminaci�n.
             </div>
             <input type="password" autoComplete="new-password" autoFocus value={claveInput}
               onChange={e => { setClaveInput(e.target.value); setClaveError(false); }}
               onKeyDown={e => e.key === "Enter" && confirmarEliminarPersona()}
               placeholder="Clave de administrador"
               style={{ width:"100%", padding:"10px 14px", borderRadius:8, border:"1.5px solid " + (claveError ? "#DC2626" : "#ddd"), fontSize:14, boxSizing:"border-box", marginBottom:claveError ? 6 : 20 }} />
-            {claveError && <div style={{ fontSize:12, color:"#DC2626", marginBottom:14 }}>⚠ Clave incorrecta. Intenta nuevamente.</div>}
+            {claveError && <div style={{ fontSize:12, color:"#DC2626", marginBottom:14 }}>? Clave incorrecta. Intenta nuevamente.</div>}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
               <button onClick={() => setPendingDeleteId(null)}
                 style={{ padding:"9px 18px", borderRadius:8, border:"1px solid #ddd", background:"#fff", fontSize:14, fontWeight:600, cursor:"pointer" }}>Cancelar</button>
@@ -9029,7 +9036,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   );
 }
 
-// ─── VISTA COMITÉS ────────────────────────────────────────────────────────────
+// --- VISTA COMIT�S ------------------------------------------------------------
 function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetalle, filtroPrograma, programasCustom }) {
   const [subtab, setSubtab] = useState("gestion");
   const [showModal, setShowModal] = useState(false);
@@ -9046,7 +9053,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
     (c.descripcion || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Código auto-correlativo según tipo
+  // C�digo auto-correlativo seg�n tipo
   const calcCodigo = (tipo) => {
     const esUrbano = tipo === "URBANO";
     const progId = esUrbano ? "csp_urbano" : "csp_rural";
@@ -9056,8 +9063,8 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
   };
 
   const guardar = () => {
-    if (!form.programaId) { alert("Selecciona el programa del comité."); return; }
-    if (!form.nombre.trim()) { alert("El nombre del comité es obligatorio."); return; }
+    if (!form.programaId) { alert("Selecciona el programa del comit�."); return; }
+    if (!form.nombre.trim()) { alert("El nombre del comit� es obligatorio."); return; }
     const datos = { id: form.id || uid(), nombre: form.nombre.trim(), descripcion: form.descripcion.trim(), fechaCreacion: form.fechaCreacion || today(), programaId: form.programaId, tipo: form.tipo };
     const lista = form.id ? comites.map(c => c.id === form.id ? { ...c, ...datos } : c) : [...comites, datos];
     onSaveComites(lista);
@@ -9082,8 +9089,8 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
     e.stopPropagation();
     const comiteEliminar = comites.find(c => c.id === id) || COMITES_FIJOS.find(c => c.codigo === id);
     const miembros = personas.filter(p => pertenecePersonaComite(p, comiteEliminar || { id })).length;
-    if (miembros > 0) { alert("No se puede eliminar un comité con integrantes. Reasigne o elimine primero a los integrantes."); return; }
-    const ok = window["confirm"]("Eliminar este comité?");
+    if (miembros > 0) { alert("No se puede eliminar un comit� con integrantes. Reasigne o elimine primero a los integrantes."); return; }
+    const ok = window["confirm"]("Eliminar este comit�?");
     if (ok) onSaveComites(comites.filter(c => c.id !== id));
   };
 
@@ -9110,10 +9117,10 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
         }}>
         <ProgramaFigura programa={p} size={66} />
         <div style={{ fontSize: 17, fontWeight: 900, color: "#333", marginTop: 10, lineHeight: 1.25 }}>{p.nombre}</div>
-        <div style={{ fontSize: 13, color: "#888", marginTop: 5, lineHeight: 1.35 }}>{p.descripcion || "Con comité"}</div>
+        <div style={{ fontSize: 13, color: "#888", marginTop: 5, lineHeight: 1.35 }}>{p.descripcion || "Con comit�"}</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
           <span style={{ background: p.color || "#7C3AED", color: "#fff", borderRadius: 14, padding: "3px 9px", fontSize: 11, fontWeight: 900 }}>
-            {count} comité{count === 1 ? "" : "s"}
+            {count} comit�{count === 1 ? "" : "s"}
           </span>
           <span style={{ background: "#E5E7EB", color: "#374151", borderRadius: 14, padding: "3px 9px", fontSize: 11, fontWeight: 800 }}>
             {personasPrograma.length} solicitante{personasPrograma.length === 1 ? "" : "s"}
@@ -9128,19 +9135,19 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a5f" }}>
-            {prog ? prog.nombre : "Comités por programa"}
+            {prog ? prog.nombre : "Comit�s por programa"}
           </div>
           <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>
-            {prog ? `${filtered.length} comités en este programa` : "Selecciona un programa para ver sus comités"}
+            {prog ? `${filtered.length} comit�s en este programa` : "Selecciona un programa para ver sus comit�s"}
           </div>
         </div>
         {subtab === "gestion" && prog && (
-          <button onClick={() => setShowModal(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo comité</button>
+          <button onClick={() => setShowModal(true)} style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nuevo comit�</button>
         )}
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-        {[["gestion", "Gestión"], ["directivas", "Directivas"]].map(([id, label]) => (
+        {[["gestion", "Gesti�n"], ["directivas", "Directivas"]].map(([id, label]) => (
           <button key={id} onClick={() => setSubtab(id)} style={{
             fontSize: 13, padding: "6px 18px", borderRadius: 8, cursor: "pointer",
             border: subtab === id ? "1px solid #7C3AED" : "1px solid #ddd",
@@ -9158,7 +9165,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 24, fontWeight: 900, color: "#1e3a5f", marginBottom: 8 }}>Programas</div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#333" }}>Elige un programa para ver sus comités</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#333" }}>Elige un programa para ver sus comit�s</div>
           </div>
           {prog && (
             <button onClick={() => { setFiltroProg(""); setSearch(""); }}
@@ -9175,12 +9182,12 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
       {prog && (
       <>
       <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de" }}>
-        <input placeholder="Buscar comité..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
+        <input placeholder="Buscar comit�..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
       </div>
 
       {filtered.length === 0 && (
         <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>
-          {comitesFiltrados.length === 0 ? "Este programa aún no tiene comités registrados." : "No se encontraron resultados."}
+          {comitesFiltrados.length === 0 ? "Este programa a�n no tiene comit�s registrados." : "No se encontraron resultados."}
         </div>
       )}
 
@@ -9242,7 +9249,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
       )}
 
       {showModal && (
-        <Modal title={form.id ? "Editar comité" : "Crear nuevo comité"} onClose={() => { setShowModal(false); setForm({ id: "", nombre: "", descripcion: "", tipo: "", programaId: "" }); }}>
+        <Modal title={form.id ? "Editar comit�" : "Crear nuevo comit�"} onClose={() => { setShowModal(false); setForm({ id: "", nombre: "", descripcion: "", tipo: "", programaId: "" }); }}>
           <div style={{ display: "grid", gap: 14 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Programa *</label>
@@ -9250,26 +9257,26 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
                 {todosLosProgramas.map(p => (
                   <button key={p.id} onClick={() => setForm(f => ({ ...f, programaId: p.id, tipo: p.id === "csp_urbano" ? "URBANO" : p.id === "csp_rural" ? "RURAL" : "OTRO" }))}
                     style={{ padding: "10px 12px", borderRadius: 8, border: "2px solid " + (form.programaId === p.id ? (p.color || "#7C3AED") : "#ddd"), background: form.programaId === p.id ? (p.colorLight || p.color || "#7C3AED") : "#fff", color: form.programaId === p.id ? (p.color || "#7C3AED") : "#555", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left" }}>
-                    <span style={{ marginRight: 6 }}>{p.icon || "📋"}</span>{p.nombre}
+                    <span style={{ marginRight: 6 }}>{p.icon || "??"}</span>{p.nombre}
                   </button>
                 ))}
               </div>
             </div>
             {form.programaId && (
               <div style={{ background: "#f5f3ff", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 11, color: "#6b7280" }}>Código asignado automáticamente:</span>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>C�digo asignado autom�ticamente:</span>
                 <span style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED", fontFamily: "monospace" }}>{calcCodigo(form.tipo || "RURAL")}</span>
               </div>
             )}
             <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Nombre del comité *</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Nombre del comit� *</label>
               <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })}
-                placeholder="Ej: Comité de Vivienda Rural Küme Ruka"
+                placeholder="Ej: Comit� de Vivienda Rural K�me Ruka"
                 style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid " + (form.nombre.trim() ? "#7C3AED" : "#ddd"), fontSize: 14, boxSizing: "border-box" }} />
-              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>El comité aparecerá en la pestaña Directivas una vez guardado con nombre.</div>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>El comit� aparecer� en la pesta�a Directivas una vez guardado con nombre.</div>
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Descripción / Notas</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Descripci�n / Notas</label>
               <input value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })}
                 placeholder="Notas adicionales (opcional)"
                 style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
@@ -9279,7 +9286,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
             <button onClick={() => { setShowModal(false); setForm({ id: "", nombre: "", descripcion: "", tipo: "", programaId: "" }); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
             <button onClick={guardar} disabled={!form.programaId || !form.nombre.trim()}
               style={{ padding: "9px 20px", borderRadius: 8, background: form.programaId && form.nombre.trim() ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: form.programaId && form.nombre.trim() ? "pointer" : "not-allowed" }}>
-              {form.id ? "Guardar comité" : "Crear comité"}
+              {form.id ? "Guardar comit�" : "Crear comit�"}
             </button>
           </div>
         </Modal>
@@ -9289,7 +9296,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
   );
 }
 
-// ─── PANTALLA DE BIENVENIDA ───────────────────────────────────────────────────
+// --- PANTALLA DE BIENVENIDA ---------------------------------------------------
 function PantallaBienvenida({ onEntrar }) {
   return (
     <div style={{
@@ -9309,12 +9316,12 @@ function PantallaBienvenida({ onEntrar }) {
         background: "#fff", borderRadius: 20, padding: "48px 56px", maxWidth: 720, width: "100%",
         boxShadow: "0 24px 64px rgba(0,0,0,0.25)", textAlign: "center", position: "relative"
       }}>
-        {/* Logos + Título */}
+        {/* Logos + T�tulo */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, marginBottom: 28 }}>
           {/* Logo izquierdo: Municipalidad */}
           <img src={LOGO_MUNI} alt="Municipalidad de Lautaro" style={{ width: 140, height: 140, objectFit: "contain" }} />
 
-          {/* Títulos centrales */}
+          {/* T�tulos centrales */}
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 28, fontWeight: 800, color: "#1e3a5f", lineHeight: 1.2, letterSpacing: 0.5 }}>
               ILUSTRE MUNICIPALIDAD DE LAUTARO
@@ -9335,13 +9342,13 @@ function PantallaBienvenida({ onEntrar }) {
         {/* Separador */}
         <div style={{ height: 1, background: "#e5e7eb", margin: "0 0 28px 0" }} />
 
-        {/* Descripción */}
+        {/* Descripci�n */}
         <div style={{ fontSize: 15, color: "#6B7280", marginBottom: 36, lineHeight: 1.7 }}>
-          Sistema de Gestión de Subsidios Habitacionales<br />
-          <span style={{ fontSize: 13, color: "#9CA3AF" }}>Control de familias, comités, documentos y solicitudes SERVIU</span>
+          Sistema de Gesti�n de Subsidios Habitacionales<br />
+          <span style={{ fontSize: 13, color: "#9CA3AF" }}>Control de familias, comit�s, documentos y solicitudes SERVIU</span>
         </div>
 
-        {/* Botón entrar */}
+        {/* Bot�n entrar */}
         <button onClick={onEntrar} style={{
           padding: "14px 48px", borderRadius: 12, background: "linear-gradient(90deg, #1e3a5f, #2563EB)",
           color: "#fff", border: "none", fontSize: 17, fontWeight: 700, cursor: "pointer",
@@ -9366,7 +9373,7 @@ function PantallaBienvenida({ onEntrar }) {
   );
 }
 
-// ─── INICIO DE SESIÓN ────────────────────────────────────────────────────────
+// --- INICIO DE SESI�N --------------------------------------------------------
 function LoginView({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -9434,7 +9441,7 @@ function LoginView({ onLogin }) {
       return;
     }
     if (nueva !== confirmar) {
-      setError("La confirmación no coincide con la nueva clave.");
+      setError("La confirmaci�n no coincide con la nueva clave.");
       return;
     }
     setLoading(true);
@@ -9693,7 +9700,7 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
   </div>;
 }
 
-// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
+// --- APP PRINCIPAL ------------------------------------------------------------
 export default function App() {
   const [pantalla, setPantalla] = useState("bienvenida");
   const [view, setView] = useState("dashboard");
@@ -9899,7 +9906,7 @@ export default function App() {
         const { error } = await supabase.from("solicitudes").update({ documentos }).eq("id", sol.id);
         if (error) console.warn("[rendimiento] No se pudo aligerar solicitud:", sol.id, error.message);
       } catch (err) {
-        console.warn("[rendimiento] Excepción al aligerar solicitud:", sol.id, err.message);
+        console.warn("[rendimiento] Excepci�n al aligerar solicitud:", sol.id, err.message);
       }
     }
   };
@@ -9932,7 +9939,7 @@ export default function App() {
         supabase.from("programas_custom").select("*"),
       ]),
       6000,
-      "Tiempo agotado cargando solicitantes y comités desde Supabase."
+      "Tiempo agotado cargando solicitantes y comit�s desde Supabase."
     );
     const erroresBase = [comitesRes, personasRes, programasRes]
       .map(r => r.error?.message)
@@ -9986,7 +9993,7 @@ export default function App() {
     estado_desmarque:     x.estado_desmarque || "",
     observaciones:        x.observaciones || "",
     lineaTiempoCsp:       normalizarLineaTiempoCsp(x.linea_tiempo_csp),
-    // Mapeos lowercase DB -> camelCase app (campos de fichas técnicas)
+    // Mapeos lowercase DB -> camelCase app (campos de fichas t�cnicas)
     dominiopropiedad:      x.dominiopropiedad || "",
     nFJS:                  x.nfjs || "",
     sistemaAgua:           x.sistemaagua || "",
@@ -10139,7 +10146,7 @@ export default function App() {
             const programasRespaldo = aplicarDatosBase(respaldo, false);
             setSolicitudes((respaldo.solicitudes || []).map(sol => mapearSolicitudDb(sol, programasRespaldo)));
             setUltimaRecargaDatos("respaldo emergencia");
-            setErrorCargaDatos(`Supabase está demorando. Se muestran datos desde ${respaldo.fuente}; no se borró información. El sistema intentará reconectar.`);
+            setErrorCargaDatos(`Supabase est� demorando. Se muestran datos desde ${respaldo.fuente}; no se borr� informaci�n. El sistema intentar� reconectar.`);
             respaldoActivo = true;
           }
         } catch (respaldoErr) {
@@ -10165,7 +10172,7 @@ export default function App() {
         const programasCarga = aplicarDatosBase(base);
         setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
         setErrorCargaDatos(usandoRespaldo
-          ? `Supabase no responde. Se muestran datos desde ${base.fuente}; no se borró información. Presione Actualizar datos para reconectar.`
+          ? `Supabase no responde. Se muestran datos desde ${base.fuente}; no se borr� informaci�n. Presione Actualizar datos para reconectar.`
           : "");
         if (!silencioso) setCargando(false);
 
@@ -10185,12 +10192,12 @@ export default function App() {
           })
           .catch(solErr => {
             console.error("Error cargando solicitudes:", solErr);
-            setErrorCargaDatos("Se cargaron solicitantes y comités, pero no se pudieron cargar las solicitudes/documentos. Presione Actualizar datos.");
+            setErrorCargaDatos("Se cargaron solicitantes y comit�s, pero no se pudieron cargar las solicitudes/documentos. Presione Actualizar datos.");
           });
       } catch (err) {
         console.error("Error cargando datos:", err);
         if (respaldoActivo) {
-          setErrorCargaDatos("Supabase no responde. Se mantiene el respaldo de emergencia; no se borró información. Presione Actualizar datos para reconectar.");
+          setErrorCargaDatos("Supabase no responde. Se mantiene el respaldo de emergencia; no se borr� informaci�n. Presione Actualizar datos para reconectar.");
         } else {
           setErrorCargaDatos(err?.message || "No se pudieron cargar los datos desde Supabase.");
         }
@@ -10260,7 +10267,7 @@ export default function App() {
         linea_tiempo_csp: normalizarLineaTiempoCsp(ultima.lineaTiempoCsp || ultima.linea_tiempo_csp),
       }]);
       await registrarAuditoria("crear_solicitante", "personas", ultima.id, { nombre: ultima.nombre, rut: ultima.rut });
-      // Si es comité desmarque → crear solicitud Habitabilidad automáticamente
+      // Si es comit� desmarque ? crear solicitud Habitabilidad autom�ticamente
       if (ultima.comiteId === "comite_desmarque") {
         const progHab = combinarProgramas(programasCustom).find(p => p.id === "habitabilidad");
         const solExistente = solicitudes.find(s => s.personaId === ultima.id && s.programaId === "habitabilidad");
@@ -10347,13 +10354,13 @@ export default function App() {
         });
       }
     }
-    // No borrar solicitudes ausentes de la lista local: protege datos en producción multiusuario.
+    // No borrar solicitudes ausentes de la lista local: protege datos en producci�n multiusuario.
   };
 
-  // Guardar comités en Supabase
+  // Guardar comit�s en Supabase
   const saveComites = async (lista) => {
     setComites(lista);
-    // No borrar comités ausentes de la lista local: protege datos en producción multiusuario.
+    // No borrar comit�s ausentes de la lista local: protege datos en producci�n multiusuario.
     try {
       for (const c of lista) {
         const { error } = await supabase.from("comites").upsert({
@@ -10366,8 +10373,8 @@ export default function App() {
       }
       await registrarAuditoria("guardar_comites", "comites", "", { cantidad: lista.length });
     } catch (err) {
-      console.warn("[saveComites] No se pudo guardar comité:", err?.message || err);
-      alert("No se pudo guardar el comité en la nube. La pantalla seguirá funcionando; revise conexión o Supabase.");
+      console.warn("[saveComites] No se pudo guardar comit�:", err?.message || err);
+      alert("No se pudo guardar el comit� en la nube. La pantalla seguir� funcionando; revise conexi�n o Supabase.");
     }
   };
 
@@ -10436,13 +10443,13 @@ export default function App() {
   const NAV_ITEMS = [
     ["dashboard", "Inicio"],
     ["personas", "Solicitantes"],
-    ["sincomite", "Sin Comité"],
-    ["comites", "Comités"],
+    ["sincomite", "Sin Comit�"],
+    ["comites", "Comit�s"],
     ["programas", "Programas"],
     ["solicitudes", "Solicitudes"],
     ["informes", "Informes"],
-    ["auditoria", "Auditoría"],
-    ["admin", "Administración"],
+    ["auditoria", "Auditor�a"],
+    ["admin", "Administraci�n"],
   ];
   const NAV_VISIBLE = NAV_ITEMS.filter(([k]) => !["auditoria", "admin"].includes(k) || esAdmin);
 
@@ -10463,7 +10470,7 @@ export default function App() {
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "Segoe UI, sans-serif", background: "#F0EDE8" }}>
       <aside style={{ width: 240, background: "#1e3a5f", display: "flex", flexDirection: "column", flexShrink: 0 }}>
         <div style={{ padding: "28px 24px 20px" }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", lineHeight: 1.25 }}>Sistema de Gestión de Subsidios Habitacionales</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", lineHeight: 1.25 }}>Sistema de Gesti�n de Subsidios Habitacionales</div>
         </div>
         <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "0 24px" }} />
         <nav style={{ padding: "16px 12px", flex: 1 }}>
@@ -10502,7 +10509,7 @@ export default function App() {
             onMouseEnter={e => e.currentTarget.style.background = "rgba(220,38,38,0.3)"}
             onMouseLeave={e => e.currentTarget.style.background = "rgba(220,38,38,0.15)"}
           >
-            ⏻ Cerrar programa
+            ? Cerrar programa
           </div>
           <div
             onClick={logout}
@@ -10513,7 +10520,7 @@ export default function App() {
               color: "#E0F2FE", fontSize: 14, fontWeight: 600,
             }}
           >
-            Cerrar sesión
+            Cerrar sesi�n
           </div>
           <div style={{ fontSize: 11, color: "#5A8BB0", lineHeight: 1.6 }}>Sistema de gestion de subsidios habitacionales</div>
         </div>
@@ -10544,7 +10551,7 @@ export default function App() {
         </div>
         {errorCargaDatos && (
           <div style={{ marginBottom: 14, background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 700 }}>
-            No se pudieron cargar los datos desde Supabase. No se borró información; revise la conexión y presione “Actualizar datos”.
+            No se pudieron cargar los datos desde Supabase. No se borr� informaci�n; revise la conexi�n y presione �Actualizar datos�.
             <div style={{ marginTop: 4, fontSize: 11, fontWeight: 500, color: "#B91C1C" }}>{errorCargaDatos}</div>
           </div>
         )}
