@@ -3571,8 +3571,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       if (await urlSirveDocumento(localEstatico)) return localEstatico;
     }
     if (respaldoUrl && !esUrlSupabaseStorage(respaldoUrl) && await urlSirveDocumento(respaldoUrl)) return respaldoUrl;
-    const carpetaComite = persona?.comite ? (persona.comite.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/_+/g,'_').replace(/^_|$_/g,'').slice(0,90)) : '';
-    const carpetaPersona = persona?.nombre ? (persona.nombre.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/_+/g,'_').replace(/^_|$_/g,'').slice(0,90)) : '';
+    const carpetaComite = persona?.comite ? (persona.comite.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,90)) : '';
+    const carpetaPersona = persona?.nombre ? (persona.nombre.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,90)) : '';
     const storagePath = archivoGuardado?.storagePath || storageObjectPath(rutaLocal, nombre) || (carpetaComite && carpetaPersona ? carpetaComite+'/'+carpetaPersona+'/'+nombre : '');
     if (storagePath) {
       try {
