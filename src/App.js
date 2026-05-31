@@ -4910,7 +4910,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 </label>
               </>
             )}
-            <input ref={fileRef} type="file" style={{ display: "none" }} onChange={subirArchivo} accept=".pdf,.jpg,.jpeg,.png" />
+            <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={subirArchivo} accept=".pdf,.jpg,.jpeg,.png" />
             <button onClick={() => fileRef.current.click()} disabled={subiendo} style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               {subiendo ? "Subiendo..." : "⬆ Subir documento"}
             </button>
