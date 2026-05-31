@@ -3502,7 +3502,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const fsFiles = [...nuevos, ...viejos.filter(f => !nuevos.includes(f))];
     const datosNames = docsConArchivo.map(d => d.archivo);
     const todos = [...new Set([...datosNames, ...supaNames, ...fsFiles])];
-    setArchivos(todos);
+    setArchivos(prev => {       const prevSet = new Set(prev);       const nuevos = todos.filter(a => !prevSet.has(a));       return nuevos.length ? [...prev, ...nuevos] : prev;     });     setArchivosRutas(prev => ({ ...prev, ...rutasMap }));     setArchivosDatos(prev => ({ ...prev, ...datosMap }));
     setArchivosRutas(rutasMap);
     setArchivosDatos(datosMap);
 
