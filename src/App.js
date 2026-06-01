@@ -3513,9 +3513,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       .filter(s => s.personaId === personaId)
       .flatMap(s => s.documentos || [])
       .find(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
-    const archivosEliminados = new Set(
-      docEliminados ? JSON.parse(docEliminados.valor || "[]") : []
-    );
+    const archivosEliminados = new Set(() => { try { return docEliminados ? JSON.parse(docEliminados.valor || "[]") : []; } catch { return []; } }());
     const archivosValidos = todos.filter(nombre => {
       if (archivosEliminados.has(nombre)) return false;
       const dato = datosMap[nombre];
