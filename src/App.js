@@ -3434,27 +3434,26 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     return { nombre: nombreSubido, dataUrl: archivoUrl, mimeType: file.type, storagePath: storagePathFinal };
   };
   const cargarArchivos = async () => {
-    const fetchLista = async (p) => {
-      if (!p) return [];
-      try {
-        const r = await fetch(apiPath("/archivos/", p));
-        if (!r.ok) return [];
-        return await r.json();
-      } catch { return []; }
-    };
-
-    // 1. Filesystem (servidor local) — falla silenciosamente si el servidor no está
-    const [nuevos, viejos] = await Promise.all([
-      fetchLista(carpeta),
-      carpeta !== carpetaVieja ? fetchLista(carpetaVieja) : Promise.resolve([])
-    ]);
-
-    const rutasMap = {};
     const datosMap = {};
-    nuevos.forEach(f => { rutasMap[f] = carpeta; });
-    viejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
+    const rutasMap = {};
 
-    // 2. Supabase — completamente independiente, no afecta al resultado del filesystem
+    // 1. Respaldos en solicitudes (fuente más confiable - tienen storagePath)
+    const docsConArchivo = (solicitudes || [])
+      .filter(s => s.personaId === personaId)
+      .flatMap(s => s.documentos || [])
+      .filter(d => d.archivo && (d.archivoData || d.storagePath));
+    docsConArchivo.forEach(d => {
+      datosMap[d.archivo] = {
+        dataUrl: d.archivoData || "",
+        mimeType: d.archivoTipo || "",
+        carpeta: d.carpeta || carpeta,
+        storagePath: d.storagePath || "",
+        storageBucket: STORAGE_BUCKET
+      };
+      if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
+    });
+
+    // 2. Supabase archivos_solicitante
     let supaNames = [];
     let { data: supaFiles, error: supaError } = await supabase
       .from("archivos_solicitante")
@@ -3468,45 +3467,59 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         .eq("persona_id", persona.id)
         .order("creado", { ascending: false });
       supaFiles = retry.data;
-      supaError = retry.error;
     }
-
-    if (supaError) {
-      console.warn("[archivos_solicitante] No se pudo consultar Supabase:", supaError.message);
-    } else {
-      (supaFiles || []).forEach(sf => {
+    if (!supaError && supaFiles) {
+      supaFiles.forEach(sf => {
         if (!rutasMap[sf.nombre]) rutasMap[sf.nombre] = sf.carpeta || carpeta;
         const storagePath = sf.storage_path || storageObjectPath(sf.carpeta || carpeta, sf.nombre);
-        datosMap[sf.nombre] = {
-          dataUrl: "",
-          mimeType: sf.mime_type || "",
-          carpeta: sf.carpeta || carpeta,
-          storagePath,
-          storageBucket: sf.storage_bucket || STORAGE_BUCKET
-        };
+        if (storagePath || !datosMap[sf.nombre]) {
+          datosMap[sf.nombre] = {
+            dataUrl: datosMap[sf.nombre]?.dataUrl || "",
+            mimeType: sf.mime_type || datosMap[sf.nombre]?.mimeType || "",
+            carpeta: sf.carpeta || carpeta,
+            storagePath,
+            storageBucket: sf.storage_bucket || STORAGE_BUCKET
+          };
+        }
       });
-      supaNames = (supaFiles || []).map(sf => sf.nombre);
+      supaNames = supaFiles.map(sf => sf.nombre);
     }
 
-    // 3. Copias guardadas en solicitudes (respaldo para la web publicada sin /files)
-    const docsConArchivo = (solicitudes || [])
-      .filter(s => s.personaId === personaId)
-      .flatMap(s => s.documentos || [])
-      .filter(d => d.archivo && (d.archivoData || d.storagePath));
-    docsConArchivo.forEach(d => {
-      datosMap[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "", storageBucket: STORAGE_BUCKET };
-      if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
+    // 3. Servidor local (solo como complemento, sin duplicar)
+    const fetchLista = async (p) => {
+      if (!p) return [];
+      try {
+        const r = await fetch(apiPath("/archivos/", p));
+        if (!r.ok) return [];
+        return await r.json();
+      } catch { return []; }
+    };
+    const [nuevos, viejos] = await Promise.all([
+      fetchLista(carpeta),
+      carpeta !== carpetaVieja ? fetchLista(carpetaVieja) : Promise.resolve([])
+    ]);
+    nuevos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpeta; });
+    viejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
+
+    // 4. Lista final deduplicada — prioridad: storagePath > servidor local
+    const datosNames = docsConArchivo.map(d => d.archivo);
+    const fsFiles = [...nuevos, ...viejos.filter(f => !nuevos.includes(f))];
+    const todos = [...new Set([...supaNames, ...datosNames, ...fsFiles])];
+
+    // 5. Solo mostrar archivos que realmente existen y se pueden abrir
+    const archivosValidos = todos.filter(nombre => {
+      const dato = datosMap[nombre];
+      const tieneStorage = !!(dato?.storagePath);
+      const tieneDataUrl = !!(dato?.dataUrl && String(dato.dataUrl).startsWith("data:"));
+      const estaEnServidor = fsFiles.includes(nombre);
+      return tieneStorage || tieneDataUrl || estaEnServidor;
     });
 
-    // 4. Unión deduplicada: solicitudes/Supabase primero (más reciente), luego filesystem
-    const fsFiles = [...nuevos, ...viejos.filter(f => !nuevos.includes(f))];
-    const datosNames = docsConArchivo.map(d => d.archivo);
-    const todos = [...new Set([...datosNames, ...supaNames, ...fsFiles])];
-    setArchivos(prev => {       const prevSet = new Set(prev);       const nuevos = todos.filter(a => !prevSet.has(a));       return nuevos.length ? [...prev, ...nuevos] : prev;     });     setArchivosRutas(prev => ({ ...prev, ...rutasMap }));     setArchivosDatos(prev => ({ ...prev, ...datosMap }));
-    setArchivosRutas(prev => ({ ...prev, ...rutasMap }));
-    setArchivosDatos(prev => ({ ...prev, ...datosMap }));
+    setArchivos(archivosValidos);
+    setArchivosRutas(rutasMap);
+    setArchivosDatos(datosMap);
 
-    const hayArchivoAvaluo = todos.some(a => {
+    const hayArchivoAvaluo = archivosValidos.some(a => {
       const al = a.toLowerCase();
       return al.includes("avaluo") || al.includes("avalúo");
     });
