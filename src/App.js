@@ -3603,9 +3603,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     // 2. Construir ruta Storage con carpeta del solicitante (estructura nueva: CSP_Rural/comite_X/rut)
     const rutasStorage = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
     for (const ruta of rutasStorage) {
-      const objectPath = storageObjectPath(ruta, nombre);
-      const storageUrl = storagePublicUrl(objectPath);
-      if (storageUrl && await urlSirveDocumento(storageUrl)) return storageUrl;
+      // Probar con nombre original y con nombre normalizado (espacios -> _)
+      const nombreNorm = safeStorageSegment(nombre);
+      for (const nom of [...new Set([nombre, nombreNorm])]) {
+        const objectPath = storageObjectPath(ruta, nom);
+        const storageUrl = storagePublicUrl(objectPath);
+        if (storageUrl && await urlSirveDocumento(storageUrl)) return storageUrl;
+      }
     }
 
     // 3. Buscar en estructura antigua: APELLIDOS_NOMBRE_RUT/archivo (respaldo masivo)
@@ -3613,14 +3617,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 3);
       const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
       const carpetaVieja2 = [...nombreParts, rutLimpio].filter(Boolean).join("_");
-      const objectPathViejo = storageObjectPath(carpetaVieja2, nombre);
-      const storageUrlViejo = storagePublicUrl(objectPathViejo);
-      if (storageUrlViejo && await urlSirveDocumento(storageUrlViejo)) return storageUrlViejo;
-      // También sin RUT
       const carpetaSoloNombre = nombreParts.join("_");
-      const objectPathNombre = storageObjectPath(carpetaSoloNombre, nombre);
-      const storageUrlNombre = storagePublicUrl(objectPathNombre);
-      if (storageUrlNombre && await urlSirveDocumento(storageUrlNombre)) return storageUrlNombre;
+      const nombreNorm2 = safeStorageSegment(nombre);
+      for (const carp of [carpetaVieja2, carpetaSoloNombre]) {
+        for (const nom of [...new Set([nombre, nombreNorm2])]) {
+          const op = storageObjectPath(carp, nom);
+          const su = storagePublicUrl(op);
+          if (su && await urlSirveDocumento(su)) return su;
+        }
+      }
     }
 
     // 4. Servidor local
