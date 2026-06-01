@@ -2810,10 +2810,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
   const misSols = solicitudes.filter(s => s.personaId === personaId);
   const firmaArchivosSolicitudes = misSols.map(s => {
-    const docs = s.documentos || [];
-    const conArchivo = docs.filter(d => d?.archivo).length;
-    const conRespaldo = docs.filter(d => d?.archivoData || d?.storagePath).length;
-    return `${s.id}:${s.documentosCargados ? "1" : "0"}:${conArchivo}:${conRespaldo}`;
+    return `${s.id}:${s.documentosCargados ? "1" : "0"}`;
   }).join("|");
   useEffect(() => {
     if (!misSols.length) {
@@ -3668,9 +3665,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return;
     }
     setHtmlPreview(null);
-    // Si es URL de Supabase Storage, abrir en pestaña nueva (iframe bloqueado por CORS)
+    // Si es URL de Supabase Storage, descargar/abrir via enlace directo
     if (esUrlSupabaseStorage(fileUrl) || String(fileUrl).includes("supabase.co")) {
-      window.open(fileUrl, "_blank", "noopener,noreferrer");
+      const a = document.createElement("a");
+      a.href = fileUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => document.body.removeChild(a), 100);
       return;
     }
     setFilePreview({ url: fileUrl, title: nombre });
