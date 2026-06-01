@@ -3243,7 +3243,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         supabase.from("solicitudes").update({ documentos: s.documentos }).eq("id", s.id)
           .then(({ error }) => { if (error) console.warn("[correo solicitante]", error.message); });
       });
-  }, [personaId, solicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!persona || !misSols.length) return;
@@ -3339,7 +3339,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const ahorroActual = calcularAhorro(updates.puntajeRSH || persona.puntajeRSH || persona.puntaje_rsh || rshDesdeSolicitudes(solsCsp));
     agregar(updates, "ahorroPostular", ahorroActual);
     if (Object.keys(updates).length > 0) syncPersona(updates);
-  }, [personaId, solicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!persona) return null;
 
