@@ -3668,6 +3668,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return;
     }
     setHtmlPreview(null);
+    // Si es URL de Supabase Storage, abrir en pestaña nueva (iframe bloqueado por CORS)
+    if (esUrlSupabaseStorage(fileUrl) || String(fileUrl).includes("supabase.co")) {
+      window.open(fileUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     setFilePreview({ url: fileUrl, title: nombre });
   };
 
