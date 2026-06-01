@@ -3508,13 +3508,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const todos = [...new Set([...supaNames, ...datosNames, ...fsFiles])];
 
     // 5. Solo mostrar archivos que realmente existen y se pueden abrir
-    // Leer lista negra de archivos eliminados para este solicitante
+    // Leer lista negra directo desde Supabase para evitar desfase de estado
     let _listaEliminados = [];
     try {
-      const _docElim = (solicitudes || [])
-        .filter(s => s.personaId === personaId)
-        .flatMap(s => s.documentos || [])
-        .find(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
+      const { data: _solsDb } = await supabase
+        .from("solicitudes")
+        .select("documentos")
+        .eq("persona_id", personaId);
+      const _docElim = (_solsDb || [])
+        .flatMap(s => Array.isArray(s.documentos) ? s.documentos : [])
+        .find(d => d && d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
       if (_docElim && _docElim.valor) _listaEliminados = JSON.parse(_docElim.valor);
     } catch (e2) { _listaEliminados = []; }
     const archivosEliminados = new Set(_listaEliminados);
