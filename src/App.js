@@ -3502,9 +3502,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const fsFiles = [...nuevos, ...viejos.filter(f => !nuevos.includes(f))];
     const datosNames = docsConArchivo.map(d => d.archivo);
     const todos = [...new Set([...datosNames, ...supaNames, ...fsFiles])];
-    setArchivos(prev => {       const prevSet = new Set(prev);       const nuevos = todos.filter(a => !prevSet.has(a));       return nuevos.length ? [...prev, ...nuevos] : prev;     });end
+    setArchivos(prev => {       const prevSet = new Set(prev);       const nuevos = todos.filter(a => !prevSet.has(a));       return nuevos.length ? [...prev, ...nuevos] : prev;     });     setArchivosRutas(prev => ({ ...prev, ...rutasMap }));     setArchivosDatos(prev => ({ ...prev, ...datosMap }));
     setArchivosRutas(prev => ({ ...prev, ...rutasMap }));
     setArchivosDatos(prev => ({ ...prev, ...datosMap }));
+
     const hayArchivoAvaluo = todos.some(a => {
       const al = a.toLowerCase();
       return al.includes("avaluo") || al.includes("avalúo");
@@ -3524,10 +3525,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   const subirArchivo = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+    const file = e.target.files[0];
+    if (!file) return;
     setSubiendo(true);
-    for (const file of files) {
     try {
       await subirArchivoServidor(file, carpeta);
       // Si es comité desmarque, detectar tipo de archivo
@@ -3541,10 +3541,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }
     } catch (err) { alert("Error al subir el archivo: " + (err.message || "")); }
     setSubiendo(false);
-    }
-    }
-    }
-    }
     e.target.value = "";
   };
 
@@ -4914,7 +4910,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                 </label>
               </>
             )}
-            <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={subirArchivo} accept=".pdf,.jpg,.jpeg,.png" multiple />
+            <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={subirArchivo} accept=".pdf,.jpg,.jpeg,.png" />
             <button onClick={() => fileRef.current.click()} disabled={subiendo} style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               {subiendo ? "Subiendo..." : "⬆ Subir documento"}
             </button>
