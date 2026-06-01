@@ -10,3 +10,4 @@ const API = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includ
   : "http://localhost:3001";
 const USE_API_DB = process.env.REACT_APP_USE_API_DB !== "false";
 export const IS_DEMO_MODE = process.env.REACT_APP_DEMO_MODE === 'true' && !USE_API_DB;
+export const supabase = USE_API_DB ? realSupabase : demoSupabase;
