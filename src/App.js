@@ -3784,7 +3784,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             ? docsActuales.map(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY ? { ...d, ...registro } : d)
             : [...docsActuales, registro];
           await supabase.from("solicitudes").update({ documentos: nuevosDocumentos }).eq("id", solDestino.id);
-          setSolicitudes(prev => prev.map(s => s.id === solDestino.id ? { ...s, documentos: nuevosDocumentos } : s));
+          onSaveSolicitudes(solicitudes.map(s => s.id === solDestino.id ? { ...s, documentos: nuevosDocumentos } : s));
         }
       }
     } catch (elErr) { console.warn("[lista negra]", elErr.message); }
