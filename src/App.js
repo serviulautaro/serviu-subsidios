@@ -2836,6 +2836,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   }, [personaId, persona?.lineaTiempoCsp, persona?.linea_tiempo_csp]);
   const esPrioritario = solicitantePrioritario(personaId, solicitudes);
   const VISITAS_DOC_KEY = "__registro_visitas_oficina__";
+  const ARCHIVOS_ELIMINADOS_KEY = "__archivos_eliminados__";
 
   useEffect(() => {
     if (!personaId || !onCargarSolicitudesPersona) return;
@@ -3507,7 +3508,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const todos = [...new Set([...supaNames, ...datosNames, ...fsFiles])];
 
     // 5. Solo mostrar archivos que realmente existen y se pueden abrir
+    // Leer lista negra de archivos eliminados para este solicitante
+    const docEliminados = (solicitudes || [])
+      .filter(s => s.personaId === personaId)
+      .flatMap(s => s.documentos || [])
+      .find(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
+    const archivosEliminados = new Set(
+      docEliminados ? JSON.parse(docEliminados.valor || "[]") : []
+    );
     const archivosValidos = todos.filter(nombre => {
+      if (archivosEliminados.has(nombre)) return false;
       const dato = datosMap[nombre];
       const tieneStorage = !!(dato?.storagePath);
       const tieneDataUrl = !!(dato?.dataUrl && String(dato.dataUrl).startsWith("data:"));
@@ -3755,6 +3765,31 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch (err) {
       errores.push("solicitud: " + (err.message || "no se pudo actualizar"));
     }
+    // Guardar en lista negra para que no vuelva a aparecer
+    try {
+      const solDestino = (solicitudes || []).filter(s => s.personaId === persona.id)[0];
+      if (solDestino) {
+        const docsActuales = Array.isArray(solDestino.documentos) ? solDestino.documentos : [];
+        const docElim = docsActuales.find(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
+        const listaActual = docElim ? JSON.parse(docElim.valor || "[]") : [];
+        if (!listaActual.includes(nombre)) {
+          const nuevaLista = [...listaActual, nombre];
+          const registro = {
+            nombre: "Archivos eliminados",
+            obligatorio: false,
+            entregado: false,
+            interno: true,
+            tipo: ARCHIVOS_ELIMINADOS_KEY,
+            valor: JSON.stringify(nuevaLista)
+          };
+          const nuevosDocumentos = docElim
+            ? docsActuales.map(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY ? { ...d, ...registro } : d)
+            : [...docsActuales, registro];
+          await supabase.from("solicitudes").update({ documentos: nuevosDocumentos }).eq("id", solDestino.id);
+          setSolicitudes(prev => prev.map(s => s.id === solDestino.id ? { ...s, documentos: nuevosDocumentos } : s));
+        }
+      }
+    } catch (elErr) { console.warn("[lista negra]", elErr.message); }
     setArchivos(prev => prev.filter(a => a !== nombre));
     setArchivosDatos(prev => { const next = { ...prev }; delete next[nombre]; return next; });
     setArchivosRutas(prev => { const next = { ...prev }; delete next[nombre]; return next; });
