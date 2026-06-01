@@ -3698,7 +3698,29 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch {
       avisos.push("servidor local");
     }
-    // No se elimina el objeto de Storage: se quita del listado visible y queda como respaldo recuperable.
+    // Eliminar de Supabase Storage (ruta nueva y ruta antigua del respaldo)
+    try {
+      const archivoGuardado = archivosDatos[nombre];
+      const rutasEliminar = [];
+      // Ruta nueva
+      if (archivoGuardado?.storagePath) rutasEliminar.push(archivoGuardado.storagePath);
+      rutasEliminar.push(storageObjectPath(carpeta, nombre));
+      if (carpeta !== carpetaVieja) rutasEliminar.push(storageObjectPath(carpetaVieja, nombre));
+      // Ruta antigua APELLIDOS_NOMBRE_RUT/archivo
+      if (persona) {
+        const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 3);
+        const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
+        const carpetaRespaldo = [...nombreParts, rutLimpio].filter(Boolean).join("_");
+        rutasEliminar.push(storageObjectPath(carpetaRespaldo, nombre));
+      }
+      const rutasUnicas = [...new Set(rutasEliminar.filter(Boolean))];
+      for (const path of rutasUnicas) {
+        const { error: storErr } = await supabase.storage.from(STORAGE_BUCKET).remove([path]);
+        if (storErr) console.warn("[storage remove]", path, storErr.message);
+      }
+    } catch (storEx) {
+      console.warn("[storage remove excepción]", storEx.message);
+    }
     try {
       const { error } = await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
       if (error) errores.push("registro Supabase: " + error.message);
@@ -3734,16 +3756,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       errores.push("solicitud: " + (err.message || "no se pudo actualizar"));
     }
     setArchivos(prev => prev.filter(a => a !== nombre));
-    setArchivosDatos(prev => {
-      const next = { ...prev };
-      delete next[nombre];
-      return next;
-    });
-    setArchivosRutas(prev => {
-      const next = { ...prev };
-      delete next[nombre];
-      return next;
-    });
+    setArchivosDatos(prev => { const next = { ...prev }; delete next[nombre]; return next; });
+    setArchivosRutas(prev => { const next = { ...prev }; delete next[nombre]; return next; });
     setDocMenu(null);
     if (errores.length) {
       console.warn("[eliminarArchivo]", errores.join(" | "));
