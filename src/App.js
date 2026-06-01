@@ -5,7 +5,7 @@ import InformesView from "./components/InformesView";
 import JSZip from "jszip";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
-// Formatear RUT chileno: 10398338-K -> 10.398.338-K
+// Formatear RUT chileno: 10398338-K -> 10.398.338-Kh
 const formatRut = (rut) => {
   if (!rut) return "";
   const clean = rut.replace(/[^0-9kK]/g, "");
