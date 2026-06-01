@@ -3562,6 +3562,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const respaldoUrl = archivoGuardado?.dataUrl || "";
     const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
     if (String(respaldoUrl).startsWith("data:")) return respaldoUrl;
+
     const urlSirveDocumento = async (url) => {
       if (!url) return false;
       try {
@@ -3576,6 +3577,38 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       } catch {}
       return false;
     };
+
+    // 1. Buscar en storagePath guardado
+    const storagePath = archivoGuardado?.storagePath;
+    if (storagePath) {
+      const storageUrl = storagePublicUrl(storagePath, archivoGuardado?.storageBucket || STORAGE_BUCKET);
+      if (storageUrl && await urlSirveDocumento(storageUrl)) return storageUrl;
+    }
+
+    // 2. Construir ruta Storage con carpeta del solicitante (estructura nueva: CSP_Rural/comite_X/rut)
+    const rutasStorage = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
+    for (const ruta of rutasStorage) {
+      const objectPath = storageObjectPath(ruta, nombre);
+      const storageUrl = storagePublicUrl(objectPath);
+      if (storageUrl && await urlSirveDocumento(storageUrl)) return storageUrl;
+    }
+
+    // 3. Buscar en estructura antigua: APELLIDOS_NOMBRE_RUT/archivo (respaldo masivo)
+    if (persona) {
+      const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 3);
+      const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
+      const carpetaVieja2 = [...nombreParts, rutLimpio].filter(Boolean).join("_");
+      const objectPathViejo = storageObjectPath(carpetaVieja2, nombre);
+      const storageUrlViejo = storagePublicUrl(objectPathViejo);
+      if (storageUrlViejo && await urlSirveDocumento(storageUrlViejo)) return storageUrlViejo;
+      // También sin RUT
+      const carpetaSoloNombre = nombreParts.join("_");
+      const objectPathNombre = storageObjectPath(carpetaSoloNombre, nombre);
+      const storageUrlNombre = storagePublicUrl(objectPathNombre);
+      if (storageUrlNombre && await urlSirveDocumento(storageUrlNombre)) return storageUrlNombre;
+    }
+
+    // 4. Servidor local
     const rutasLocales = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
     for (const ruta of rutasLocales) {
       const localProtegido = apiPath("/archivo-local/", ruta, nombre);
