@@ -3509,11 +3509,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
     // 5. Solo mostrar archivos que realmente existen y se pueden abrir
     // Leer lista negra de archivos eliminados para este solicitante
-    const docEliminados = (solicitudes || [])
-      .filter(s => s.personaId === personaId)
-      .flatMap(s => s.documentos || [])
-      .find(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
-    const archivosEliminados = new Set(() => { try { return docEliminados ? JSON.parse(docEliminados.valor || "[]") : []; } catch { return []; } }());
+    let _listaEliminados = [];
+    try {
+      const _docElim = (solicitudes || [])
+        .filter(s => s.personaId === personaId)
+        .flatMap(s => s.documentos || [])
+        .find(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
+      if (_docElim && _docElim.valor) _listaEliminados = JSON.parse(_docElim.valor);
+    } catch (e2) { _listaEliminados = []; }
+    const archivosEliminados = new Set(_listaEliminados);
     const archivosValidos = todos.filter(nombre => {
       if (archivosEliminados.has(nombre)) return false;
       const dato = datosMap[nombre];
