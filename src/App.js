@@ -194,7 +194,7 @@ const statusBg = (p) => p === 100 ? "#ECFDF5" : p >= 50 ? "#FFFBEB" : "#FEF2F2";
 const API = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
   ? window.location.origin
   : "http://localhost:3001";
-const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita";
+const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite";
 const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
 const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
@@ -3362,8 +3362,23 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const guardarArchivoPersistente = async (nombre, dataUrl, mimeType = "", carp = carpeta, storagePath = "") => {
     if (!nombre || (!dataUrl && !storagePath)) return;
+    let storagePathFinal = storagePath;
+    if (!storagePathFinal && dataUrl && (mimeType === "text/html" || nombre.endsWith(".html"))) {
+      try {
+        const htmlContent = dataUrl.startsWith("data:") ? decodeURIComponent(dataUrl.split(",").slice(1).join(",")) : dataUrl;
+        const blob = new Blob([htmlContent], { type: "text/html" });
+        const objectPath = storageObjectPath(carp, nombre);
+        const { error: storageErr } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(objectPath, blob, { upsert: true, contentType: "text/html" });
+        if (!storageErr) {
+          storagePathFinal = objectPath;
+          await _registrarArchivoSupa(nombre, carp, { storage_bucket: STORAGE_BUCKET, storage_path: storagePathFinal, mime_type: "text/html", tamano_bytes: blob.size });
+        }
+      } catch (e) { console.warn("[guardarArchivoPersistente] No se pudo subir HTML a Storage:", e.message); }
+    }
     const archivoUrl = dataUrl || "";
-    setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp, storagePath } }));
+    setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp, storagePath: storagePathFinal } }));
     setArchivos(prev => prev.includes(nombre) ? prev : [nombre, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombre]: carp }));
     const solDestino = misSols[0];
@@ -3379,7 +3394,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       archivoData: dataUrl,
       archivoTipo: mimeType,
       carpeta: carp,
-      storagePath
+      storagePath: storagePathFinal
     };
     if (idx >= 0) documentos[idx] = { ...documentos[idx], ...registro };
     else documentos.push(registro);
