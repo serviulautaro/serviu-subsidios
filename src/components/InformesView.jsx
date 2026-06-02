@@ -122,6 +122,14 @@ function mergeComites(comitesSupa = []) {
       return;
     }
     if (usados.has(norm(sc.nombre))) return;
+    // Si el nombre nuevo de Supabase es una variante de uno base (ej: mayúsculas), ignorar
+    const nsc = norm(sc.nombre);
+    const esVarianteBase = COMITES_BASE.some(b => {
+      const nb = norm(b.nombre);
+      // Mismo inicio (primeras 15 chars) o contiene las mismas palabras clave
+      return nsc.startsWith(nb.slice(0, 15)) || nb.startsWith(nsc.slice(0, 15));
+    });
+    if (esVarianteBase) return;
     const texto = `${sc.programaId || ""} ${sc.programa_id || ""} ${sc.tipo || ""} ${sc.nombre || ""}`.toUpperCase();
     const tipo = texto.includes("URBANO") ? "Urbano" : "Rural";
     const codigo = tipo === "Urbano" ? `gr${nextU++}U` : `gr${nextR++}R`;
@@ -142,6 +150,22 @@ function mergeComites(comitesSupa = []) {
   });
 
   return base;
+}
+
+// Filtra comités de prueba y duplicados para los selectores de informes
+function filtrarComitesValidos(lista = []) {
+  const palabrasExcluir = ["prueba", "test", "demo", "borrar", "eliminar", "temporal"];
+  const vistos = new Set();
+  return lista.filter(c => {
+    if (!c?.nombre) return false;
+    const n = norm(c.nombre);
+    // Excluir comités de prueba/temporales
+    if (palabrasExcluir.some(p => n.includes(p))) return false;
+    // Excluir duplicados por nombre normalizado
+    if (vistos.has(n)) return false;
+    vistos.add(n);
+    return true;
+  });
 }
 
 function personaEnComite(persona, comite) {
@@ -1140,7 +1164,7 @@ function TarjetaInforme({ item, active, onClick }) {
 }
 
 export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser, soloAuditoria = false, onSavePersonas, programasCustom = [] }) {
-  const comites = useMemo(() => mergeComites(comitesSupa), [comitesSupa]);
+  const comites = useMemo(() => filtrarComitesValidos(mergeComites(comitesSupa)), [comitesSupa]);
   const programas = useMemo(() => combinarProgramasMeta(programasCustom), [programasCustom]);
   const tarjetas = useMemo(() => ([
     { id: "individual", nombre: "Informe Individual", descripcion: "Informe por persona o por solicitantes de un comite", color: "#2563eb", colorLight: "#eff6ff", icon: "👤" },
