@@ -2894,6 +2894,24 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
 
   const LS_FECHAS_KEY = "fechas_visita_pendientes";
 
+  // Update via servidor Render (más confiable que Supabase directo en producción)
+  const updateViaServidor = async (tabla, filtros, valores) => {
+    try {
+      const res = await fetch(`${API}/api/db/${tabla}/update`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filters: filtros, values: valores })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok !== false) return true;
+      console.warn("[updateViaServidor]", tabla, json.error || res.status);
+      return false;
+    } catch (e) {
+      console.warn("[updateViaServidor fetch]", e.message);
+      return false;
+    }
+  };
+
   const guardarFechaVisitaDesmarque = async (sol, fecha) => {
     const fechaAnterior = fechaVisitaSolicitud(sol);
     if (!fecha && fechaAnterior && !window.confirm("¿Quitar la fecha de visita registrada?")) {
@@ -2912,32 +2930,40 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       localStorage.setItem(LS_FECHAS_KEY, JSON.stringify(pendientes));
     } catch {}
 
-    // Sincronizar con Supabase — intentar ahora y en segundo plano
+    // Sincronizar via servidor Render (directo a PostgreSQL, sin CORS)
     const sincronizar = async () => {
-      for (let intento = 0; intento < 4; intento++) {
-        if (intento > 0) await new Promise(r => setTimeout(r, 2000));
-        try {
-          const { error } = await supabase
-            .from("solicitudes")
-            .update({ documentos, fecha_visita: fecha || null })
-            .eq("id", sol.id);
-          if (!error) {
-            try {
-              const pendientes = JSON.parse(localStorage.getItem(LS_FECHAS_KEY) || "{}");
-              delete pendientes[sol.id];
-              localStorage.setItem(LS_FECHAS_KEY, JSON.stringify(pendientes));
-            } catch {}
-            return true;
-          }
-          console.warn("[fecha visita intento " + (intento+1) + "]", error.message);
-        } catch (fetchErr) {
-          console.warn("[fecha visita fetch]", fetchErr.message);
+      const filtros = [{ col: "id", value: sol.id }];
+      const valores = { documentos: JSON.stringify(documentos), fecha_visita: fecha || "" };
+
+      // Intento 1: servidor Render (más confiable)
+      for (let i = 0; i < 3; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, 2000));
+        const ok = await updateViaServidor("solicitudes", filtros, valores);
+        if (ok) {
+          try {
+            const pendientes = JSON.parse(localStorage.getItem(LS_FECHAS_KEY) || "{}");
+            delete pendientes[sol.id];
+            localStorage.setItem(LS_FECHAS_KEY, JSON.stringify(pendientes));
+          } catch {}
+          return true;
         }
       }
+      // Intento 2: Supabase directo como fallback
+      try {
+        const { error } = await supabase.from("solicitudes")
+          .update({ documentos, fecha_visita: fecha || null }).eq("id", sol.id);
+        if (!error) {
+          try {
+            const pendientes = JSON.parse(localStorage.getItem(LS_FECHAS_KEY) || "{}");
+            delete pendientes[sol.id];
+            localStorage.setItem(LS_FECHAS_KEY, JSON.stringify(pendientes));
+          } catch {}
+          return true;
+        }
+      } catch {}
       console.warn("[fecha visita] quedó pendiente en localStorage");
       return false;
     };
-    // Primer intento inmediato (no bloquea UI)
     sincronizar().catch(() => {});
     return true;
   };
@@ -10728,23 +10754,30 @@ export default function App() {
         return Array.from(porId.values());
       });
 
-      // Sincronizar fechas pendientes con Supabase en segundo plano
-      setTimeout(() => {
+      // Sincronizar fechas pendientes via servidor Render
+      setTimeout(async () => {
         const pendientesFechas = JSON.parse(localStorage.getItem("fechas_visita_pendientes") || "{}");
         if (Object.keys(pendientesFechas).length === 0) return;
-        solicitudesCompletas.forEach(async sol => {
+        for (const sol of solicitudesCompletas) {
           const p = pendientesFechas[sol.id];
-          if (!p) return;
+          if (!p) continue;
           try {
-            const { error } = await supabase.from("solicitudes")
-              .update({ documentos: p.documentos, fecha_visita: p.fecha || null }).eq("id", sol.id);
-            if (!error) {
+            const res = await fetch(`${API}/api/db/solicitudes/update`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                filters: [{ col: "id", value: sol.id }],
+                values: { documentos: JSON.stringify(p.documentos), fecha_visita: p.fecha || "" }
+              })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.ok !== false) {
               const actual = JSON.parse(localStorage.getItem("fechas_visita_pendientes") || "{}");
               delete actual[sol.id];
               localStorage.setItem("fechas_visita_pendientes", JSON.stringify(actual));
             }
           } catch {}
-        });
+        }
       }, 2000);
     } catch (err) {
       console.warn("[detalle solicitante] No se pudieron cargar documentos completos:", err?.message || err);
