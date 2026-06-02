@@ -2993,9 +2993,42 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
         console.warn("[cargarVisitas fetch]", fetchErr.message);
       }
     }
-    const combinadas = fusionarVisitas(tablaData || [], respaldo);
+    // Recuperar visitas pendientes de localStorage (guardadas offline)
+    const LS_KEY = "visitas_pendientes_sync";
+    let pendientesLS = [];
+    try {
+      const raw = localStorage.getItem(LS_KEY) || "[]";
+      pendientesLS = JSON.parse(raw).filter(v => v.persona_id === personaId);
+    } catch {}
+
+    const combinadas = fusionarVisitas(tablaData || [], fusionarVisitas(respaldo, pendientesLS));
     setVisitas(combinadas);
-    // Si hay más visitas en la tabla que en el respaldo, sincronizar respaldo
+
+    // Sincronizar pendientes de localStorage con Supabase
+    if (pendientesLS.length > 0) {
+      const sincronizar = async () => {
+        const todasPendientes = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+        const sincronizadas = [];
+        for (const v of todasPendientes) {
+          let ok = false;
+          try { const { error } = await supabase.from("visitas").insert([v]); if (!error) ok = true; } catch {}
+          if (!ok) {
+            try {
+              const base = { id: v.id, persona_id: v.persona_id, fecha: v.fecha,
+                profesional: v.profesional, solicitud: v.solicitud, compromiso: v.compromiso };
+              const { error } = await supabase.from("visitas").insert([base]); if (!error) ok = true;
+            } catch {}
+          }
+          if (ok) sincronizadas.push(v.id);
+        }
+        if (sincronizadas.length > 0) {
+          const restantes = todasPendientes.filter(v => !sincronizadas.includes(v.id));
+          localStorage.setItem(LS_KEY, JSON.stringify(restantes));
+        }
+      };
+      sincronizar().catch(() => {});
+    }
+
     if (tablaData && tablaData.length > respaldo.length) {
       respaldarVisitasEnSolicitud(combinadas).catch(() => {});
     }
@@ -3021,40 +3054,52 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       docs_recibidos: recibidosLineas.join("\n"),
       profesional_recibio: formVisita.profesionalRecibio || (recibidosLineas.length ? profesionalActual : ""),
     };
-    let persistidaTabla = false;
-    // Intento con versión completa, si falla columnas → versión reducida, ambas con retry
-    const insertarVisita = async (obj) => {
-      for (let i = 0; i < 3; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, 1500));
-        try {
-          const { error } = await supabase.from("visitas").insert([obj]);
-          if (!error) return true;
-          console.warn("[visitas insert]", error.message, "código:", error.code);
-          if (i < 2) continue; // retry
-        } catch (e) { console.warn("[visitas fetch]", e.message); }
-      }
-      return false;
-    };
-    persistidaTabla = await insertarVisita(nueva);
-    if (!persistidaTabla) {
-      // Fallback: versión sin columnas opcionales (por si la tabla no fue migrada)
-      const base = { id: nueva.id, persona_id: nueva.persona_id, fecha: nueva.fecha,
-        profesional: nueva.profesional, solicitud: nueva.solicitud, compromiso: nueva.compromiso };
-      persistidaTabla = await insertarVisita(base);
-      if (persistidaTabla) console.warn("[visitas] Guardado sin docs_recibidos/profesional_recibio — ejecutar supabase_migration.sql");
-    }
+    // PASO 1: Guardar inmediatamente en localStorage (nunca se pierde)
+    const LS_KEY = "visitas_pendientes_sync";
+    const pendientes = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+    pendientes.push(nueva);
+    localStorage.setItem(LS_KEY, JSON.stringify(pendientes));
+
+    // PASO 2: Actualizar UI de inmediato — el usuario puede seguir trabajando
     const listaFinal = fusionarVisitas([nueva], visitas);
-    const persistidaRespaldo = await respaldarVisitasEnSolicitud(listaFinal);
-    if (!persistidaTabla && !persistidaRespaldo) {
-      alert("No se pudo guardar la visita en Supabase. No se cerrará el formulario para evitar pérdida de datos.");
-      setGuardandoVisita(false);
-      return;
-    }
-    await registrarAuditoria?.("registrar_visita", "visitas", nueva.id, { personaId, persona: persona?.nombre || "", fecha: nueva.fecha, profesional: nueva.profesional });
     setVisitas(listaFinal);
     setFormVisita({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "" });
     setShowFormVisita(false);
     setGuardandoVisita(false);
+
+    // PASO 3: Intentar guardar en Supabase en segundo plano (no bloquea al usuario)
+    const sincronizarPendientes = async () => {
+      const porSincronizar = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+      if (porSincronizar.length === 0) return;
+      const sincronizadas = [];
+      for (const v of porSincronizar) {
+        let ok = false;
+        // Intento completo
+        try {
+          const { error } = await supabase.from("visitas").insert([v]);
+          if (!error) { ok = true; }
+        } catch {}
+        // Fallback versión reducida si falla por columnas
+        if (!ok) {
+          try {
+            const base = { id: v.id, persona_id: v.persona_id, fecha: v.fecha,
+              profesional: v.profesional, solicitud: v.solicitud, compromiso: v.compromiso };
+            const { error } = await supabase.from("visitas").insert([base]);
+            if (!error) { ok = true; }
+          } catch {}
+        }
+        if (ok) sincronizadas.push(v.id);
+      }
+      if (sincronizadas.length > 0) {
+        const restantes = porSincronizar.filter(v => !sincronizadas.includes(v.id));
+        localStorage.setItem(LS_KEY, JSON.stringify(restantes));
+      }
+    };
+
+    // Sincronizar en segundo plano — no esperar resultado
+    sincronizarPendientes().catch(() => {});
+    respaldarVisitasEnSolicitud(listaFinal).catch(() => {});
+    registrarAuditoria?.("registrar_visita", "visitas", nueva.id, { personaId, persona: persona?.nombre || "", fecha: nueva.fecha, profesional: nueva.profesional }).catch(() => {});
   };
 
   const asignarComite = async () => {
