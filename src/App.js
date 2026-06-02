@@ -2956,30 +2956,48 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     else documentos.push(registro);
     const actualizadas = solicitudes.map(s => s.id === solDestino.id ? { ...s, documentos } : s);
     onSaveSolicitudes(actualizadas);
-    const { error } = await supabase.from("solicitudes").update({ documentos }).eq("id", solDestino.id);
-    if (error) {
-      console.warn("[visitas respaldo] error:", error.message);
-      return false;
+    let respaldoOk = false;
+    for (let intento = 0; intento < 3; intento++) {
+      if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+      try {
+        const { error } = await supabase.from("solicitudes").update({ documentos }).eq("id", solDestino.id);
+        if (!error) { respaldoOk = true; break; }
+        console.warn("[visitas respaldo intento " + (intento+1) + "]", error.message);
+      } catch (fetchErr) {
+        console.warn("[visitas respaldo fetch]", fetchErr.message);
+      }
     }
-    return true;
+    if (!respaldoOk) console.warn("[visitas respaldo] falló tras 3 intentos");
+    return respaldoOk;
   };
 
   const cargarVisitas = async () => {
     const respaldo = visitasDesdeSolicitudes();
-    try {
-      const { data, error } = await supabase.from("visitas").select("*").eq("persona_id", personaId).order("fecha", { ascending: false });
-      if (error) {
-        if (error.code === "PGRST205") console.warn("[visitas] Tabla 'visitas' no existe aún. Ejecuta supabase_migration.sql en el Dashboard.");
-        else console.warn("[visitas] error:", error.message);
-        setVisitas(prev => fusionarVisitas(prev, respaldo));
-        return;
+    let tablaData = null;
+    // Retry hasta 3 veces para cargar desde tabla visitas
+    for (let intento = 0; intento < 3; intento++) {
+      if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+      try {
+        const { data, error } = await supabase.from("visitas").select("*").eq("persona_id", personaId).order("fecha", { ascending: false });
+        if (error) {
+          if (error.code === "PGRST205") {
+            console.warn("[visitas] Tabla no existe. Usando solo respaldo.");
+            break;
+          }
+          console.warn("[visitas carga intento " + (intento+1) + "]", error.message);
+          continue;
+        }
+        tablaData = data || [];
+        break;
+      } catch (fetchErr) {
+        console.warn("[cargarVisitas fetch]", fetchErr.message);
       }
-      const combinadas = fusionarVisitas(data || [], respaldo);
-      setVisitas(combinadas);
-      if (respaldo.length < combinadas.length) respaldarVisitasEnSolicitud(combinadas).catch(() => {});
-    } catch (err) {
-      console.warn("[cargarVisitas] excepción:", err.message);
-      setVisitas(prev => fusionarVisitas(prev, respaldo));
+    }
+    const combinadas = fusionarVisitas(tablaData || [], respaldo);
+    setVisitas(combinadas);
+    // Si hay más visitas en la tabla que en el respaldo, sincronizar respaldo
+    if (tablaData && tablaData.length > respaldo.length) {
+      respaldarVisitasEnSolicitud(combinadas).catch(() => {});
     }
   };
 
@@ -3003,22 +3021,25 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       docs_recibidos: recibidosLineas.join("\n"),
       profesional_recibio: formVisita.profesionalRecibio || (recibidosLineas.length ? profesionalActual : ""),
     };
-    let persistidaTabla = true;
-    const { error: insErr } = await supabase.from("visitas").insert([nueva]);
-    if (insErr) {
-      console.warn("[visitas insert] error:", insErr.message);
-      const base = {
-        id: nueva.id,
-        persona_id: nueva.persona_id,
-        fecha: nueva.fecha,
-        profesional: nueva.profesional,
-        solicitud: nueva.solicitud,
-        compromiso: nueva.compromiso
-      };
-      const retry = await supabase.from("visitas").insert([base]);
-      if (retry.error) {
-        persistidaTabla = false;
-        console.warn("[visitas insert retry] error:", retry.error.message);
+    let persistidaTabla = false;
+    // Intento 1: insert completo
+    for (let intento = 0; intento < 3; intento++) {
+      if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+      try {
+        const { error: insErr } = await supabase.from("visitas").insert([nueva]);
+        if (!insErr) { persistidaTabla = true; break; }
+        // Si falla por columnas faltantes, intentar versión reducida
+        if (insErr.code === "PGRST204" || insErr.message?.includes("column")) {
+          const base = { id: nueva.id, persona_id: nueva.persona_id, fecha: nueva.fecha,
+            profesional: nueva.profesional, solicitud: nueva.solicitud, compromiso: nueva.compromiso };
+          const { error: retryErr } = await supabase.from("visitas").insert([base]);
+          if (!retryErr) { persistidaTabla = true; break; }
+          console.warn("[visitas insert reducido]", retryErr.message);
+        } else {
+          console.warn("[visitas insert intento " + (intento+1) + "]", insErr.message);
+        }
+      } catch (fetchErr) {
+        console.warn("[visitas insert fetch error]", fetchErr.message);
       }
     }
     const listaFinal = fusionarVisitas([nueva], visitas);
