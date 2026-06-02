@@ -10574,7 +10574,7 @@ export default function App() {
     setPersonas(lista);
     const ultima = lista[lista.length - 1];
     if (ultima && !personas.find(p => p.id === ultima.id)) {
-      await supabase.from("personas").insert([{
+      const nuevaPersonaPayload = {
         id: ultima.id, nombre: ultima.nombre, rut: ultima.rut,
         fecha_nacimiento: ultima.fechaNacimiento, telefono: ultima.telefono,
         email: ultima.email, direccion: ultima.direccion, comuna: ultima.comuna,
@@ -10592,7 +10592,32 @@ export default function App() {
         estado_desmarque: ultima.estado_desmarque || "NO VISITADO",
         observaciones: ultima.observaciones || "",
         linea_tiempo_csp: normalizarLineaTiempoCsp(ultima.lineaTiempoCsp || ultima.linea_tiempo_csp),
-      }]);
+      };
+      // Intentar via servidor Render primero (sin CORS), luego Supabase como respaldo
+      let guardadoOk = false;
+      for (let intento = 0; intento < 3; intento++) {
+        if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+        try {
+          const res = await fetch(`${API}/api/db/personas/insert`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify([nuevaPersonaPayload])
+          });
+          const json = await res.json().catch(() => ({}));
+          if (res.ok && json.ok !== false) { guardadoOk = true; break; }
+          console.warn("[insert persona Render intento " + (intento+1) + "]", json.error || res.status);
+        } catch (e) { console.warn("[insert persona fetch]", e.message); }
+      }
+      if (!guardadoOk) {
+        try {
+          const { error } = await supabase.from("personas").insert([nuevaPersonaPayload]);
+          if (!error) guardadoOk = true;
+          else console.warn("[insert persona Supabase]", error.message);
+        } catch (e) { console.warn("[insert persona Supabase fetch]", e.message); }
+      }
+      if (!guardadoOk) {
+        alert("⚠️ No se pudo guardar el solicitante en el servidor. Revise la conexión. El solicitante aparece en pantalla pero puede perderse al recargar.");
+      }
       await registrarAuditoria("crear_solicitante", "personas", ultima.id, { nombre: ultima.nombre, rut: ultima.rut });
       // Si es comité desmarque → crear solicitud Habitabilidad automáticamente
       if (ultima.comiteId === "comite_desmarque") {
@@ -10610,10 +10635,26 @@ export default function App() {
               tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null, valor: d.valor || ""
             }))
           };
-          await supabase.from("solicitudes").insert([{
+          // Insert solicitud via Render
+          let solOk = false;
+          const solPayload = [{
             id: nuevaSol.id, persona_id: nuevaSol.personaId, persona_nombre: nuevaSol.personaNombre,
             programa_id: nuevaSol.programaId, fecha: nuevaSol.fecha, documentos: nuevaSol.documentos
-          }]);
+          }];
+          for (let i = 0; i < 3; i++) {
+            if (i > 0) await new Promise(r => setTimeout(r, 1500));
+            try {
+              const res = await fetch(`${API}/api/db/solicitudes/insert`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(solPayload)
+              });
+              const json = await res.json().catch(() => ({}));
+              if (res.ok && json.ok !== false) { solOk = true; break; }
+            } catch {}
+          }
+          if (!solOk) {
+            await supabase.from("solicitudes").insert(solPayload).catch(() => {});
+          }
           await registrarAuditoria("crear_solicitud_automatica", "solicitudes", nuevaSol.id, { persona: nuevaSol.personaNombre, programa: "habitabilidad" });
           setSolicitudes(prev => [...prev, nuevaSol]);
         }
