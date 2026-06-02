@@ -3611,13 +3611,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
     // 3. Buscar en estructura antigua: APELLIDOS_NOMBRE_RUT/archivo (respaldo masivo)
     if (persona) {
-      const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 4);
+      const nombreParts4 = (persona.nombre || "").toUpperCase().split(" ").slice(0, 4);
+      const nombreParts3 = (persona.nombre || "").toUpperCase().split(" ").slice(0, 3);
+      const nombreCompleto = (persona.nombre || "").toUpperCase();
       const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
-      const carpetaVieja2 = [...nombreParts, rutLimpio].filter(Boolean).join("_");
-      const carpetaVieja3 = [...(persona.nombre || "").toUpperCase().split(" ").slice(0, 3), rutLimpio].filter(Boolean).join("_");
-      const carpetaSoloNombre = nombreParts.join("_");
+      const carpetaVieja4 = [...nombreParts4, rutLimpio].filter(Boolean).join("_");
+      const carpetaVieja3 = [...nombreParts3, rutLimpio].filter(Boolean).join("_");
+      const carpetaConEspacios = nombreCompleto;
       const nombreNorm2 = safeStorageSegment(nombre);
-      for (const carp of [carpetaVieja2, carpetaVieja3, carpetaSoloNombre]) {
+      // También buscar en estructura de comité: Programa/Comité/Nombre
+      const comite = (persona.comiteNombre || "").toUpperCase();
+      const carpetaComite = comite ? `Construccion Sitio Propio Rural/${comite}/${carpetaConEspacios}` : null;
+      const carpetasExtra = [carpetaVieja4, carpetaVieja3, carpetaConEspacios];
+      if (carpetaComite) carpetasExtra.push(carpetaComite);
+      for (const carp of carpetasExtra.filter(Boolean)) {
         for (const nom of [...new Set([nombre, nombreNorm2])]) {
           const op = storageObjectPath(carp, nom);
           const su = storagePublicUrl(op);
