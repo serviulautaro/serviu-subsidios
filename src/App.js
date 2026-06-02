@@ -1988,11 +1988,24 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
-      await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
+      let guardadoOk = false;
+      for (let intento = 0; intento < 3; intento++) {
+        if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+        try {
+          const { error } = await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
+          if (!error) { guardadoOk = true; break; }
+        } catch {}
+      }
+      if (!guardadoOk) {
+        setConfirmModal(null);
+        alert("❌ No se pudo guardar. Revise la conexión e intente nuevamente.");
+        return;
+      }
       onSave(formFinal);
       setCamposDesbloqueados(false);
       setModo("ver");
       setConfirmModal(null);
+      alert("✅ Ficha Rural guardada correctamente.");
     }});
   };
 
@@ -2314,11 +2327,24 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
-      await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
+      let guardadoOk = false;
+      for (let intento = 0; intento < 3; intento++) {
+        if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+        try {
+          const { error } = await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
+          if (!error) { guardadoOk = true; break; }
+        } catch {}
+      }
+      if (!guardadoOk) {
+        setConfirmModal(null);
+        alert("❌ No se pudo guardar. Revise la conexión e intente nuevamente.");
+        return;
+      }
       onSave(formFinal);
       setCamposDesbloqueados(false);
       setModo("ver");
       setConfirmModal(null);
+      alert("✅ Ficha Urbana guardada correctamente.");
     }});
   };
 
