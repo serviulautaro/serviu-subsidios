@@ -3778,8 +3778,18 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       console.warn("[storage remove excepción]", storEx.message);
     }
     try {
-      const { error } = await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
-      if (error) errores.push("registro Supabase: " + error.message);
+      let deleteError = null;
+      for (let intento = 0; intento < 3; intento++) {
+        if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+        try {
+          const { error } = await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
+          deleteError = error;
+          if (!error) break;
+        } catch (fetchErr) {
+          deleteError = { message: "TypeError: " + (fetchErr?.message || "Failed to fetch") };
+        }
+      }
+      if (deleteError) errores.push("registro Supabase: " + deleteError.message);
     } catch {
       errores.push("registro Supabase");
     }
@@ -3842,7 +3852,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setDocMenu(null);
     if (errores.length) {
       console.warn("[eliminarArchivo]", errores.join(" | "));
-      alert("Se intentó eliminar el documento, pero hubo una respuesta incompleta: " + errores.join(", ") + ". Si sigue apareciendo, actualice la página e intente nuevamente.");
+      alert("El archivo fue eliminado de la vista, pero hubo un problema de conexión al sincronizar con el servidor (" + errores.join(", ") + "). Recargue la página para confirmar.");
     } else if (avisos.length) {
       console.warn("[eliminarArchivo avisos]", avisos.join(" | "));
     }
