@@ -608,7 +608,29 @@ function tablaSeccionFicha(titulo, filas) {
   return `<div class="section"><h2>${titulo}</h2><table class="tabla-individual"><thead><tr><th>Tipo documento</th><th>Estado</th><th>Datos del solicitante</th></tr></thead><tbody>${filas.map(([tipo, dato]) => filaInforme(tipo, !!primerDato(dato), dato)).join("")}</tbody></table></div>`;
 }
 
-function bloquePersonaDetalleComiteHtml(persona, solicitudes, personas, comites) {
+function seccionArchivosHtml(archivos = []) {
+  if (!archivos.length) {
+    return `<div class="section"><h2>Carpeta de documentos</h2><table class="tabla-individual"><thead><tr><th>Archivo</th><th>Estado</th></tr></thead><tbody><tr><td colspan="2" style="color:#9ca3af;text-align:center">Sin archivos en la carpeta de documentos</td></tr></tbody></table></div>`;
+  }
+  const ext = (nombre) => {
+    const p = nombre.lastIndexOf(".");
+    return p >= 0 ? nombre.slice(p + 1).toUpperCase() : "ARCH";
+  };
+  const tipo = (nombre) => {
+    const e = ext(nombre);
+    if (e === "PDF") return "PDF";
+    if (["JPG","JPEG","PNG","WEBP","GIF"].includes(e)) return "Imagen";
+    if (e === "HTML") return "Documento HTML";
+    if (["DOC","DOCX"].includes(e)) return "Word";
+    return e;
+  };
+  const filas = archivos.map(a =>
+    `<tr><td style="word-break:break-all">${v(a.nombre)}</td><td style="color:#059669;font-weight:700">${tipo(a.nombre)} ✓</td></tr>`
+  ).join("");
+  return `<div class="section"><h2>Carpeta de documentos (${archivos.length} archivo${archivos.length === 1 ? "" : "s"})</h2><table class="tabla-individual"><thead><tr><th>Nombre del archivo</th><th>Tipo</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+}
+
+function bloquePersonaDetalleComiteHtml(persona, solicitudes, personas, comites, archivosPersona = []) {
   const sols = solicitudFiltrada(persona, solicitudes, personas, "todos");
   const comite = comiteDePersona(persona, comites);
   const docs = sols.flatMap(sol => {
@@ -659,6 +681,7 @@ function bloquePersonaDetalleComiteHtml(persona, solicitudes, personas, comites)
       ["Ingreso familiar UF", primerDato(persona.ingresoFamiliarUf, persona.ingreso_familiar_uf)],
     ])}
     <div class="section"><h2>Solicitudes activas</h2>${tablasDocumentosIndividualHtml(docs)}</div>
+    ${seccionArchivosHtml(archivosPersona)}
   </div>`;
 }
 
@@ -691,10 +714,37 @@ function imprimirIndividualMultiple(seleccionados, solicitudes, personas, comite
 }
 
 
-function imprimirDetalleComite(comite, personas, solicitudes, comites) {
+async function imprimirDetalleComite(comite, personas, solicitudes, comites) {
   if (!comite) return;
   const miembros = miembrosComite(comite, personas);
-  const html = miembros.map(persona => bloquePersonaDetalleComiteHtml(persona, solicitudes, personas, comites)).join("");
+  if (!miembros.length) {
+    imprimirVentana("Informe detallado del comité", `<div class="page"><div class="muted">Sin solicitantes registrados.</div></div>`);
+    return;
+  }
+  // Consultar archivos de todos los miembros en Supabase
+  const idsPersonas = miembros.map(p => p.id).filter(Boolean);
+  let archivosPorPersona = {};
+  try {
+    const { data: archivosDb } = await supabase
+      .from("archivos_solicitante")
+      .select("persona_id, nombre")
+      .in("persona_id", idsPersonas)
+      .order("creado", { ascending: false });
+    if (archivosDb) {
+      archivosDb.forEach(a => {
+        if (!archivosPorPersona[a.persona_id]) archivosPorPersona[a.persona_id] = [];
+        // Evitar duplicados por nombre
+        if (!archivosPorPersona[a.persona_id].some(x => x.nombre === a.nombre)) {
+          archivosPorPersona[a.persona_id].push(a);
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[informe detallado] No se pudieron cargar archivos:", err.message);
+  }
+  const html = miembros.map(persona =>
+    bloquePersonaDetalleComiteHtml(persona, solicitudes, personas, comites, archivosPorPersona[persona.id] || [])
+  ).join("");
   imprimirVentana("Informe detallado del comité", html || `<div class="page"><div class="muted">Sin solicitantes registrados.</div></div>`);
 }
 
