@@ -1992,16 +1992,19 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
       let guardadoOk = false;
+      let ultimoError = "";
       for (let intento = 0; intento < 3; intento++) {
         if (intento > 0) await new Promise(r => setTimeout(r, 1500));
         try {
           const { error } = await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
           if (!error) { guardadoOk = true; break; }
-        } catch {}
+          ultimoError = error.message || JSON.stringify(error);
+          console.warn("[ficha rural update intento " + (intento+1) + "]", ultimoError);
+        } catch (e) { ultimoError = e.message; console.warn("[ficha rural catch]", e.message); }
       }
       if (!guardadoOk) {
         setConfirmModal(null);
-        alert("❌ No se pudo guardar. Revise la conexión e intente nuevamente.");
+        alert("❌ No se pudo guardar. Error: " + ultimoError);
         return;
       }
       onSave(formFinal);
@@ -2331,16 +2334,19 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
       });
       let guardadoOk = false;
+      let ultimoError = "";
       for (let intento = 0; intento < 3; intento++) {
         if (intento > 0) await new Promise(r => setTimeout(r, 1500));
         try {
           const { error } = await supabase.from("personas").update(toDbFields(formFinal)).eq("id", persona.id);
           if (!error) { guardadoOk = true; break; }
-        } catch {}
+          ultimoError = error.message || JSON.stringify(error);
+          console.warn("[ficha urbana update intento " + (intento+1) + "]", ultimoError);
+        } catch (e) { ultimoError = e.message; console.warn("[ficha urbana catch]", e.message); }
       }
       if (!guardadoOk) {
         setConfirmModal(null);
-        alert("❌ No se pudo guardar. Revise la conexión e intente nuevamente.");
+        alert("❌ No se pudo guardar. Error: " + ultimoError);
         return;
       }
       onSave(formFinal);
