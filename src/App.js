@@ -3673,15 +3673,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return;
     }
     setHtmlPreview(null);
-    // Si es URL de Supabase Storage, descargar/abrir via enlace directo
+    // Si es URL de Supabase Storage, abrir en pestaña nueva forzando descarga
     if (esUrlSupabaseStorage(fileUrl) || String(fileUrl).includes("supabase.co")) {
-      const a = document.createElement("a");
-      a.href = fileUrl;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => document.body.removeChild(a), 100);
+      const win = window.open("", "_blank");
+      if (win) {
+        win.location.href = fileUrl;
+      } else {
+        // Si popup bloqueado, navegar directamente
+        window.location.href = fileUrl;
+      }
       return;
     }
     setFilePreview({ url: fileUrl, title: nombre });
