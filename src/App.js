@@ -2912,9 +2912,9 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       localStorage.setItem(LS_FECHAS_KEY, JSON.stringify(pendientes));
     } catch {}
 
-    // Sincronizar con Supabase en segundo plano
+    // Sincronizar con Supabase — intentar ahora y en segundo plano
     const sincronizar = async () => {
-      for (let intento = 0; intento < 3; intento++) {
+      for (let intento = 0; intento < 4; intento++) {
         if (intento > 0) await new Promise(r => setTimeout(r, 2000));
         try {
           const { error } = await supabase
@@ -2922,21 +2922,22 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
             .update({ documentos, fecha_visita: fecha || null })
             .eq("id", sol.id);
           if (!error) {
-            // Limpiar localStorage al confirmar guardado
             try {
               const pendientes = JSON.parse(localStorage.getItem(LS_FECHAS_KEY) || "{}");
               delete pendientes[sol.id];
               localStorage.setItem(LS_FECHAS_KEY, JSON.stringify(pendientes));
             } catch {}
-            return;
+            return true;
           }
           console.warn("[fecha visita intento " + (intento+1) + "]", error.message);
         } catch (fetchErr) {
           console.warn("[fecha visita fetch]", fetchErr.message);
         }
       }
-      console.warn("[fecha visita] quedó pendiente en localStorage para próxima sincronización");
+      console.warn("[fecha visita] quedó pendiente en localStorage");
+      return false;
     };
+    // Primer intento inmediato (no bloquea UI)
     sincronizar().catch(() => {});
     return true;
   };
@@ -10352,7 +10353,19 @@ export default function App() {
       documentos: documentosCargados ? aliviarDocumentosSolicitud(sol.documentos) : [],
       documentosCargados,
     };
-    mapped.fecha_visita = fechaVisitaSolicitud(mapped);
+    // Leer fecha desde BD, documentos internos, o localStorage (en ese orden de prioridad)
+    const fechaBD = mapped.fecha_visita || "";
+    const fechaDocs = docFechaVisitaDesmarque(mapped.documentos || [])?.valor || "";
+    let fechaLS = "";
+    try {
+      const pendientesFechas = JSON.parse(localStorage.getItem("fechas_visita_pendientes") || "{}");
+      fechaLS = pendientesFechas[mapped.id]?.fecha || "";
+    } catch {}
+    mapped.fecha_visita = normalizarFechaInput(fechaBD || fechaDocs || fechaLS);
+    // Si hay fecha en localStorage pero no en BD/docs, aplicar también a documentos
+    if (!fechaBD && !fechaDocs && fechaLS) {
+      mapped.documentos = documentosConFechaVisita(mapped.documentos || [], fechaLS);
+    }
     // Migrar solicitudes CSP antiguas solo cuando sus documentos completos ya fueron cargados.
     if ((mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") && documentosCargados) {
       const prog = programasCarga.find(p => p.id === mapped.programaId);
