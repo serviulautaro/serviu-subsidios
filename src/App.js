@@ -219,7 +219,7 @@ const storageObjectPath = (carpeta = "", nombre = "") =>
     .map(safeStorageSegment)
     .join("/");
 const storagePublicUrl = (objectPath = "", bucket = STORAGE_BUCKET) =>
-  objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(encodeRoutePath(objectPath)).data.publicUrl : "";
+  objectPath ? supabase.storage.from(bucket || STORAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl : "";
 const esUrlSupabaseStorage = (url = "") => /supabase\.co\/storage\/v1\/object/i.test(String(url || ""));
 const fileToDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
