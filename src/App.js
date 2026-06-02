@@ -194,7 +194,7 @@ const statusBg = (p) => p === 100 ? "#ECFDF5" : p >= 50 ? "#FFFBEB" : "#FEF2F2";
 const API = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
   ? window.location.origin
   : "http://localhost:3001";
-const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite";
+const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,fecha_visita,comite,codigo_comite,tipo_comite,profesional_comite";
 const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
 const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
@@ -2903,24 +2903,28 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : solActualizada);
     onSaveSolicitudes(nuevasSols);
 
-    const { error: docsError } = await supabase
-      .from("solicitudes")
-      .update({ documentos })
-      .eq("id", sol.id);
-
-    if (docsError) {
-      console.warn("[fecha visita documentos] error:", docsError.message);
-      const docsAnteriores = documentosConFechaVisita(sol.documentos || [], fechaAnterior);
-      onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior, documentos: docsAnteriores }));
-      alert("No se pudo guardar la fecha de visita. No se modificó el registro.");
-      return false;
+    let docsError = null;
+    for (let intento = 0; intento < 3; intento++) {
+      if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+      try {
+        const { error } = await supabase
+          .from("solicitudes")
+          .update({ documentos, fecha_visita: fecha || null })
+          .eq("id", sol.id);
+        docsError = error;
+        if (!error) break;
+      } catch (fetchErr) {
+        docsError = { message: "Failed to fetch" };
+      }
     }
 
-    supabase
-      .from("solicitudes")
-      .update({ fecha_visita: fecha || null })
-      .eq("id", sol.id)
-      .then(({ error }) => { if (error) console.warn("[fecha visita columna] respaldo interno usado:", error.message); });
+    if (docsError) {
+      console.warn("[fecha visita] error tras 3 intentos:", docsError.message);
+      const docsAnteriores = documentosConFechaVisita(sol.documentos || [], fechaAnterior);
+      onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...sol, fecha_visita: fechaAnterior, documentos: docsAnteriores }));
+      alert("No se pudo guardar la fecha de visita. Revise la conexión e intente nuevamente.");
+      return false;
+    }
 
     return true;
   };
