@@ -1175,9 +1175,12 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
     return styles[estado] || styles.pending;
   }
 
+  // Paso 9 (Respuesta SERVIU) solo avanza por VB automatico, no por marcado manual
+  const PASOS_SOLO_AUTOMATICOS = [9];
   pasos = pasos.map(p => {
     if (avanceManual[p.numero] === undefined) return p;
     if (p.estado === "stop-red" || p.estado === "warn" || p.estado === "final-green") return p;
+    if (PASOS_SOLO_AUTOMATICOS.includes(p.numero)) return p;
     return { ...p, estado: avanceManual[p.numero] ? "done" : "pending", manual: true };
   });
 
@@ -1203,7 +1206,7 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
         const tieneDetalle = !!(p.detalle || "").trim();
         const abierto = !!abiertos[idx];
         const esActual = idx === pasoActualIdx;
-        const editable = !!onTogglePaso && !["stop-red", "warn", "final-green"].includes(p.estado);
+        const editable = !!onTogglePaso && !["stop-red", "warn", "final-green"].includes(p.estado) && ![9].includes(p.numero);
         const marcado = p.estado !== "pending";
         return <div key={idx} title={editable ? "Pincha el cuadro para marcar o desmarcar avance" : (tieneDetalle ? "Pincha para ver/ocultar detalle" : p.label)}
           onClick={() => editable && onTogglePaso(p.numero, !marcado)}
