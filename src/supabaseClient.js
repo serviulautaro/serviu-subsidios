@@ -82,11 +82,8 @@ function makeProxyClient(base) {
                   for (let i = 0; i < 3; i++) {
                     if (i > 0) await new Promise(r => setTimeout(r, 1500));
                     try {
-                      const vals = {};
-                      for (const [k, v] of Object.entries(values)) {
-                        vals[k] = (typeof v === 'object' && v !== null && !Array.isArray(v)) ? JSON.stringify(v) :
-                                  Array.isArray(v) ? JSON.stringify(v) : v;
-                      }
+                      // Pasar valores tal cual - el servidor maneja la serialización
+                      const vals = { ...values };
                       await apiCall('PATCH', `/api/db/${tabla}/update`, {
                         filters: [{ col, value: val }],
                         values: vals
