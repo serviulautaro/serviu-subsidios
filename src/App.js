@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase, IS_DEMO_MODE } from "./supabaseClient";
 import ComitesVivienda from "./components/ComitesVivienda";
 import InformesView from "./components/InformesView";
@@ -3527,9 +3527,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return tieneStorage || tieneDataUrl || estaEnServidor;
     });
 
-    setArchivos(archivosValidos);
-    setArchivosRutas(rutasMap);
-    setArchivosDatos(datosMap);
+    // Agrupar los 3 setState para evitar re-renders múltiples (pestañeo)
+    React.startTransition(() => {
+      setArchivos(archivosValidos);
+      setArchivosRutas(rutasMap);
+      setArchivosDatos(datosMap);
+    });
 
     const hayArchivoAvaluo = archivosValidos.some(a => {
       const al = a.toLowerCase();
@@ -10155,15 +10158,20 @@ export default function App() {
       documentos: Array.isArray(x.documentos) ? x.documentos : [],
       esCustom: true,
     }));
-    setProgramasCustom(programasCustomCargados);
-    setComites((c || []).map(x => ({
+    const comitesMapeados = (c || []).map(x => ({
       ...x,
       programaId: x.programa_id,
       fechaCreacion: x.fecha_creacion,
       lineaTiempo: normalizarLineaTiempoCsp(x.linea_tiempo),
-    })));
-    setPersonas((p || []).map(mapearPersonaDb));
-    setDatosBaseListos(true);
+    }));
+    const personasMapeadas = (p || []).map(mapearPersonaDb);
+    // Actualizar todo en la misma pasada para evitar re-renders múltiples (pestañeo)
+    React.startTransition(() => {
+      setProgramasCustom(programasCustomCargados);
+      setComites(comitesMapeados);
+      setPersonas(personasMapeadas);
+      setDatosBaseListos(true);
+    });
     if (guardarCache) {
       DB.set("serviu_cache_base", {
         comites: c,
@@ -10336,10 +10344,18 @@ export default function App() {
       const tag = (el.tagName || "").toLowerCase();
       return ["input", "textarea", "select"].includes(tag) || el.isContentEditable;
     };
+    let ultimaRecargaSilenciosa = Date.now();
     const recargarSiVisible = () => {
-      if (document.visibilityState === "visible" && !usuarioEstaEditando()) cargarDatos(true);
+      if (document.visibilityState !== "visible") return;
+      if (usuarioEstaEditando()) return;
+      if (Date.now() - ultimaRecargaSilenciosa < 3 * 60 * 1000) return;
+      ultimaRecargaSilenciosa = Date.now();
+      cargarDatos(true);
     };
-    const timer = window.setInterval(recargarSiVisible, 60 * 1000);
+    const timer = window.setInterval(() => {
+      ultimaRecargaSilenciosa = 0;
+      recargarSiVisible();
+    }, 5 * 60 * 1000);
     document.addEventListener("visibilitychange", recargarSiVisible);
     window.addEventListener("focus", recargarSiVisible);
     return () => {
