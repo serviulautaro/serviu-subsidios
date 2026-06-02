@@ -3611,12 +3611,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
     // 3. Buscar en estructura antigua: APELLIDOS_NOMBRE_RUT/archivo (respaldo masivo)
     if (persona) {
-      const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 3);
+      const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 4);
       const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
       const carpetaVieja2 = [...nombreParts, rutLimpio].filter(Boolean).join("_");
+      const carpetaVieja3 = [...(persona.nombre || "").toUpperCase().split(" ").slice(0, 3), rutLimpio].filter(Boolean).join("_");
       const carpetaSoloNombre = nombreParts.join("_");
       const nombreNorm2 = safeStorageSegment(nombre);
-      for (const carp of [carpetaVieja2, carpetaSoloNombre]) {
+      for (const carp of [carpetaVieja2, carpetaVieja3, carpetaSoloNombre]) {
         for (const nom of [...new Set([nombre, nombreNorm2])]) {
           const op = storageObjectPath(carp, nom);
           const su = storagePublicUrl(op);
@@ -3736,10 +3737,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       if (carpeta !== carpetaVieja) rutasEliminar.push(storageObjectPath(carpetaVieja, nombre));
       // Ruta antigua APELLIDOS_NOMBRE_RUT/archivo
       if (persona) {
-        const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 3);
+        const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 4);
         const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
         const carpetaRespaldo = [...nombreParts, rutLimpio].filter(Boolean).join("_");
+        const carpetaRespaldo3 = [...(persona.nombre || "").toUpperCase().split(" ").slice(0, 3), rutLimpio].filter(Boolean).join("_");
         rutasEliminar.push(storageObjectPath(carpetaRespaldo, nombre));
+        rutasEliminar.push(storageObjectPath(carpetaRespaldo3, nombre));
       }
       const rutasUnicas = [...new Set(rutasEliminar.filter(Boolean))];
       for (const path of rutasUnicas) {
