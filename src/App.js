@@ -3022,25 +3022,26 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       profesional_recibio: formVisita.profesionalRecibio || (recibidosLineas.length ? profesionalActual : ""),
     };
     let persistidaTabla = false;
-    // Intento 1: insert completo
-    for (let intento = 0; intento < 3; intento++) {
-      if (intento > 0) await new Promise(r => setTimeout(r, 1500));
-      try {
-        const { error: insErr } = await supabase.from("visitas").insert([nueva]);
-        if (!insErr) { persistidaTabla = true; break; }
-        // Si falla por columnas faltantes, intentar versión reducida
-        if (insErr.code === "PGRST204" || insErr.message?.includes("column")) {
-          const base = { id: nueva.id, persona_id: nueva.persona_id, fecha: nueva.fecha,
-            profesional: nueva.profesional, solicitud: nueva.solicitud, compromiso: nueva.compromiso };
-          const { error: retryErr } = await supabase.from("visitas").insert([base]);
-          if (!retryErr) { persistidaTabla = true; break; }
-          console.warn("[visitas insert reducido]", retryErr.message);
-        } else {
-          console.warn("[visitas insert intento " + (intento+1) + "]", insErr.message);
-        }
-      } catch (fetchErr) {
-        console.warn("[visitas insert fetch error]", fetchErr.message);
+    // Intento con versión completa, si falla columnas → versión reducida, ambas con retry
+    const insertarVisita = async (obj) => {
+      for (let i = 0; i < 3; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, 1500));
+        try {
+          const { error } = await supabase.from("visitas").insert([obj]);
+          if (!error) return true;
+          console.warn("[visitas insert]", error.message, "código:", error.code);
+          if (i < 2) continue; // retry
+        } catch (e) { console.warn("[visitas fetch]", e.message); }
       }
+      return false;
+    };
+    persistidaTabla = await insertarVisita(nueva);
+    if (!persistidaTabla) {
+      // Fallback: versión sin columnas opcionales (por si la tabla no fue migrada)
+      const base = { id: nueva.id, persona_id: nueva.persona_id, fecha: nueva.fecha,
+        profesional: nueva.profesional, solicitud: nueva.solicitud, compromiso: nueva.compromiso };
+      persistidaTabla = await insertarVisita(base);
+      if (persistidaTabla) console.warn("[visitas] Guardado sin docs_recibidos/profesional_recibio — ejecutar supabase_migration.sql");
     }
     const listaFinal = fusionarVisitas([nueva], visitas);
     const persistidaRespaldo = await respaldarVisitasEnSolicitud(listaFinal);
