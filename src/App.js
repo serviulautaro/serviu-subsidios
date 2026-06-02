@@ -10219,18 +10219,27 @@ export default function App() {
   ]);
 
   const cargarBaseServidor = async () => {
-    const res = await conTiempoMaximo(
-      fetch(API + "/api/bootstrap", { cache: "no-store" }),
-      8000,
-      "Tiempo agotado cargando datos base desde Render."
-    );
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || json.ok === false) throw new Error(json.error || "No se pudo cargar datos base desde Render.");
-    return {
-      comites: json.comites || [],
-      personas: json.personas || [],
-      programasCustom: json.programasCustom || [],
-    };
+    for (let intento = 0; intento < 3; intento++) {
+      if (intento > 0) await new Promise(r => setTimeout(r, 3000));
+      try {
+        const res = await conTiempoMaximo(
+          fetch(API + "/api/bootstrap", { cache: "no-store" }),
+          25000,
+          "Tiempo agotado cargando datos base desde Render."
+        );
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok !== false) return {
+          comites: json.comites || [],
+          personas: json.personas || [],
+          programasCustom: json.programasCustom || [],
+        };
+        console.warn("[bootstrap render intento " + (intento+1) + "]", json.error || res.status);
+      } catch (err) {
+        console.warn("[bootstrap render intento " + (intento+1) + "]", err.message);
+        if (intento === 2) throw err;
+      }
+    }
+    throw new Error("No se pudo cargar datos base desde Render tras 3 intentos.");
   };
 
   const cargarBaseSupabaseDirecto = async () => {
@@ -10410,16 +10419,21 @@ export default function App() {
   };
 
   const cargarSolicitudesPorPartes = async () => {
-    try {
-      const res = await conTiempoMaximo(
-        fetch(API + "/api/solicitudes", { cache: "no-store" }),
-        10000,
-        "Tiempo agotado cargando solicitudes desde Render."
-      );
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok !== false) return json.solicitudes || [];
-    } catch (err) {
-      console.warn("[solicitudes render]", err.message);
+    // Intentar servidor Render con timeout generoso (puede estar despertando)
+    for (let intento = 0; intento < 3; intento++) {
+      if (intento > 0) await new Promise(r => setTimeout(r, 3000));
+      try {
+        const res = await conTiempoMaximo(
+          fetch(API + "/api/solicitudes", { cache: "no-store" }),
+          25000,
+          "Tiempo agotado cargando solicitudes desde Render."
+        );
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok !== false) return json.solicitudes || [];
+        console.warn("[solicitudes render intento " + (intento+1) + "]", json.error || res.status);
+      } catch (err) {
+        console.warn("[solicitudes render intento " + (intento+1) + "]", err.message);
+      }
     }
     const pageSize = 100;
     const todas = [];
