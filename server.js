@@ -194,7 +194,7 @@ async function pgInsert(table, rows = [], { upsert = false } = {}) {
   return inserted;
 }
 
-const toSnake = s => s.replace(/([A-Z])/g, m => '_' + m.toLowerCase()); async function pgUpdate(table, filtros = [], valuesObj = {}) {   valuesObj = Object.fromEntries(Object.entries(valuesObj).map(([k,v]) => [toSnake(k), v]));(table, filtros = [], valuesObj = {}) {
+const toSnake = s => s.replace(/([A-Z])/g, m => '_' + m.toLowerCase()); async function pgUpdate(table, filtros = [], valuesObj = {}) {   valuesObj = Object.fromEntries(Object.entries(valuesObj).map(([k,v]) => [toSnake(k), v])); = s => s.replace(/([A-Z])/g, m => '_' + m.toLowerCase()); async function pgUpdate(table, filtros = [], valuesObj = {}) {   valuesObj = Object.fromEntries(Object.entries(valuesObj).map(([k,v]) => [toSnake(k), v]));(table, filtros = [], valuesObj = {}) {
   validarTabla(table);
   if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
   if (!filtros.length) throw new Error('Update sin filtros bloqueado.');
