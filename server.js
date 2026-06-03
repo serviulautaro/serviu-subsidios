@@ -682,16 +682,67 @@ app.get('/archivo-generado/:personaId/:nombre', async (req, res) => {
   }
 });
 
-app.get('/archivo-local/{*path}', (req, res) => {
+app.get('/archivo-local/{*path}', async (req, res) => {
   try {
     const fullRel = getWildcard(req);
     const lastSlash = fullRel.lastIndexOf('/');
-    if (lastSlash === -1) return res.status(400).json({ error: 'Ruta invÃ¡lida' });
+    if (lastSlash === -1) return res.status(400).json({ error: 'Ruta invalida' });
     const carpetaRel = fullRel.substring(0, lastSlash);
     const archivo = fullRel.substring(lastSlash + 1);
+
+    // 1. Buscar en disco (cache)
     const encontrado = buscarArchivoLocal(carpetaRel, archivo);
-    if (!encontrado) return res.status(404).json({ error: 'Archivo no encontrado en documentos locales.' });
-    res.sendFile(encontrado);
+    if (encontrado) return res.sendFile(encontrado);
+
+    // 2. Buscar en PostgreSQL
+    if (pgPool) {
+      try {
+        const { rows } = await requirePg().query(
+          'SELECT data_url, mime_type FROM archivos_solicitante WHERE nombre=$1 AND data_url IS NOT NULL LIMIT 1',
+          [archivo]
+        );
+        if (rows.length && rows[0].data_url) {
+          const dataUrl = rows[0].data_url;
+          const mime = rows[0].mime_type || 'application/octet-stream';
+          if (dataUrl.startsWith('data:')) {
+            const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
+            res.setHeader('Content-Type', mime);
+            return res.send(buf);
+          }
+          return res.send(dataUrl);
+        }
+      } catch(e) { console.warn('[archivo-local->PG]', e.message); }
+    }
+
+    // 3. Buscar en Supabase Storage (archivos anteriores a la migracion)
+    try {
+      const objectPath = carpetaRel + '/' + archivo;
+      const { data: urlData } = supabaseServer.storage.from('documentos-solicitantes').getPublicUrl(objectPath);
+      if (urlData && urlData.publicUrl) {
+        const nodeFetch = require('node-fetch');
+        const fetchFn = nodeFetch.default || nodeFetch;
+        const r = await fetchFn(urlData.publicUrl);
+        if (r.ok) {
+          const ct = r.headers.get('content-type') || 'application/octet-stream';
+          if (!ct.includes('text/html') && !ct.includes('application/json')) {
+            const buf = await r.buffer();
+            if (pgPool) {
+              try {
+                const dpg = 'data:' + ct + ';base64,' + buf.toString('base64');
+                await requirePg().query(
+                  'UPDATE archivos_solicitante SET data_url=$1, mime_type=$2 WHERE nombre=$3 AND data_url IS NULL',
+                  [dpg, ct, archivo]
+                );
+              } catch {}
+            }
+            res.setHeader('Content-Type', ct);
+            return res.send(buf);
+          }
+        }
+      }
+    } catch(e) { console.warn('[archivo-local->Supabase]', e.message); }
+
+    res.status(404).json({ error: 'Archivo no encontrado.' });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -711,28 +762,69 @@ app.delete('/archivos/{*path}', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Fallback /files/: buscar en PostgreSQL por nombre
+// Fallback /files/: buscar en PostgreSQL, luego en Supabase Storage
 app.use('/files', async (req, res) => {
-  if (!pgPool) return res.status(404).json({ error: 'Archivo no encontrado.' });
   try {
-    const nombre = decodeURIComponent(req.path.split('/').filter(Boolean).pop() || '');
+    const partes = req.path.split('/').filter(Boolean);
+    const nombre = decodeURIComponent(partes.pop() || '');
+    const carpetaUrl = partes.join('/');
     if (!nombre) return res.status(404).json({ error: 'Nombre vacío.' });
-    const { rows } = await requirePg().query(
-      `SELECT data_url, mime_type FROM archivos_solicitante WHERE nombre=$1 AND data_url IS NOT NULL LIMIT 1`,
-      [nombre]
-    );
-    if (!rows.length || !rows[0].data_url) return res.status(404).json({ error: 'Archivo no encontrado en BD.' });
-    const dataUrl = rows[0].data_url;
-    const mime = rows[0].mime_type || 'application/octet-stream';
-    if (dataUrl.startsWith('data:')) {
-      const base64 = dataUrl.split(',')[1];
-      const buf = Buffer.from(base64, 'base64');
-      res.setHeader('Content-Type', mime);
-      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombre)}"`);
-      return res.send(buf);
+
+    // 1. Buscar en PostgreSQL
+    if (pgPool) {
+      try {
+        const { rows } = await requirePg().query(
+          `SELECT data_url, mime_type FROM archivos_solicitante WHERE nombre=$1 AND data_url IS NOT NULL ORDER BY id LIMIT 1`,
+          [nombre]
+        );
+        if (rows.length && rows[0].data_url) {
+          const dataUrl = rows[0].data_url;
+          const mime = rows[0].mime_type || 'application/octet-stream';
+          if (dataUrl.startsWith('data:')) {
+            const base64 = dataUrl.split(',')[1];
+            const buf = Buffer.from(base64, 'base64');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombre)}"`);
+            return res.send(buf);
+          }
+          res.setHeader('Content-Type', mime.includes('html') ? 'text/html' : mime);
+          return res.send(dataUrl);
+        }
+      } catch(e) { console.warn('[files→PG]', e.message); }
     }
-    res.setHeader('Content-Type', mime.includes('html') ? 'text/html' : mime);
-    res.send(dataUrl);
+
+    // 2. Intentar desde Supabase Storage como respaldo
+    try {
+      const objectPath = carpetaUrl ? `${carpetaUrl}/${nombre}` : nombre;
+      const { data: urlData } = supabaseServer.storage
+        .from('documentos-solicitantes')
+        .getPublicUrl(objectPath);
+      if (urlData?.publicUrl) {
+        const fetch = require('node-fetch').default || require('node-fetch');
+        const r = await fetch(urlData.publicUrl);
+        if (r.ok) {
+          const ct = r.headers.get('content-type') || 'application/octet-stream';
+          if (!ct.includes('text/html') && !ct.includes('application/json')) {
+            const buf = await r.buffer();
+            // Guardar en PG para próximas veces
+            if (pgPool) {
+              try {
+                const dataUrlPg = `data:${ct};base64,` + buf.toString('base64');
+                await requirePg().query(
+                  `UPDATE archivos_solicitante SET data_url=$1, mime_type=$2 WHERE nombre=$3 AND data_url IS NULL`,
+                  [dataUrlPg, ct, nombre]
+                );
+              } catch {}
+            }
+            res.setHeader('Content-Type', ct);
+            res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombre)}"`);
+            return res.send(buf);
+          }
+        }
+      }
+    } catch(e) { console.warn('[files→Supabase]', e.message); }
+
+    res.status(404).json({ error: 'Archivo no encontrado.' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
