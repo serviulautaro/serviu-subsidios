@@ -412,6 +412,33 @@ app.post('/api/archivo-base64', async (req, res) => {
   }
 });
 
+// Diagnóstico del sistema de archivos
+app.get('/api/diagnostico', async (req, res) => {
+  const info = { pgConectado: !!pgPool, tablas: {}, disco: {} };
+  if (pgPool) {
+    try {
+      const { rows } = await requirePg().query(
+        `SELECT 
+          (SELECT COUNT(*) FROM archivos_solicitante) as total_archivos,
+          (SELECT COUNT(*) FROM archivos_solicitante WHERE data_url IS NOT NULL) as con_data_url,
+          (SELECT COUNT(*) FROM archivos_solicitante WHERE data_url IS NULL) as sin_data_url`
+      );
+      info.tablas = rows[0];
+    } catch(e) { info.tablas = { error: e.message }; }
+  }
+  try {
+    const contarArchivos = (dir) => {
+      let n = 0;
+      try { for (const f of require('fs').readdirSync(dir, {withFileTypes:true})) {
+        if (f.isFile()) n++; else if (f.isDirectory()) n += contarArchivos(require('path').join(dir,f.name));
+      }} catch {}
+      return n;
+    };
+    info.disco = { archivos_en_repo: contarArchivos(docsDir) };
+  } catch {}
+  res.json(info);
+});
+
 // Endpoint manual para forzar migración
 app.post('/api/migrar-archivos', async (req, res) => {
   try {
