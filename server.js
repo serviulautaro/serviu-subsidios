@@ -544,13 +544,19 @@ app.post('/api/rpc/:fn', async (req, res) => {
       return res.json({ ok: true, data: true });
     }
     if (fn === 'registrar_auditoria') {
-      await requirePg().query(
-        `INSERT INTO audit_log(user_id, usuario, accion, entidad, entidad_id, detalle)
-         SELECT u.id, u.nombre, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb)
-         FROM app_users u
-         WHERE u.id = $1 AND u.activo = true`,
-        [body.p_user_id, body.p_accion, body.p_entidad, body.p_entidad_id, JSON.stringify(body.p_detalle || {})]
-      );
+      try {
+        // Validar que p_user_id sea un UUID válido antes de consultar
+        const uid = String(body.p_user_id || '');
+        const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid);
+        if (esUuid) {
+          await requirePg().query(
+            `INSERT INTO audit_log(user_id, usuario, accion, entidad, entidad_id, detalle)
+             SELECT u.id, u.nombre, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb)
+             FROM app_users u WHERE u.id = $1 AND u.activo = true`,
+            [uid, body.p_accion, body.p_entidad, body.p_entidad_id, JSON.stringify(body.p_detalle || {})]
+          );
+        }
+      } catch(e) { console.warn('[auditoria]', e.message); }
       return res.json({ ok: true, data: null });
     }
     if (fn === 'admin_listar_app_users') {

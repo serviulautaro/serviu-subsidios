@@ -3648,21 +3648,23 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     // Trae nombre + carpeta de todos los archivos de esta persona
     let pgNames = [];
     try {
-      const r = await fetch(`${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type,data_url`);
-      if (r.ok) {
-        const json = await r.json();
+      const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type`;
+      const r = await fetch(urlPG);
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        console.error('[cargarArchivos] Error PG:', r.status, json?.error || JSON.stringify(json));
+      } else {
         const filas = json.data || json || [];
-        console.log('[cargarArchivos] PG devolvió', filas.length, 'archivos para persona', persona.id);
+        console.log('[cargarArchivos] PG:', filas.length, 'archivos — persona:', persona.id);
         filas.forEach(sf => {
           if (!sf.nombre) return;
           pgNames.push(sf.nombre);
           rutasMap[sf.nombre] = sf.carpeta || carpeta;
-          if (!datosMap[sf.nombre]) {
+          if (!datosMap[sf.nombre])
             datosMap[sf.nombre] = { mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta };
-          }
         });
       }
-    } catch(e) { console.warn("[cargarArchivos PG]", e.message); }
+    } catch(e) { console.error("[cargarArchivos PG exception]", e.message); }
 
     // FUENTE SECUNDARIA: lista de archivos físicos en el servidor (repo git + recientes)
     const fetchLista = async (p) => {
