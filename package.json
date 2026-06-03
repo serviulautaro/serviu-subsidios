@@ -22,7 +22,7 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
-    "start": "node server.js",
+    "start": "npm run build && node server.js",
     "dev": "react-scripts start",
     "start:demo": "node scripts/demo_env.js start",
     "build": "react-scripts build",
@@ -34,7 +34,8 @@
     "restaurar:documentos:respaldo": "node scripts/restaurar_documentos_respaldo_render.js",
     "migrar:documentos": "node scripts/migrar_documentos_storage.js",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "start:prod": "node server.js"
   },
   "eslintConfig": {
     "extends": [
