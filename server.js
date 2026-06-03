@@ -69,6 +69,47 @@ const validarAdmin = (key) => {
     throw err;
   }
 };
+// Migración automática: copiar archivos de Supabase Storage → PostgreSQL
+async function migrarArchivosSuapabaseAPG() {
+  if (!pgPool) return;
+  try {
+    const { rows } = await requirePg().query(
+      `SELECT id, persona_id, nombre, carpeta FROM archivos_solicitante
+       WHERE data_url IS NULL AND nombre IS NOT NULL LIMIT 300`
+    );
+    if (!rows.length) { console.log('[migrar] Sin archivos pendientes.'); return; }
+    console.log('[migrar] Archivos a migrar:', rows.length);
+    let ok = 0, fail = 0;
+    for (const row of rows) {
+      try {
+        const carpeta = (row.carpeta || '').split('/').map(s => encodeURIComponent(s)).join('/');
+        const nombre = encodeURIComponent(row.nombre);
+        const publicUrl = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/public/documentos-solicitantes/' + carpeta + '/' + nombre;
+        const authUrl   = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/authenticated/documentos-solicitantes/' + carpeta + '/' + nombre;
+        let buf = null, ct = 'application/octet-stream';
+        for (const [url, headers] of [[publicUrl, {}], [authUrl, { 'Authorization': 'Bearer ' + SUPABASE_KEY }]]) {
+          try {
+            const r = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+            if (!r.ok) continue;
+            const rct = r.headers.get('content-type') || '';
+            if (rct.includes('text/html') || rct.includes('application/json')) continue;
+            buf = Buffer.from(await r.arrayBuffer());
+            if (buf.length) { ct = rct || ct; break; }
+          } catch {}
+        }
+        if (!buf || !buf.length) { fail++; continue; }
+        const dataUrl = 'data:' + ct + ';base64,' + buf.toString('base64');
+        await requirePg().query(
+          `UPDATE archivos_solicitante SET data_url=$1, mime_type=$2 WHERE id=$3`,
+          [dataUrl, ct, row.id]
+        );
+        ok++;
+      } catch(e) { fail++; }
+    }
+    console.log('[migrar] ' + ok + ' OK, ' + fail + ' fallidos de ' + rows.length);
+  } catch(e) { console.warn('[migrar] Error:', e.message); }
+}
+
 let schemaRuntimePromise = null;
 async function ensureRuntimeSchema() {
   if (!pgPool) return;
