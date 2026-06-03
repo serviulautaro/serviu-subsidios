@@ -3648,10 +3648,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     // Trae nombre + carpeta de todos los archivos de esta persona
     let pgNames = [];
     try {
-      const r = await fetch(`${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type`);
+      const r = await fetch(`${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type,data_url`);
       if (r.ok) {
         const json = await r.json();
         const filas = json.data || json || [];
+        console.log('[cargarArchivos] PG devolvió', filas.length, 'archivos para persona', persona.id);
         filas.forEach(sf => {
           if (!sf.nombre) return;
           pgNames.push(sf.nombre);

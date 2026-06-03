@@ -265,7 +265,7 @@ const aligerarSolicitudListado = (sol = {}) => ({
 
 async function pgSelect(table, query = {}) {
   validarTabla(table);
-  if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
+  await ensureRuntimeSchema();
   const values = [];
   let sql = `SELECT ${columnasSelect(query.select)} FROM ${quoteIdent(table)}`;
   sql += whereSql(filtrosDesdeQuery(query), values);
@@ -290,7 +290,7 @@ async function pgSelectSolicitudesListado() {
 
 async function pgInsert(table, rows = [], { upsert = false } = {}) {
   validarTabla(table);
-  if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
+  await ensureRuntimeSchema();
   const lista = Array.isArray(rows) ? rows : [rows];
   if (!lista.length) return [];
   const keys = [...new Set(lista.flatMap(row => Object.keys(row || {})))];
@@ -316,7 +316,7 @@ const toSnake = s => s.replace(/([A-Z])/g, m => '_' + m.toLowerCase());
 async function pgUpdate(table, filtros = [], valuesObj = {}) {
   valuesObj = Object.fromEntries(Object.entries(valuesObj).map(([k,v]) => [toSnake(k), v]));
   validarTabla(table);
-  if (table === 'comites' || table === 'personas') await ensureRuntimeSchema();
+  await ensureRuntimeSchema();
   if (!filtros.length) throw new Error('Update sin filtros bloqueado.');
   const keys = Object.keys(valuesObj || {});
   if (!keys.length) return [];
@@ -335,6 +335,7 @@ async function pgUpdate(table, filtros = [], valuesObj = {}) {
 
 async function pgDelete(table, filtros = []) {
   validarTabla(table);
+  await ensureRuntimeSchema();
   if (!filtros.length) throw new Error('Delete sin filtros bloqueado.');
   const values = [];
   let sql = `DELETE FROM ${quoteIdent(table)}`;
@@ -394,6 +395,7 @@ app.post('/api/archivo-base64', async (req, res) => {
       return res.status(400).json({ error: 'Faltan campos: persona_id, nombre, data_url' });
     }
     if (!pgPool) return res.status(503).json({ error: 'Sin PostgreSQL' });
+    await ensureRuntimeSchema(); // garantiza columnas data_url y mime_type
     await requirePg().query(
       `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
        VALUES ($1,$2,$3,$4,$5,$6)
