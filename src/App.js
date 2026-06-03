@@ -4673,12 +4673,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     minWidth: 155,
                     flex: "1 1 155px",
                     textAlign: "left",
-                    border: "1.5px solid " + (bloqueada ? "#E5E7EB" : marcada ? "#10B981" : decision === "no_califica" ? "#FCA5A5" : decision === "califica" ? "#10B981" : "#CBD5E1"),
-                    background: bloqueada ? "#F3F4F6" : marcada ? "#ECFDF5" : decision === "no_califica" ? "#FEF2F2" : decision === "califica" ? "#ECFDF5" : "#F8FAFC",
-                    color: bloqueada ? "#9CA3AF" : marcada || decision === "califica" ? "#047857" : decision === "no_califica" ? "#B91C1C" : "#475569",
+                    border: "2px solid " + (bloqueada ? "#E5E7EB" : marcada ? "#1D6FA4" : decision === "no_califica" ? "#FCA5A5" : decision === "califica" ? "#10B981" : "#CBD5E1"),
+                    background: bloqueada ? "#F3F4F6" : marcada ? "#DBEAFE" : decision === "no_califica" ? "#FEF2F2" : decision === "califica" ? "#ECFDF5" : "#F8FAFC",
+                    color: bloqueada ? "#9CA3AF" : marcada ? "#1e3a5f" : decision === "califica" ? "#047857" : decision === "no_califica" ? "#B91C1C" : "#475569",
                     borderRadius: 9,
                     padding: "9px 10px",
-                    boxShadow: marcada || decision ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
+                    boxShadow: marcada ? "0 0 0 3px rgba(29,111,164,0.18)" : decision ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
                   }}>
                   <div style={{ fontSize: 10, fontWeight: 900, opacity: .75 }}>ETAPA {idx + 1}</div>
                   <button type="button" disabled={bloqueada}
