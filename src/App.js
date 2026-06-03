@@ -3523,8 +3523,33 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const guardarArchivoPersistente = async (nombre, dataUrl, mimeType = "", carp = carpeta, storagePath = "") => {
     if (!nombre || (!dataUrl && !storagePath)) return;
     let storagePathFinal = storagePath;
-    // Storage de Supabase no se usa — archivos van solo a Render
     const archivoUrl = dataUrl || "";
+
+    // Subir archivo físico al servidor Render para que persista entre usuarios y sesiones
+    if (dataUrl && carp) {
+      try {
+        if (mimeType === "text/html" || nombre.endsWith(".html")) {
+          // HTML: usar ruta guardar-html
+          const html = dataUrl.startsWith("data:") ? decodeURIComponent(dataUrl.split(",").slice(1).join(",")) : dataUrl;
+          await fetch(apiPath("/guardar-html/", carp), {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nombre, html })
+          });
+        } else {
+          // PDF u otro binario: convertir base64 a blob y subir con /subir/
+          const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+          const byteString = atob(base64);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          const blob = new Blob([ab], { type: mimeType || "application/pdf" });
+          const fd = new FormData();
+          fd.append("archivo", blob, nombre);
+          await fetch(apiPath("/subir/", carp), { method: "POST", body: fd });
+        }
+      } catch (e) { console.warn("[guardarArchivoPersistente] No se pudo subir a Render:", e.message); }
+    }
+
     setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp, storagePath: storagePathFinal } }));
     setArchivos(prev => prev.includes(nombre) ? prev : [nombre, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombre]: carp }));
