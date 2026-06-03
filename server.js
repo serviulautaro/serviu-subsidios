@@ -77,6 +77,8 @@ async function ensureRuntimeSchema() {
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "tipo" text;
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "linea_tiempo" jsonb DEFAULT '{}'::jsonb;
       ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "linea_tiempo_csp" jsonb DEFAULT '{}'::jsonb;
+      ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "data_url" text;
+      ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "mime_type" text;
     `).catch(err => {
       schemaRuntimePromise = null;
       throw err;
@@ -622,6 +624,35 @@ app.get('/archivos/{*path}', (req, res) => {
   // Unión deduplicada: DB primero, luego filesystem
   const todos = [...new Set([...dbFiles, ...fsFiles])];
   res.json(todos);
+});
+
+// Servir archivo generado guardado en archivos_solicitante.data_url
+app.get('/archivo-generado/:personaId/:nombre', async (req, res) => {
+  try {
+    const { personaId, nombre } = req.params;
+    if (!pgPool) return res.status(503).json({ error: 'Sin conexión a BD' });
+    const { rows } = await requirePg().query(
+      'SELECT data_url, mime_type FROM archivos_solicitante WHERE persona_id=$1 AND nombre=$2 LIMIT 1',
+      [personaId, decodeURIComponent(nombre)]
+    );
+    if (!rows.length || !rows[0].data_url) return res.status(404).json({ error: 'Archivo no encontrado' });
+    const dataUrl = rows[0].data_url;
+    const mimeType = rows[0].mime_type || 'application/octet-stream';
+    // Puede ser dataUrl (data:...;base64,...) o HTML plano
+    if (dataUrl.startsWith('data:')) {
+      const [header, base64] = dataUrl.split(',');
+      const mime = header.replace('data:', '').replace(';base64', '');
+      const buf = Buffer.from(base64, 'base64');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(decodeURIComponent(nombre))}"`);
+      return res.send(buf);
+    }
+    // HTML plano
+    res.setHeader('Content-Type', mimeType.includes('html') ? 'text/html' : mimeType);
+    res.send(dataUrl);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/archivo-local/{*path}', (req, res) => {

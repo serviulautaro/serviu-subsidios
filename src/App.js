@@ -3511,13 +3511,23 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       carpeta: carp || carpeta
     };
     const { error } = await supabase.from("archivos_solicitante").upsert({ ...base, ...extra });
-    if (error && (extra.storage_path || extra.storage_bucket || extra.mime_type || extra.tamano_bytes)) {
-      const retry = await supabase.from("archivos_solicitante").upsert(base);
-      if (retry.error) console.error("[archivos_solicitante] Error al registrar:", retry.error.message, "| archivo:", nombre);
-      return !retry.error;
-    }
     if (error) console.error("[archivos_solicitante] Error al registrar:", error.message, "| archivo:", nombre);
     return !error;
+  };
+
+  // Guarda data_url de documento generado directamente en BD para persistencia
+  const _guardarDataUrlEnBD = async (nombre, dataUrl, mimeType, carp) => {
+    if (!dataUrl || !persona?.id) return;
+    try {
+      await supabase.from("archivos_solicitante").upsert({
+        id: `${persona.id}_${nombre}`,
+        persona_id: persona.id,
+        nombre,
+        carpeta: carp || carpeta,
+        data_url: dataUrl,
+        mime_type: mimeType
+      });
+    } catch(e) { console.warn("[_guardarDataUrlEnBD]", e.message); }
   };
 
   const guardarArchivoPersistente = async (nombre, dataUrl, mimeType = "", carp = carpeta, storagePath = "") => {
@@ -3548,6 +3558,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           await fetch(apiPath("/subir/", carp), { method: "POST", body: fd });
         }
       } catch (e) { console.warn("[guardarArchivoPersistente] No se pudo subir a Render:", e.message); }
+      // Guardar dataUrl en BD como respaldo permanente para documentos generados
+      await _guardarDataUrlEnBD(nombre, dataUrl, mimeType, carp);
     }
 
     setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp, storagePath: storagePathFinal } }));
@@ -3790,6 +3802,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     for (const ruta of rutasLocales) {
       const url = apiPath("/archivo-local/", ruta, nombre);
       if (await urlSirveDocumento(url)) return url;
+    }
+
+    // 3. BD: documento generado guardado como data_url en archivos_solicitante
+    if (persona?.id) {
+      const urlBD = `${API}/archivo-generado/${encodeURIComponent(persona.id)}/${encodeURIComponent(nombre)}`;
+      if (await urlSirveDocumento(urlBD)) return urlBD;
     }
 
     return "";
