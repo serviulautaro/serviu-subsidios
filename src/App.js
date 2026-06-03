@@ -3527,20 +3527,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const guardarArchivoPersistente = async (nombre, dataUrl, mimeType = "", carp = carpeta, storagePath = "") => {
     if (!nombre || (!dataUrl && !storagePath)) return;
     let storagePathFinal = storagePath;
-    if (!storagePathFinal && dataUrl && (mimeType === "text/html" || nombre.endsWith(".html"))) {
-      try {
-        const htmlContent = dataUrl.startsWith("data:") ? decodeURIComponent(dataUrl.split(",").slice(1).join(",")) : dataUrl;
-        const blob = new Blob([htmlContent], { type: "text/html" });
-        const objectPath = storageObjectPath(carp, nombre);
-        const { error: storageErr } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(objectPath, blob, { upsert: true, contentType: "text/html" });
-        if (!storageErr) {
-          storagePathFinal = objectPath;
-          await _registrarArchivoSupa(nombre, carp, { storage_bucket: STORAGE_BUCKET, storage_path: storagePathFinal, mime_type: "text/html", tamano_bytes: blob.size });
-        }
-      } catch (e) { console.warn("[guardarArchivoPersistente] No se pudo subir HTML a Storage:", e.message); }
-    }
+    // Storage de Supabase no se usa — archivos van solo a Render
     const archivoUrl = dataUrl || "";
     setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp, storagePath: storagePathFinal } }));
     setArchivos(prev => prev.includes(nombre) ? prev : [nombre, ...prev]);
@@ -3572,12 +3559,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!carp) throw new Error("No se pudo determinar la carpeta del solicitante.");
     const nombreSubido = file.name;
     const objectPath = storageObjectPath(carp, nombreSubido);
-    const { error: storageErr } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(objectPath, file, { upsert: true, contentType: file.type || "application/octet-stream" });
-    if (storageErr) {
-      console.warn("[storage] No se pudo subir a Supabase Storage:", storageErr.message);
-    }
+    const storageErr = true; // Storage de Supabase no se usa, todo va a Render
     const fd = new FormData();
     fd.append("archivo", file);
     let data = {};
