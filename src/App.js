@@ -3684,21 +3684,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     // UNIÓN: PG + disco (sin duplicados)
     const todos = [...new Set([...pgNames, ...fsFiles])];
 
-    // Filtrar archivos eliminados
-    let _listaEliminados = [];
-    try {
-      const { data: _solsDb } = await supabase.from("solicitudes").select("documentos").eq("persona_id", personaId);
-      const _docElim = (_solsDb || []).flatMap(s => Array.isArray(s.documentos) ? s.documentos : [])
-        .find(d => d && d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
-      if (_docElim && _docElim.valor) _listaEliminados = JSON.parse(_docElim.valor);
-    } catch {}
-    const archivosEliminados = new Set(_listaEliminados);
-
-    // Mostrar todos los archivos registrados (en PG o en disco) que no estén eliminados
-    const archivosValidos = todos.filter(nombre => {
-      if (!nombre || archivosEliminados.has(nombre)) return false;
-      return true; // Si está en PG o en disco, existe
-    });
+    // Mostrar todos los archivos registrados (en PG o en disco)
+    // Ya no se usa lista negra — si está en PG existe, si no está no existe
+    const archivosValidos = todos.filter(nombre => !!nombre);
 
     // Agrupar los 3 setState para evitar re-renders múltiples (pestañeo)
     React.startTransition(() => {
@@ -3870,34 +3858,28 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const ok = window["confirm"]("Eliminar " + nombre + "?");
     if (!ok) return;
     const errores = [];
-    const avisos = [];
+
+    // 1. Borrar del disco del servidor
     try {
-      const res = await fetch(apiPath("/archivos/", carpeta, nombre), { method: "DELETE" });
-      if (!res.ok && res.status !== 404) avisos.push("servidor local");
-      if (carpeta !== carpetaVieja) {
-        const resViejo = await fetch(apiPath("/archivos/", carpetaVieja, nombre), { method: "DELETE" });
-        if (!resViejo.ok && resViejo.status !== 404) avisos.push("carpeta anterior");
-      }
-    } catch {
-      avisos.push("servidor local");
-    }
-    // Storage de Supabase no se usa — archivos físicos ya se borraron del servidor Render arriba
-    try {
-      let deleteError = null;
-      for (let intento = 0; intento < 3; intento++) {
+      await fetch(apiPath("/archivos/", carpeta, nombre), { method: "DELETE" });
+      if (carpeta !== carpetaVieja)
+        await fetch(apiPath("/archivos/", carpetaVieja, nombre), { method: "DELETE" });
+    } catch {}
+
+    // 2. Borrar de PostgreSQL (fuente permanente) — con reintentos
+    let borradoDePG = false;
+    for (let intento = 0; intento < 3; intento++) {
+      try {
         if (intento > 0) await new Promise(r => setTimeout(r, 1500));
-        try {
-          const { error } = await supabase.from("archivos_solicitante").delete().eq("persona_id", persona.id).eq("nombre", nombre);
-          deleteError = error;
-          if (!error) break;
-        } catch (fetchErr) {
-          deleteError = { message: "TypeError: " + (fetchErr?.message || "Failed to fetch") };
-        }
-      }
-      if (deleteError) errores.push("registro Supabase: " + deleteError.message);
-    } catch {
-      errores.push("registro Supabase");
+        const r = await fetch(`${API}/api/db/archivos_solicitante/delete`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filters: [{ col: "persona_id", value: persona.id }, { col: "nombre", value: nombre }] })
+        });
+        if (r.ok) { borradoDePG = true; break; }
+      } catch {}
     }
+    if (!borradoDePG) errores.push("No se pudo borrar de la base de datos");
     try {
       const actualizadas = solicitudes.map(s => {
         if (s.personaId !== persona.id || !Array.isArray(s.documentos)) return s;
@@ -3926,31 +3908,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch (err) {
       errores.push("solicitud: " + (err.message || "no se pudo actualizar"));
     }
-    // Guardar en lista negra para que no vuelva a aparecer
-    try {
-      const solDestino = (solicitudes || []).filter(s => s.personaId === persona.id)[0];
-      if (solDestino) {
-        const docsActuales = Array.isArray(solDestino.documentos) ? solDestino.documentos : [];
-        const docElim = docsActuales.find(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
-        const listaActual = docElim ? JSON.parse(docElim.valor || "[]") : [];
-        if (!listaActual.includes(nombre)) {
-          const nuevaLista = [...listaActual, nombre];
-          const registro = {
-            nombre: "Archivos eliminados",
-            obligatorio: false,
-            entregado: false,
-            interno: true,
-            tipo: ARCHIVOS_ELIMINADOS_KEY,
-            valor: JSON.stringify(nuevaLista)
-          };
-          const nuevosDocumentos = docElim
-            ? docsActuales.map(d => d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY ? { ...d, ...registro } : d)
-            : [...docsActuales, registro];
-          await supabase.from("solicitudes").update({ documentos: nuevosDocumentos }).eq("id", solDestino.id);
-          onSaveSolicitudes(solicitudes.map(s => s.id === solDestino.id ? { ...s, documentos: nuevosDocumentos } : s));
-        }
-      }
-    } catch (elErr) { console.warn("[lista negra]", elErr.message); }
+    // Ya no se necesita lista negra — el archivo se borró de PostgreSQL
     setArchivos(prev => prev.filter(a => a !== nombre));
     setArchivosDatos(prev => { const next = { ...prev }; delete next[nombre]; return next; });
     setArchivosRutas(prev => { const next = { ...prev }; delete next[nombre]; return next; });
