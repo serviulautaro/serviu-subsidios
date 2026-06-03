@@ -569,19 +569,8 @@ function buscarArchivoLocal(carpetaRel, archivo) {
   return candidatos.find(c => normalizarArchivoLocal(path.relative(docsDir, c)).replace(/\\/g, '/').includes(carpetaNorm)) || candidatos[0];
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const carpetaRel = getWildcard(req);
-    const carpeta = safeDocsPath(carpetaRel);
-    if (!fs.existsSync(carpeta)) fs.mkdirSync(carpeta, { recursive: true });
-    cb(null, carpeta);
-  },
-  filename: (req, file, cb) => {
-    const nombre = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    cb(null, nombre);
-  }
-});
-const upload = multer({ storage });
+// Usar memoria para archivos — Render no tiene disco persistente
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 app.post('/carpeta/{*path}', (req, res) => {
   const carpetaRel = getWildcard(req);
@@ -590,13 +579,51 @@ app.post('/carpeta/{*path}', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/subir/{*path}', upload.single('archivo'), (req, res) => {
-  const carpetaRel = getWildcard(req);
-  const nombre = req.file.filename;
+app.post('/subir/{*path}', upload.single('archivo'), async (req, res) => {
   try {
-    db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run(`${carpetaRel}/${nombre}`, carpetaRel, nombre);
-  } catch(e) { console.error('DB archivos:', e.message); }
-  res.json({ ok: true, nombre });
+    const carpetaRel = getWildcard(req);
+    const nombre = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    const mimeType = req.file.mimetype || 'application/octet-stream';
+    const dataUrl = `data:${mimeType};base64,` + req.file.buffer.toString('base64');
+
+    // Guardar también en disco como caché (puede desaparecer en reinicios)
+    try {
+      const carpetaPath = safeDocsPath(carpetaRel);
+      if (!fs.existsSync(carpetaPath)) fs.mkdirSync(carpetaPath, { recursive: true });
+      fs.writeFileSync(path.join(carpetaPath, nombre), req.file.buffer);
+    } catch(e) { console.warn('[subir] disco caché:', e.message); }
+
+    // Extraer persona_id de la carpeta (último segmento = RUT)
+    const partesCarpeta = carpetaRel.split('/');
+    const posibleRut = partesCarpeta[partesCarpeta.length - 1];
+
+    // Guardar en PostgreSQL (fuente permanente)
+    if (pgPool) {
+      try {
+        // Buscar persona_id por RUT o por carpeta
+        let personaId = null;
+        const { rows: pRows } = await requirePg().query(
+          `SELECT id FROM personas WHERE rut ILIKE $1 OR rut = $1 LIMIT 1`,
+          [posibleRut]
+        );
+        if (pRows.length) personaId = pRows[0].id;
+
+        if (personaId) {
+          await requirePg().query(
+            `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT(id) DO UPDATE SET data_url=$5, mime_type=$6, carpeta=$4`,
+            [`${personaId}_${nombre}`, personaId, nombre, carpetaRel, dataUrl, mimeType]
+          );
+        }
+      } catch(e) { console.warn('[subir] PG:', e.message); }
+    }
+
+    // Registrar en SQLite local
+    try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run(`${carpetaRel}/${nombre}`, carpetaRel, nombre); } catch {}
+
+    res.json({ ok: true, nombre });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/archivos/{*path}', (req, res) => {
@@ -684,8 +711,29 @@ app.delete('/archivos/{*path}', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.use('/files', (req, res) => {
-  res.status(404).json({ error: 'Archivo no encontrado en la carpeta de documentos.' });
+// Fallback /files/: buscar en PostgreSQL por nombre
+app.use('/files', async (req, res) => {
+  if (!pgPool) return res.status(404).json({ error: 'Archivo no encontrado.' });
+  try {
+    const nombre = decodeURIComponent(req.path.split('/').filter(Boolean).pop() || '');
+    if (!nombre) return res.status(404).json({ error: 'Nombre vacío.' });
+    const { rows } = await requirePg().query(
+      `SELECT data_url, mime_type FROM archivos_solicitante WHERE nombre=$1 AND data_url IS NOT NULL LIMIT 1`,
+      [nombre]
+    );
+    if (!rows.length || !rows[0].data_url) return res.status(404).json({ error: 'Archivo no encontrado en BD.' });
+    const dataUrl = rows[0].data_url;
+    const mime = rows[0].mime_type || 'application/octet-stream';
+    if (dataUrl.startsWith('data:')) {
+      const base64 = dataUrl.split(',')[1];
+      const buf = Buffer.from(base64, 'base64');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombre)}"`);
+      return res.send(buf);
+    }
+    res.setHeader('Content-Type', mime.includes('html') ? 'text/html' : mime);
+    res.send(dataUrl);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── RENOMBRAR CARPETA ────────────────────────────────────────────────────────
