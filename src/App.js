@@ -3644,96 +3644,60 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const datosMap = {};
     const rutasMap = {};
 
-    // 1. Respaldos en solicitudes (fuente más confiable - tienen storagePath)
-    const docsConArchivo = (solicitudes || [])
-      .filter(s => s.personaId === personaId)
-      .flatMap(s => s.documentos || [])
-      .filter(d => d.archivo && (d.archivoData || d.storagePath));
-    docsConArchivo.forEach(d => {
-      datosMap[d.archivo] = {
-        dataUrl: d.archivoData || "",
-        mimeType: d.archivoTipo || "",
-        carpeta: d.carpeta || carpeta,
-        storagePath: d.storagePath || "",
-        storageBucket: STORAGE_BUCKET
-      };
-      if (!rutasMap[d.archivo]) rutasMap[d.archivo] = d.carpeta || carpeta;
-    });
+    // FUENTE PRINCIPAL: PostgreSQL via servidor Render
+    // Trae nombre + carpeta de todos los archivos de esta persona
+    let pgNames = [];
+    try {
+      const r = await fetch(`${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type`);
+      if (r.ok) {
+        const json = await r.json();
+        const filas = json.data || json || [];
+        filas.forEach(sf => {
+          if (!sf.nombre) return;
+          pgNames.push(sf.nombre);
+          rutasMap[sf.nombre] = sf.carpeta || carpeta;
+          if (!datosMap[sf.nombre]) {
+            datosMap[sf.nombre] = { mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta };
+          }
+        });
+      }
+    } catch(e) { console.warn("[cargarArchivos PG]", e.message); }
 
-    // 2. Supabase archivos_solicitante
-    let supaNames = [];
-    let { data: supaFiles, error: supaError } = await supabase
-      .from("archivos_solicitante")
-      .select("nombre, carpeta, storage_bucket, storage_path, mime_type")
-      .eq("persona_id", persona.id)
-      .order("creado", { ascending: false });
-    if (supaError) {
-      const retry = await supabase
-        .from("archivos_solicitante")
-        .select("nombre, carpeta")
-        .eq("persona_id", persona.id)
-        .order("creado", { ascending: false });
-      supaFiles = retry.data;
-    }
-    if (!supaError && supaFiles) {
-      supaFiles.forEach(sf => {
-        if (!rutasMap[sf.nombre]) rutasMap[sf.nombre] = sf.carpeta || carpeta;
-        const storagePath = sf.storage_path || storageObjectPath(sf.carpeta || carpeta, sf.nombre);
-        if (storagePath || !datosMap[sf.nombre]) {
-          datosMap[sf.nombre] = {
-            dataUrl: datosMap[sf.nombre]?.dataUrl || "",
-            mimeType: sf.mime_type || datosMap[sf.nombre]?.mimeType || "",
-            carpeta: sf.carpeta || carpeta,
-            storagePath,
-            storageBucket: sf.storage_bucket || STORAGE_BUCKET
-          };
-        }
-      });
-      supaNames = supaFiles.map(sf => sf.nombre);
-    }
-
-    // 3. Servidor local (solo como complemento, sin duplicar)
+    // FUENTE SECUNDARIA: lista de archivos físicos en el servidor (repo git + recientes)
     const fetchLista = async (p) => {
       if (!p) return [];
       try {
         const r = await fetch(apiPath("/archivos/", p));
         if (!r.ok) return [];
-        return await r.json();
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
       } catch { return []; }
     };
-    const [nuevos, viejos] = await Promise.all([
+    const [fsNuevos, fsViejos] = await Promise.all([
       fetchLista(carpeta),
       carpeta !== carpetaVieja ? fetchLista(carpetaVieja) : Promise.resolve([])
     ]);
-    nuevos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpeta; });
-    viejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
+    fsNuevos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpeta; });
+    fsViejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
+    const fsFiles = [...new Set([...fsNuevos, ...fsViejos])];
 
-    // 4. Lista final deduplicada — prioridad: storagePath > servidor local
-    const datosNames = docsConArchivo.map(d => d.archivo);
-    const fsFiles = [...nuevos, ...viejos.filter(f => !nuevos.includes(f))];
-    const todos = [...new Set([...supaNames, ...datosNames, ...fsFiles])];
+    // UNIÓN: PG + disco (sin duplicados)
+    const todos = [...new Set([...pgNames, ...fsFiles])];
 
-    // 5. Solo mostrar archivos que realmente existen y se pueden abrir
-    // Leer lista negra directo desde Supabase para evitar desfase de estado
+    // Filtrar archivos eliminados
     let _listaEliminados = [];
     try {
-      const { data: _solsDb } = await supabase
-        .from("solicitudes")
-        .select("documentos")
-        .eq("persona_id", personaId);
-      const _docElim = (_solsDb || [])
-        .flatMap(s => Array.isArray(s.documentos) ? s.documentos : [])
+      const { data: _solsDb } = await supabase.from("solicitudes").select("documentos").eq("persona_id", personaId);
+      const _docElim = (_solsDb || []).flatMap(s => Array.isArray(s.documentos) ? s.documentos : [])
         .find(d => d && d.interno && d.tipo === ARCHIVOS_ELIMINADOS_KEY);
       if (_docElim && _docElim.valor) _listaEliminados = JSON.parse(_docElim.valor);
-    } catch (e2) { _listaEliminados = []; }
+    } catch {}
     const archivosEliminados = new Set(_listaEliminados);
+
+    // Mostrar todos los archivos registrados (en PG o en disco) que no estén eliminados
     const archivosValidos = todos.filter(nombre => {
-      if (archivosEliminados.has(nombre)) return false;
-      const dato = datosMap[nombre];
-      const tieneStorage = !!(dato?.storagePath);
-      const tieneDataUrl = !!(dato?.dataUrl && String(dato.dataUrl).startsWith("data:"));
-      const estaEnServidor = fsFiles.includes(nombre);
-      return tieneStorage || tieneDataUrl || estaEnServidor;
+      if (!nombre || archivosEliminados.has(nombre)) return false;
+      return true; // Si está en PG o en disco, existe
     });
 
     // Agrupar los 3 setState para evitar re-renders múltiples (pestañeo)
