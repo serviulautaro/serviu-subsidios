@@ -92,8 +92,13 @@ const columnasSelect = (select = '*') => {
 const filtrosDesdeQuery = (query = {}) => {
   const filtros = [];
   Object.entries(query).forEach(([key, value]) => {
+    // Formato 1: eq[col]=valor
     const match = key.match(/^eq\[(.+)\]$/);
-    if (match) filtros.push({ col: match[1], value });
+    if (match) { filtros.push({ col: match[1], value }); return; }
+    // Formato 2: col=eq.valor (compatibilidad Supabase)
+    if (typeof value === 'string' && value.startsWith('eq.')) {
+      filtros.push({ col: key, value: value.slice(3) });
+    }
   });
   return filtros;
 };

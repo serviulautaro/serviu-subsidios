@@ -40,7 +40,7 @@ function makeFilterChain(method, tabla, action, payload) {
       } else if (method === 'UPDATE') {
         promise = apiCall('PATCH', `/api/db/${tabla}/update`, { filters, values: payload });
       } else if (method === 'SELECT') {
-        const qp = filters.map(f => `${f.col}=eq.${f.value}`).join('&');
+        const qp = filters.map(f => `eq[${f.col}]=${encodeURIComponent(f.value)}`).join('&');
         const cols = payload || '*';
         promise = apiCall('GET', `/api/db/${tabla}?${qp}&select=${cols}`);
       } else {
@@ -63,7 +63,7 @@ function makeSelectChain(tabla, cols) {
     eq: (col, val) => { filters.push({ col, value: val }); return chain; },
     order: (col, opts = {}) => { orderCol = col; orderAsc = opts.ascending !== false; return chain; },
     then: (resolve) => {
-      const qp = filters.map(f => `${f.col}=eq.${f.value}`).join('&');
+      const qp = filters.map(f => `eq[${f.col}]=${encodeURIComponent(f.value)}`).join('&');
       const orderPart = orderCol ? `&orderBy=${orderCol}&orderAsc=${orderAsc}` : '';
       return apiCall('GET', `/api/db/${tabla}?${qp}&select=${cols || '*'}${orderPart}`)
         .then(r => resolve({ data: r.data || r, error: null }))
