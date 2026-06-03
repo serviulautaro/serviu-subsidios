@@ -35,7 +35,8 @@
     "migrar:documentos": "node scripts/migrar_documentos_storage.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "start:prod": "node server.js"
+    "start:prod": "node server.js",
+    "build:render": "node --max_old_space_size=512 node_modules/react-scripts/bin/react-scripts.js build"
   },
   "eslintConfig": {
     "extends": [

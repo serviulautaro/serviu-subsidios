@@ -2,9 +2,10 @@ services:
   - type: web
     name: serviu-subsidios-demo
     env: node
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && node --max_old_space_size=512 node_modules/react-scripts/bin/react-scripts.js build
     startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production
-# Deploy Wed Jun  3 22:58:27 UTC 2026
+      - key: REACT_APP_DEMO_MODE
+        value: "false"
