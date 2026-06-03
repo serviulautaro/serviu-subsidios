@@ -3919,8 +3919,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (errores.length) {
       console.warn("[eliminarArchivo]", errores.join(" | "));
       alert("El archivo fue eliminado de la vista, pero hubo un problema de conexión al sincronizar con el servidor (" + errores.join(", ") + "). Recargue la página para confirmar.");
-    } else if (avisos.length) {
-      console.warn("[eliminarArchivo avisos]", avisos.join(" | "));
     }
   };
 
@@ -9910,7 +9908,7 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
   </div>;
 }
 
-// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
+// APP PRINCIPAL
 export default function App() {
   const [pantalla, setPantalla] = useState("bienvenida");
   const [view, setView] = useState("dashboard");
