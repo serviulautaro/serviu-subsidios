@@ -3038,20 +3038,17 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const cargarVisitas = async () => {
     const respaldo = visitasDesdeSolicitudes();
     let tablaData = null;
-    // Retry hasta 3 veces para cargar desde tabla visitas
+    // Cargar visitas directamente desde Render (fuente única de verdad)
     for (let intento = 0; intento < 3; intento++) {
       if (intento > 0) await new Promise(r => setTimeout(r, 1500));
       try {
-        const { data, error } = await supabase.from("visitas").select("*").eq("persona_id", personaId).order("fecha", { ascending: false });
-        if (error) {
-          if (error.code === "PGRST205") {
-            console.warn("[visitas] Tabla no existe. Usando solo respaldo.");
-            break;
-          }
-          console.warn("[visitas carga intento " + (intento+1) + "]", error.message);
-          continue;
-        }
-        tablaData = data || [];
+        const apiBase = (typeof window !== 'undefined' && !['localhost','127.0.0.1'].includes(window.location.hostname))
+          ? window.location.origin : 'http://localhost:3001';
+        const r = await fetch(`${apiBase}/api/db/visitas?eq[persona_id]=${encodeURIComponent(personaId)}&orderBy=fecha&orderAsc=false`);
+        if (!r.ok) { console.warn("[visitas] Error servidor intento", intento+1, r.status); continue; }
+        const json = await r.json();
+        tablaData = json.data || json || [];
+        console.log("[visitas] Cargadas desde Render:", tablaData.length, "para persona", personaId);
         break;
       } catch (fetchErr) {
         console.warn("[cargarVisitas fetch]", fetchErr.message);
@@ -3075,14 +3072,14 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
         const sincronizadas = [];
         for (const v of todasPendientes) {
           let ok = false;
-          try { const { error } = await supabase.from("visitas").insert([v]); if (!error) ok = true; } catch {}
-          if (!ok) {
-            try {
-              const base = { id: v.id, persona_id: v.persona_id, fecha: v.fecha,
-                profesional: v.profesional, solicitud: v.solicitud, compromiso: v.compromiso };
-              const { error } = await supabase.from("visitas").insert([base]); if (!error) ok = true;
-            } catch {}
-          }
+          try {
+            const apiBase2 = (typeof window !== 'undefined' && !['localhost','127.0.0.1'].includes(window.location.hostname))
+              ? window.location.origin : 'http://localhost:3001';
+            const r2 = await fetch(`${apiBase2}/api/db/visitas/insert`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([v])
+            });
+            if (r2.ok) ok = true;
+          } catch {}
           if (ok) sincronizadas.push(v.id);
         }
         if (sincronizadas.length > 0) {
@@ -3131,28 +3128,22 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     setShowFormVisita(false);
     setGuardandoVisita(false);
 
-    // PASO 3: Intentar guardar en Supabase en segundo plano (no bloquea al usuario)
+    // PASO 3: Guardar en Render directamente (fuente única de verdad)
     const sincronizarPendientes = async () => {
       const porSincronizar = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
       if (porSincronizar.length === 0) return;
+      const apiBase = (typeof window !== 'undefined' && !['localhost','127.0.0.1'].includes(window.location.hostname))
+        ? window.location.origin : 'http://localhost:3001';
       const sincronizadas = [];
       for (const v of porSincronizar) {
-        let ok = false;
-        // Intento completo
         try {
-          const { error } = await supabase.from("visitas").insert([v]);
-          if (!error) { ok = true; }
-        } catch {}
-        // Fallback versión reducida si falla por columnas
-        if (!ok) {
-          try {
-            const base = { id: v.id, persona_id: v.persona_id, fecha: v.fecha,
-              profesional: v.profesional, solicitud: v.solicitud, compromiso: v.compromiso };
-            const { error } = await supabase.from("visitas").insert([base]);
-            if (!error) { ok = true; }
-          } catch {}
-        }
-        if (ok) sincronizadas.push(v.id);
+          const r = await fetch(`${apiBase}/api/db/visitas/insert`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([v])
+          });
+          if (r.ok) sincronizadas.push(v.id);
+          else console.warn("[visitas insert] Error:", r.status);
+        } catch (e) { console.warn("[visitas insert]", e.message); }
       }
       if (sincronizadas.length > 0) {
         const restantes = porSincronizar.filter(v => !sincronizadas.includes(v.id));
