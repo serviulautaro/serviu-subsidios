@@ -3555,6 +3555,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           const blob = new Blob([ab], { type: mimeType || "application/pdf" });
           const fd = new FormData();
           fd.append("archivo", blob, nombre);
+          if (persona?.id) fd.append("persona_id", persona.id);
           await fetch(apiPath("/subir/", carp), { method: "POST", body: fd });
         }
       } catch (e) { console.warn("[guardarArchivoPersistente] No se pudo subir a Render:", e.message); }
@@ -3595,6 +3596,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const storageErr = true; // Storage de Supabase no se usa, todo va a Render
     const fd = new FormData();
     fd.append("archivo", file);
+    if (persona?.id) fd.append("persona_id", persona.id);
     let data = {};
     try {
       const res = await fetch(apiPath("/subir/", carp), { method: "POST", body: fd });

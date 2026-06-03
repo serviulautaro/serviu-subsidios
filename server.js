@@ -584,46 +584,40 @@ app.post('/subir/{*path}', upload.single('archivo'), async (req, res) => {
     const carpetaRel = getWildcard(req);
     const nombre = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     const mimeType = req.file.mimetype || 'application/octet-stream';
-    const dataUrl = `data:${mimeType};base64,` + req.file.buffer.toString('base64');
+    const dataUrl = 'data:' + mimeType + ';base64,' + req.file.buffer.toString('base64');
+    // persona_id enviado por el frontend (más confiable que extraer del RUT)
+    const personaId = req.body?.persona_id || req.query?.persona_id || null;
 
-    // Guardar también en disco como caché (puede desaparecer en reinicios)
+    // Guardar en disco como caché
     try {
       const carpetaPath = safeDocsPath(carpetaRel);
       if (!fs.existsSync(carpetaPath)) fs.mkdirSync(carpetaPath, { recursive: true });
       fs.writeFileSync(path.join(carpetaPath, nombre), req.file.buffer);
-    } catch(e) { console.warn('[subir] disco caché:', e.message); }
-
-    // Extraer persona_id de la carpeta (último segmento = RUT)
-    const partesCarpeta = carpetaRel.split('/');
-    const posibleRut = partesCarpeta[partesCarpeta.length - 1];
+    } catch(e) { console.warn('[subir] disco:', e.message); }
 
     // Guardar en PostgreSQL (fuente permanente)
-    if (pgPool) {
+    if (pgPool && personaId) {
       try {
-        // Buscar persona_id por RUT o por carpeta
-        let personaId = null;
-        const { rows: pRows } = await requirePg().query(
-          `SELECT id FROM personas WHERE rut ILIKE $1 OR rut = $1 LIMIT 1`,
-          [posibleRut]
+        await requirePg().query(
+          `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type, carpeta=EXCLUDED.carpeta`,
+          [personaId + '_' + nombre, personaId, nombre, carpetaRel, dataUrl, mimeType]
         );
-        if (pRows.length) personaId = pRows[0].id;
-
-        if (personaId) {
-          await requirePg().query(
-            `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
-             VALUES ($1,$2,$3,$4,$5,$6)
-             ON CONFLICT(id) DO UPDATE SET data_url=$5, mime_type=$6, carpeta=$4`,
-            [`${personaId}_${nombre}`, personaId, nombre, carpetaRel, dataUrl, mimeType]
-          );
-        }
-      } catch(e) { console.warn('[subir] PG:', e.message); }
+        console.log('[subir] Guardado en PG:', nombre, 'persona:', personaId);
+      } catch(e) { console.warn('[subir] PG error:', e.message); }
+    } else if (!personaId) {
+      console.warn('[subir] Sin persona_id — solo en disco:', nombre);
     }
 
-    // Registrar en SQLite local
-    try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run(`${carpetaRel}/${nombre}`, carpetaRel, nombre); } catch {}
+    // SQLite local
+    try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run(carpetaRel + '/' + nombre, carpetaRel, nombre); } catch {}
 
     res.json({ ok: true, nombre });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    console.error('[subir] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/archivos/{*path}', (req, res) => {
@@ -719,13 +713,12 @@ app.get('/archivo-local/{*path}', async (req, res) => {
       const objectPath = carpetaRel + '/' + archivo;
       const { data: urlData } = supabaseServer.storage.from('documentos-solicitantes').getPublicUrl(objectPath);
       if (urlData && urlData.publicUrl) {
-        const nodeFetch = require('node-fetch');
-        const fetchFn = nodeFetch.default || nodeFetch;
+        const fetchFn = fetch; // Node 18+ fetch nativo
         const r = await fetchFn(urlData.publicUrl);
         if (r.ok) {
           const ct = r.headers.get('content-type') || 'application/octet-stream';
           if (!ct.includes('text/html') && !ct.includes('application/json')) {
-            const buf = await r.buffer();
+            const buf = Buffer.from(await r.arrayBuffer());
             if (pgPool) {
               try {
                 const dpg = 'data:' + ct + ';base64,' + buf.toString('base64');
@@ -800,12 +793,12 @@ app.use('/files', async (req, res) => {
         .from('documentos-solicitantes')
         .getPublicUrl(objectPath);
       if (urlData?.publicUrl) {
-        const fetch = require('node-fetch').default || require('node-fetch');
-        const r = await fetch(urlData.publicUrl);
+        const fetchFn2 = fetch; // Node 18+ fetch nativo
+        const r = await fetch(urlData.publicUrl); // fetch nativo Node18
         if (r.ok) {
           const ct = r.headers.get('content-type') || 'application/octet-stream';
           if (!ct.includes('text/html') && !ct.includes('application/json')) {
-            const buf = await r.buffer();
+            const buf = Buffer.from(await r.arrayBuffer());
             // Guardar en PG para próximas veces
             if (pgPool) {
               try {
