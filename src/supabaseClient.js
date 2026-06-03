@@ -23,18 +23,69 @@ async function apiCall(method, path, body) {
   return res.json();
 }
 
+// Cadena de filtros acumulable: soporta múltiples .eq() encadenados
+function makeFilterChain(method, tabla, action, payload) {
+  const filters = [];
+
+  const chain = {
+    eq: (col, val) => {
+      filters.push({ col, value: val });
+      return chain;
+    },
+    // Permite usar como promesa directamente (await o .then())
+    then: (resolve, reject) => {
+      let promise;
+      if (method === 'DELETE') {
+        promise = apiCall('DELETE', `/api/db/${tabla}/delete`, { filters });
+      } else if (method === 'UPDATE') {
+        promise = apiCall('PATCH', `/api/db/${tabla}/update`, { filters, values: payload });
+      } else if (method === 'SELECT') {
+        const qp = filters.map(f => `${f.col}=eq.${f.value}`).join('&');
+        const cols = payload || '*';
+        promise = apiCall('GET', `/api/db/${tabla}?${qp}&select=${cols}`);
+      } else {
+        promise = Promise.reject(new Error('Método no soportado: ' + method));
+      }
+      return promise
+        .then(r => resolve({ data: r.data || r, error: null }))
+        .catch(e => resolve({ data: null, error: e }));
+    }
+  };
+
+  return chain;
+}
+
+function makeSelectChain(tabla, cols) {
+  const filters = [];
+  let orderCol = null, orderAsc = true;
+
+  const chain = {
+    eq: (col, val) => { filters.push({ col, value: val }); return chain; },
+    order: (col, opts = {}) => { orderCol = col; orderAsc = opts.ascending !== false; return chain; },
+    then: (resolve) => {
+      const qp = filters.map(f => `${f.col}=eq.${f.value}`).join('&');
+      const orderPart = orderCol ? `&orderBy=${orderCol}&orderAsc=${orderAsc}` : '';
+      return apiCall('GET', `/api/db/${tabla}?${qp}&select=${cols || '*'}${orderPart}`)
+        .then(r => resolve({ data: r.data || r, error: null }))
+        .catch(e => resolve({ data: null, error: e }));
+    }
+  };
+  return chain;
+}
+
 function makeProxyClient() {
   return {
     auth: realSupabase.auth,
+    // storage stub: no hace nada, evita crash
+    storage: {
+      from: () => ({
+        remove: async () => ({ error: null }),
+        upload: async () => ({ error: null }),
+        getPublicUrl: () => ({ data: { publicUrl: '' } }),
+      })
+    },
     from: (tabla) => ({
-      select: (cols = '*') => ({
-        eq: (col, val) => apiCall('GET', `/api/db/${tabla}?${col}=eq.${val}&select=${cols}`)
-          .then(r => ({ data: r.data || r, error: null }))
-          .catch(e => ({ data: null, error: e })),
-        then: (resolve) => apiCall('GET', `/api/db/${tabla}?select=${cols}`)
-          .then(r => resolve({ data: r.data || r, error: null }))
-          .catch(e => resolve({ data: null, error: e })),
-      }),
+      select: (cols = '*') => makeSelectChain(tabla, cols),
       insert: (rows) => ({
         then: (resolve) => {
           const arr = Array.isArray(rows) ? rows : [rows];
@@ -51,24 +102,8 @@ function makeProxyClient() {
             .catch(e => resolve({ data: null, error: e }));
         }
       }),
-      update: (values) => ({
-        eq: (col, val) => ({
-          then: (resolve) => {
-            apiCall('PATCH', `/api/db/${tabla}/update`, { filters: [{ col, value: val }], values })
-              .then(() => resolve({ data: null, error: null }))
-              .catch(e => resolve({ data: null, error: e }));
-          }
-        })
-      }),
-      delete: () => ({
-        eq: (col, val) => ({
-          then: (resolve) => {
-            apiCall('DELETE', `/api/db/${tabla}/delete`, { filters: [{ col, value: val }] })
-              .then(() => resolve({ data: null, error: null }))
-              .catch(e => resolve({ data: null, error: e }));
-          }
-        })
-      }),
+      update: (values) => makeFilterChain('UPDATE', tabla, 'update', values),
+      delete: () => makeFilterChain('DELETE', tabla, 'delete', null),
     }),
     rpc: (fn, params) => ({
       then: (resolve) => apiCall('POST', `/api/rpc/${fn}`, params)

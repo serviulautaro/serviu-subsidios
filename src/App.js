@@ -3898,31 +3898,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch {
       avisos.push("servidor local");
     }
-    // Eliminar de Supabase Storage (ruta nueva y ruta antigua del respaldo)
-    try {
-      const archivoGuardado = archivosDatos[nombre];
-      const rutasEliminar = [];
-      // Ruta nueva
-      if (archivoGuardado?.storagePath) rutasEliminar.push(archivoGuardado.storagePath);
-      rutasEliminar.push(storageObjectPath(carpeta, nombre));
-      if (carpeta !== carpetaVieja) rutasEliminar.push(storageObjectPath(carpetaVieja, nombre));
-      // Ruta antigua APELLIDOS_NOMBRE_RUT/archivo
-      if (persona) {
-        const nombreParts = (persona.nombre || "").toUpperCase().split(" ").slice(0, 4);
-        const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
-        const carpetaRespaldo = [...nombreParts, rutLimpio].filter(Boolean).join("_");
-        const carpetaRespaldo3 = [...(persona.nombre || "").toUpperCase().split(" ").slice(0, 3), rutLimpio].filter(Boolean).join("_");
-        rutasEliminar.push(storageObjectPath(carpetaRespaldo, nombre));
-        rutasEliminar.push(storageObjectPath(carpetaRespaldo3, nombre));
-      }
-      const rutasUnicas = [...new Set(rutasEliminar.filter(Boolean))];
-      for (const path of rutasUnicas) {
-        const { error: storErr } = await supabase.storage.from(STORAGE_BUCKET).remove([path]);
-        if (storErr) console.warn("[storage remove]", path, storErr.message);
-      }
-    } catch (storEx) {
-      console.warn("[storage remove excepción]", storEx.message);
-    }
+    // Storage de Supabase no se usa — archivos físicos ya se borraron del servidor Render arriba
     try {
       let deleteError = null;
       for (let intento = 0; intento < 3; intento++) {
