@@ -3592,40 +3592,45 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!file) throw new Error("No se selecciono archivo.");
     if (!carp) throw new Error("No se pudo determinar la carpeta del solicitante.");
     const nombreSubido = file.name;
-    const objectPath = storageObjectPath(carp, nombreSubido);
-    const storageErr = true; // Storage de Supabase no se usa, todo va a Render
-    const fd = new FormData();
-    fd.append("archivo", file);
-    if (persona?.id) fd.append("persona_id", persona.id);
-    let data = {};
-    try {
-      const res = await fetch(apiPath("/subir/", carp), { method: "POST", body: fd });
-      data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) {
-        data = { nombre: file.name };
-      }
-    } catch {
-      data = { nombre: file.name };
-    }
-    const storagePathFinal = storageErr ? "" : objectPath;
+    const mimeType = file.type || "application/octet-stream";
+
+    // Convertir a base64 para guardar permanentemente en PostgreSQL
     const dataUrl = await fileToDataUrl(file);
-    await _registrarArchivoSupa(nombreSubido, carp, {
-      storage_bucket: STORAGE_BUCKET,
-      storage_path: storagePathFinal,
-      mime_type: file.type || "application/octet-stream",
-      tamano_bytes: file.size || 0
-    });
-    const archivoUrl = dataUrl;
-    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl: archivoUrl, mimeType: file.type, carpeta: carp, storagePath: storagePathFinal, storageBucket: STORAGE_BUCKET } }));
+
+    // Guardar en PostgreSQL directo (método principal — persiste entre reinicios)
+    if (persona?.id) {
+      try {
+        const r = await fetch(`${API}/api/archivo-base64`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            persona_id: persona.id,
+            nombre: nombreSubido,
+            carpeta: carp,
+            data_url: dataUrl,
+            mime_type: mimeType
+          })
+        });
+        if (!r.ok) console.warn("[subir] Error PG:", await r.text());
+      } catch(e) { console.warn("[subir] Error PG:", e.message); }
+    }
+
+    // También subir como archivo (caché en disco)
+    try {
+      const fd = new FormData();
+      fd.append("archivo", file);
+      if (persona?.id) fd.append("persona_id", persona.id);
+      await fetch(apiPath("/subir/", carp), { method: "POST", body: fd });
+    } catch(e) { console.warn("[subir] Error disco:", e.message); }
+
+    // Actualizar estado local
+    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl, mimeType, carpeta: carp } }));
     setArchivos(prev => prev.includes(nombreSubido) ? prev : [nombreSubido, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombreSubido]: carp }));
-    await guardarArchivoPersistente(nombreSubido, dataUrl, file.type, carp, storagePathFinal);
     await registrarAuditoria?.("subir_documento", "archivos_solicitante", persona.id, {
-      solicitante: persona.nombre,
-      archivo: nombreSubido,
-      carpeta: carp,
+      solicitante: persona.nombre, archivo: nombreSubido, carpeta: carp,
     });
-    return { nombre: nombreSubido, dataUrl: archivoUrl, mimeType: file.type, storagePath: storagePathFinal };
+    return { nombre: nombreSubido, dataUrl, mimeType, storagePath: "" };
   };
   const cargarArchivos = async () => {
     const datosMap = {};

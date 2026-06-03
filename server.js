@@ -23,7 +23,7 @@ if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir);
 const db = new Database(path.join(__dirname, 'serviu.db'));
 
 const SUPABASE_URL = 'https://qirjfgjesjzikouehmib.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_SSAA2undzTyVsgCjMgbXBw_Bu9D_lvt';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpcmpmZ2plc2p6aWtvdWVobWliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjgxMTUsImV4cCI6MjA5MzI0NDExNX0.7bDpXPZyc-Ovt-EWBqCl3RsbPqiU_eSAa98F_ufbVqU';
 const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
 const pgPool = process.env.DATABASE_URL
   ? new Pool({
@@ -276,6 +276,30 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_archivos_carpeta ON archivos(carpeta);
 `);
+
+// Ruta para guardar archivo como base64 directo en PostgreSQL (sin disco)
+app.post('/api/archivo-base64', async (req, res) => {
+  try {
+    const { persona_id, nombre, carpeta, data_url, mime_type } = req.body || {};
+    if (!persona_id || !nombre || !data_url) {
+      return res.status(400).json({ error: 'Faltan campos: persona_id, nombre, data_url' });
+    }
+    if (!pgPool) return res.status(503).json({ error: 'Sin PostgreSQL' });
+    await requirePg().query(
+      `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type, carpeta=EXCLUDED.carpeta`,
+      [persona_id + '_' + nombre, persona_id, nombre, carpeta || '', data_url, mime_type || 'application/octet-stream']
+    );
+    // Registrar en SQLite también
+    try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run((carpeta||'') + '/' + nombre, carpeta||'', nombre); } catch {}
+    console.log('[archivo-base64] Guardado en PG:', nombre, 'persona:', persona_id);
+    res.json({ ok: true, nombre });
+  } catch(e) {
+    console.error('[archivo-base64] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // Endpoint manual para forzar migración
 app.post('/api/migrar-archivos', async (req, res) => {
