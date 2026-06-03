@@ -69,6 +69,74 @@ const validarAdmin = (key) => {
     throw err;
   }
 };
+// Migración: leer archivos físicos del repo git y guardarlos en PostgreSQL
+async function migrarArchivosGitAPG() {
+  if (!pgPool) return;
+  try {
+    // Recorrer recursivamente todos los archivos del directorio documentos
+    const recorrer = (dir, base = '') => {
+      let resultado = [];
+      try {
+        for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+          const rel = base ? base + '/' + item.name : item.name;
+          if (item.isDirectory()) resultado = resultado.concat(recorrer(path.join(dir, item.name), rel));
+          else if (item.isFile() && !item.name.startsWith('.')) resultado.push({ ruta: path.join(dir, item.name), rel });
+        }
+      } catch {}
+      return resultado;
+    };
+
+    const archivos = recorrer(docsDir);
+    console.log('[migrar-git] Archivos en disco:', archivos.length);
+    let ok = 0;
+
+    for (const { ruta, rel } of archivos) {
+      try {
+        const lastSlash = rel.lastIndexOf('/');
+        if (lastSlash === -1) continue;
+        const carpeta = rel.substring(0, lastSlash);
+        const nombre = rel.substring(lastSlash + 1);
+
+        // Verificar si ya está en PG con data_url
+        const { rows: exists } = await requirePg().query(
+          `SELECT id FROM archivos_solicitante WHERE carpeta=$1 AND nombre=$2 AND data_url IS NOT NULL LIMIT 1`,
+          [carpeta, nombre]
+        );
+        if (exists.length) continue; // Ya migrado
+
+        // Leer archivo y convertir a base64
+        const buf = fs.readFileSync(ruta);
+        const ext = path.extname(nombre).toLowerCase();
+        const mimeMap = { '.pdf': 'application/pdf', '.html': 'text/html', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
+        const mime = mimeMap[ext] || 'application/octet-stream';
+        const dataUrl = 'data:' + mime + ';base64,' + buf.toString('base64');
+
+        // Buscar persona_id por carpeta
+        const partesCarpeta = carpeta.split('/');
+        const rut = partesCarpeta[partesCarpeta.length - 1];
+        let personaId = null;
+        if (rut) {
+          const { rows: pRows } = await requirePg().query(
+            `SELECT id FROM personas WHERE rut=$1 OR rut ILIKE $1 LIMIT 1`, [rut]
+          );
+          if (pRows.length) personaId = pRows[0].id;
+        }
+
+        if (personaId) {
+          await requirePg().query(
+            `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type`,
+            [personaId + '_' + nombre, personaId, nombre, carpeta, dataUrl, mime]
+          );
+          ok++;
+        }
+      } catch(e) { /* skip */ }
+    }
+    console.log('[migrar-git] Completado: ' + ok + ' archivos guardados en PG');
+  } catch(e) { console.warn('[migrar-git] Error:', e.message); }
+}
+
 // Migración automática: copiar archivos de Supabase Storage → PostgreSQL
 async function migrarArchivosSuapabaseAPG() {
   if (!pgPool) return;
@@ -693,32 +761,80 @@ app.post('/subir/{*path}', upload.single('archivo'), async (req, res) => {
   }
 });
 
-app.get('/archivos/{*path}', (req, res) => {
+app.get('/archivos/{*path}', async (req, res) => {
   const carpetaRel = getWildcard(req);
-  // Leer de la base de datos (fuente principal)
-  let dbFiles = [];
-  try {
-    dbFiles = db.prepare('SELECT nombre FROM archivos WHERE carpeta = ? ORDER BY creado DESC').all(carpetaRel).map(r => r.nombre);
-  } catch {}
-  // Leer del filesystem (compatibilidad con archivos previos no registrados)
-  let fsFiles = [];
+  const archivosSet = new Set();
+
+  // 1. Filesystem (incluye archivos del repositorio git — siempre disponibles)
   const carpetaPath = safeDocsPath(carpetaRel);
   if (fs.existsSync(carpetaPath)) {
     try {
-      fsFiles = fs.readdirSync(carpetaPath).filter(item => {
-        try { return fs.statSync(path.join(carpetaPath, item)).isFile(); } catch { return false; }
-      });
-      // Registrar en DB los archivos del filesystem que no estén ya registrados
-      for (const nombre of fsFiles) {
-        const id = `${carpetaRel}/${nombre}`;
-        try { db.prepare('INSERT OR IGNORE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run(id, carpetaRel, nombre); } catch {}
-      }
+      fs.readdirSync(carpetaPath)
+        .filter(item => { try { return fs.statSync(path.join(carpetaPath, item)).isFile(); } catch { return false; } })
+        .forEach(n => archivosSet.add(n));
     } catch {}
   }
-  // Unión deduplicada: DB primero, luego filesystem
-  const todos = [...new Set([...dbFiles, ...fsFiles])];
-  res.json(todos);
+
+  // 2. SQLite local (archivos recientes en disco)
+  try {
+    db.prepare('SELECT nombre FROM archivos WHERE carpeta = ? ORDER BY creado DESC').all(carpetaRel)
+      .forEach(r => archivosSet.add(r.nombre));
+  } catch {}
+
+  // 3. PostgreSQL (archivos guardados permanentemente — más importante)
+  if (pgPool) {
+    try {
+      const { rows } = await requirePg().query(
+        `SELECT nombre FROM archivos_solicitante WHERE carpeta=$1 AND nombre IS NOT NULL`,
+        [carpetaRel]
+      );
+      rows.forEach(r => archivosSet.add(r.nombre));
+    } catch(e) { console.warn('[archivos list PG]', e.message); }
+  }
+
+  res.json([...archivosSet]);
 });
+
+
+// ─── HELPER CENTRAL: servir archivo desde PostgreSQL ─────────────────────────
+async function servirDesdeDB(res, nombre, carpeta) {
+  if (!pgPool) return false;
+  try {
+    // Buscar por carpeta exacta + nombre (más preciso)
+    let rows = [];
+    if (carpeta) {
+      const r = await requirePg().query(
+        `SELECT data_url, mime_type FROM archivos_solicitante
+         WHERE nombre=$1 AND carpeta=$2 AND data_url IS NOT NULL LIMIT 1`,
+        [nombre, carpeta]
+      );
+      rows = r.rows;
+    }
+    // Si no encontró con carpeta exacta, buscar solo por nombre
+    if (!rows.length) {
+      const r = await requirePg().query(
+        `SELECT data_url, mime_type FROM archivos_solicitante
+         WHERE nombre=$1 AND data_url IS NOT NULL
+         ORDER BY id LIMIT 1`,
+        [nombre]
+      );
+      rows = r.rows;
+    }
+    if (!rows.length || !rows[0].data_url) return false;
+    const dataUrl = rows[0].data_url;
+    const mime = rows[0].mime_type || 'application/octet-stream';
+    if (dataUrl.startsWith('data:')) {
+      const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(nombre) + '"');
+      res.send(buf);
+      return true;
+    }
+    res.setHeader('Content-Type', mime.includes('html') ? 'text/html' : mime);
+    res.send(dataUrl);
+    return true;
+  } catch(e) { console.warn('[servirDesdeDB]', e.message); return false; }
+}
 
 // Servir archivo generado guardado en archivos_solicitante.data_url
 app.get('/archivo-generado/:personaId/:nombre', async (req, res) => {
@@ -756,143 +872,51 @@ app.get('/archivo-local/{*path}', async (req, res) => {
     if (lastSlash === -1) return res.status(400).json({ error: 'Ruta invalida' });
     const carpetaRel = fullRel.substring(0, lastSlash);
     const archivo = fullRel.substring(lastSlash + 1);
-
-    // 1. Buscar en disco (cache)
+    // 1. Disco
     const encontrado = buscarArchivoLocal(carpetaRel, archivo);
     if (encontrado) return res.sendFile(encontrado);
-
-    // 2. Buscar en PostgreSQL
-    if (pgPool) {
-      try {
-        const { rows } = await requirePg().query(
-          `SELECT data_url, mime_type FROM archivos_solicitante
-           WHERE nombre=$1 AND data_url IS NOT NULL
-           AND ($2::text IS NULL OR carpeta=$2 OR carpeta LIKE '%' || $2 || '%')
-           ORDER BY id LIMIT 1`,
-          [archivo, carpetaRel || null]
-        );
-        if (rows.length && rows[0].data_url) {
-          const dataUrl = rows[0].data_url;
-          const mime = rows[0].mime_type || 'application/octet-stream';
-          if (dataUrl.startsWith('data:')) {
-            const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
-            res.setHeader('Content-Type', mime);
-            return res.send(buf);
-          }
-          return res.send(dataUrl);
-        }
-      } catch(e) { console.warn('[archivo-local->PG]', e.message); }
-    }
-
-    // 3. Buscar en Supabase Storage (archivos anteriores a la migracion)
-    try {
-      const objectPath = carpetaRel + '/' + archivo;
-      const { data: urlData } = supabaseServer.storage.from('documentos-solicitantes').getPublicUrl(objectPath);
-      if (urlData && urlData.publicUrl) {
-        const fetchFn = fetch; // Node 18+ fetch nativo
-        const r = await fetchFn(urlData.publicUrl);
-        if (r.ok) {
-          const ct = r.headers.get('content-type') || 'application/octet-stream';
-          if (!ct.includes('text/html') && !ct.includes('application/json')) {
-            const buf = Buffer.from(await r.arrayBuffer());
-            if (pgPool) {
-              try {
-                const dpg = 'data:' + ct + ';base64,' + buf.toString('base64');
-                await requirePg().query(
-                  'UPDATE archivos_solicitante SET data_url=$1, mime_type=$2 WHERE nombre=$3 AND data_url IS NULL',
-                  [dpg, ct, archivo]
-                );
-              } catch {}
-            }
-            res.setHeader('Content-Type', ct);
-            return res.send(buf);
-          }
-        }
-      }
-    } catch(e) { console.warn('[archivo-local->Supabase]', e.message); }
-
+    // 2. PostgreSQL
+    if (await servirDesdeDB(res, archivo, carpetaRel)) return;
     res.status(404).json({ error: 'Archivo no encontrado.' });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
-app.delete('/archivos/{*path}', (req, res) => {
+app.delete('/archivos/{*path}', async (req, res) => {
   try {
     const fullRel = getWildcard(req);
     const lastSlash = fullRel.lastIndexOf('/');
     if (lastSlash === -1) return res.status(400).json({ error: 'Ruta inválida' });
     const carpetaRel = fullRel.substring(0, lastSlash);
     const archivo = fullRel.substring(lastSlash + 1);
-    const filePath = safeDocsPath(carpetaRel, archivo);
-    archivarArchivoLocal(filePath, carpetaRel, archivo);
+    // 1. Archivar del disco (papelera)
+    try { const fp = safeDocsPath(carpetaRel, archivo); archivarArchivoLocal(fp, carpetaRel, archivo); } catch {}
+    // 2. SQLite
     try { db.prepare('DELETE FROM archivos WHERE carpeta = ? AND nombre = ?').run(carpetaRel, archivo); } catch {}
+    // 3. PostgreSQL — marcar data_url como NULL (no borrar el registro para auditoría)
+    if (pgPool) {
+      try {
+        await requirePg().query(
+          `UPDATE archivos_solicitante SET data_url=NULL, mime_type=NULL WHERE carpeta=$1 AND nombre=$2`,
+          [carpetaRel, archivo]
+        );
+      } catch(e) { console.warn('[delete PG]', e.message); }
+    }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Fallback /files/: buscar en PostgreSQL, luego en Supabase Storage
+// Fallback /files/: disco → PostgreSQL
 app.use('/files', async (req, res) => {
   try {
     const partes = req.path.split('/').filter(Boolean);
     const nombre = decodeURIComponent(partes.pop() || '');
-    const carpetaUrl = partes.join('/');
+    const carpeta = partes.join('/');
     if (!nombre) return res.status(404).json({ error: 'Nombre vacío.' });
-
-    // 1. Buscar en PostgreSQL
-    if (pgPool) {
-      try {
-        const { rows } = await requirePg().query(
-          `SELECT data_url, mime_type FROM archivos_solicitante WHERE nombre=$1 AND data_url IS NOT NULL ORDER BY id LIMIT 1`,
-          [nombre]
-        );
-        if (rows.length && rows[0].data_url) {
-          const dataUrl = rows[0].data_url;
-          const mime = rows[0].mime_type || 'application/octet-stream';
-          if (dataUrl.startsWith('data:')) {
-            const base64 = dataUrl.split(',')[1];
-            const buf = Buffer.from(base64, 'base64');
-            res.setHeader('Content-Type', mime);
-            res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombre)}"`);
-            return res.send(buf);
-          }
-          res.setHeader('Content-Type', mime.includes('html') ? 'text/html' : mime);
-          return res.send(dataUrl);
-        }
-      } catch(e) { console.warn('[files→PG]', e.message); }
-    }
-
-    // 2. Intentar desde Supabase Storage como respaldo
-    try {
-      const objectPath = carpetaUrl ? `${carpetaUrl}/${nombre}` : nombre;
-      const { data: urlData } = supabaseServer.storage
-        .from('documentos-solicitantes')
-        .getPublicUrl(objectPath);
-      if (urlData?.publicUrl) {
-        const fetchFn2 = fetch; // Node 18+ fetch nativo
-        const r = await fetch(urlData.publicUrl); // fetch nativo Node18
-        if (r.ok) {
-          const ct = r.headers.get('content-type') || 'application/octet-stream';
-          if (!ct.includes('text/html') && !ct.includes('application/json')) {
-            const buf = Buffer.from(await r.arrayBuffer());
-            // Guardar en PG para próximas veces
-            if (pgPool) {
-              try {
-                const dataUrlPg = `data:${ct};base64,` + buf.toString('base64');
-                await requirePg().query(
-                  `UPDATE archivos_solicitante SET data_url=$1, mime_type=$2 WHERE nombre=$3 AND data_url IS NULL`,
-                  [dataUrlPg, ct, nombre]
-                );
-              } catch {}
-            }
-            res.setHeader('Content-Type', ct);
-            res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombre)}"`);
-            return res.send(buf);
-          }
-        }
-      }
-    } catch(e) { console.warn('[files→Supabase]', e.message); }
-
+    // 1. Buscar en disco con búsqueda fuzzy
+    const encontrado = buscarArchivoLocal(carpeta, nombre);
+    if (encontrado) return res.sendFile(encontrado);
+    // 2. PostgreSQL
+    if (await servirDesdeDB(res, nombre, carpeta)) return;
     res.status(404).json({ error: 'Archivo no encontrado.' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1297,6 +1321,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('Servidor SERVIU corriendo en puerto ' + PORT);
   console.log('Base de datos: serviu.db');
   console.log('Acceso en red: http://' + ip + ':' + PORT);
-  // Migrar archivos de Supabase Storage a PostgreSQL en segundo plano
-  setTimeout(() => migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar startup]', e.message)), 5000);
+  // Migrar archivos del repositorio git a PostgreSQL (archivos históricos)
+  setTimeout(() => migrarArchivosGitAPG().catch(e => console.warn('[migrar-git startup]', e.message)), 3000);
+  // Migrar archivos de Supabase Storage a PostgreSQL
+  setTimeout(() => migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar-supa startup]', e.message)), 8000);
 });
