@@ -3361,8 +3361,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   useEffect(() => {
-    if (persona) { cargarVisitas(); }
+    // Limpiar datos del solicitante anterior inmediatamente al cambiar de persona
+    setVisitas([]);
+    setArchivos([]);
+    setArchivosRutas({});
+    setArchivosDatos({});
     setShowFichaSolicitante(false);
+    if (persona) { cargarVisitas(); }
   }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
