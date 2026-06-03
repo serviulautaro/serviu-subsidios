@@ -107,8 +107,10 @@ const whereSql = (filtros = [], values = []) => {
 };
 const aplicarOrdenRango = (query = {}, values = []) => {
   let sql = '';
-  if (query.order) {
-    sql += ` ORDER BY ${quoteIdent(query.order)} ${query.ascending === 'false' ? 'DESC' : 'ASC'}`;
+  const orderCol = query.orderBy || query.order;
+  const orderDir = (query.orderAsc === 'false' || query.ascending === 'false') ? 'DESC' : 'ASC';
+  if (orderCol) {
+    sql += ` ORDER BY ${quoteIdent(orderCol)} ${orderDir}`;
   }
   if (query.limit) {
     values.push(Number(query.limit));
