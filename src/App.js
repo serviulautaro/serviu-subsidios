@@ -3733,10 +3733,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const archivoGuardado = archivosDatos[nombre];
     const respaldoUrl = archivoGuardado?.dataUrl || "";
     const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
+
+    // Si hay dataUrl en memoria, usarlo directamente (más rápido)
     if (String(respaldoUrl).startsWith("data:")) return respaldoUrl;
 
     const urlSirveDocumento = async (url) => {
       if (!url) return false;
+      // Nunca intentar URLs de Supabase Storage — ya no se usa
+      if (esUrlSupabaseStorage(url)) return false;
       try {
         let res = await fetch(url, { method: "HEAD", cache: "no-store" });
         let contentType = res.headers.get("content-type") || "";
@@ -3750,58 +3754,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return false;
     };
 
-    // 1. Buscar en storagePath guardado
-    const storagePath = archivoGuardado?.storagePath;
-    if (storagePath) {
-      const storageUrl = storagePublicUrl(storagePath, archivoGuardado?.storageBucket || STORAGE_BUCKET);
-      if (storageUrl && await urlSirveDocumento(storageUrl)) return storageUrl;
-    }
-
-    // 2. Construir ruta Storage con carpeta del solicitante (estructura nueva: CSP_Rural/comite_X/rut)
-    const rutasStorage = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
-    for (const ruta of rutasStorage) {
-      // Probar con nombre original y con nombre normalizado (espacios -> _)
-      const nombreNorm = safeStorageSegment(nombre);
-      for (const nom of [...new Set([nombre, nombreNorm])]) {
-        const objectPath = storageObjectPath(ruta, nom);
-        const storageUrl = storagePublicUrl(objectPath);
-        if (storageUrl && await urlSirveDocumento(storageUrl)) return storageUrl;
-      }
-    }
-
-    // 3. Buscar en estructura antigua: APELLIDOS_NOMBRE_RUT/archivo (respaldo masivo)
-    if (persona) {
-      const nombreParts4 = (persona.nombre || "").toUpperCase().split(" ").slice(0, 4);
-      const nombreParts3 = (persona.nombre || "").toUpperCase().split(" ").slice(0, 3);
-      const nombreCompleto = (persona.nombre || "").toUpperCase();
-      const rutLimpio = (persona.rut || "").replace(/[^0-9kK]/g, "");
-      const carpetaVieja4 = [...nombreParts4, rutLimpio].filter(Boolean).join("_");
-      const carpetaVieja3 = [...nombreParts3, rutLimpio].filter(Boolean).join("_");
-      const carpetaConEspacios = nombreCompleto;
-      const nombreNorm2 = safeStorageSegment(nombre);
-      // También buscar en estructura de comité: Programa/Comité/Nombre
-      const comite = (persona.comiteNombre || "").toUpperCase();
-      const carpetaComite = comite ? `Construccion Sitio Propio Rural/${comite}/${carpetaConEspacios}` : null;
-      const carpetasExtra = [carpetaVieja4, carpetaVieja3, carpetaConEspacios];
-      if (carpetaComite) carpetasExtra.push(carpetaComite);
-      for (const carp of carpetasExtra.filter(Boolean)) {
-        for (const nom of [...new Set([nombre, nombreNorm2])]) {
-          const op = storageObjectPath(carp, nom);
-          const su = storagePublicUrl(op);
-          if (su && await urlSirveDocumento(su)) return su;
-        }
-      }
-    }
-
-    // 4. Servidor local
+    // 1. RENDER: /files/ (ruta principal de archivos estáticos)
     const rutasLocales = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
     for (const ruta of rutasLocales) {
-      const localProtegido = apiPath("/archivo-local/", ruta, nombre);
-      if (await urlSirveDocumento(localProtegido)) return localProtegido;
-      const localEstatico = apiPath("/files/", ruta, nombre);
-      if (await urlSirveDocumento(localEstatico)) return localEstatico;
+      const url = apiPath("/files/", ruta, nombre);
+      if (await urlSirveDocumento(url)) return url;
     }
-    if (respaldoUrl && !esUrlSupabaseStorage(respaldoUrl) && await urlSirveDocumento(respaldoUrl)) return respaldoUrl;
+
+    // 2. RENDER: /archivo-local/ (compatibilidad con archivos previos)
+    for (const ruta of rutasLocales) {
+      const url = apiPath("/archivo-local/", ruta, nombre);
+      if (await urlSirveDocumento(url)) return url;
+    }
+
     return "";
   };
 
