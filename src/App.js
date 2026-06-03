@@ -3599,20 +3599,28 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
     // Guardar en PostgreSQL directo (método principal — persiste entre reinicios)
     if (persona?.id) {
-      try {
-        const r = await fetch(`${API}/api/archivo-base64`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            persona_id: persona.id,
-            nombre: nombreSubido,
-            carpeta: carp,
-            data_url: dataUrl,
-            mime_type: mimeType
-          })
-        });
-        if (!r.ok) console.warn("[subir] Error PG:", await r.text());
-      } catch(e) { console.warn("[subir] Error PG:", e.message); }
+      let guardadoEnPG = false;
+      for (let intento = 0; intento < 3; intento++) {
+        try {
+          if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+          const r = await fetch(`${API}/api/archivo-base64`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              persona_id: persona.id,
+              nombre: nombreSubido,
+              carpeta: carp,
+              data_url: dataUrl,
+              mime_type: mimeType
+            })
+          });
+          if (r.ok) { guardadoEnPG = true; break; }
+          console.warn("[subir] Error PG intento", intento+1, ":", await r.text());
+        } catch(e) { console.warn("[subir] Error PG intento", intento+1, ":", e.message); }
+      }
+      if (!guardadoEnPG) {
+        alert("Advertencia: El archivo '" + nombreSubido + "' se subió pero no se pudo guardar permanentemente. Intente subirlo nuevamente.");
+      }
     }
 
     // También subir como archivo (caché en disco)
