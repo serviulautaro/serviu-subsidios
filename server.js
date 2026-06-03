@@ -277,6 +277,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_archivos_carpeta ON archivos(carpeta);
 `);
 
+// Endpoint manual para forzar migración
+app.post('/api/migrar-archivos', async (req, res) => {
+  try {
+    migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar manual]', e.message));
+    res.json({ ok: true, mensaje: 'Migración iniciada en segundo plano' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/bootstrap', async (req, res) => {
   try {
     if (pgPool) {
@@ -692,8 +700,11 @@ app.get('/archivo-local/{*path}', async (req, res) => {
     if (pgPool) {
       try {
         const { rows } = await requirePg().query(
-          'SELECT data_url, mime_type FROM archivos_solicitante WHERE nombre=$1 AND data_url IS NOT NULL LIMIT 1',
-          [archivo]
+          `SELECT data_url, mime_type FROM archivos_solicitante
+           WHERE nombre=$1 AND data_url IS NOT NULL
+           AND ($2::text IS NULL OR carpeta=$2 OR carpeta LIKE '%' || $2 || '%')
+           ORDER BY id LIMIT 1`,
+          [archivo, carpetaRel || null]
         );
         if (rows.length && rows[0].data_url) {
           const dataUrl = rows[0].data_url;
@@ -1221,4 +1232,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('Servidor SERVIU corriendo en puerto ' + PORT);
   console.log('Base de datos: serviu.db');
   console.log('Acceso en red: http://' + ip + ':' + PORT);
+  // Migrar archivos de Supabase Storage a PostgreSQL en segundo plano
+  setTimeout(() => migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar startup]', e.message)), 5000);
 });
