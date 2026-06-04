@@ -7504,7 +7504,21 @@ const datosSolicitud = {
             <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>📄 Vista previa del documento</div>
             <div style={{ display: "flex", gap: 10 }}>
               <button
-                onClick={() => { if (iframePreviewRef.current) iframePreviewRef.current.contentWindow.print(); }}
+                onClick={() => {
+                  if (htmlPreview) {
+                    // Documento HTML generado: abrir en ventana nueva limpia para imprimir
+                    const win = window.open('', '_blank');
+                    if (win) {
+                      win.document.write(htmlPreview);
+                      win.document.close();
+                      setTimeout(() => { win.focus(); win.print(); }, 400);
+                    }
+                  } else if (iframePreviewRef.current) {
+                    // Archivo PDF/externo: imprimir desde iframe
+                    iframePreviewRef.current.contentWindow.focus();
+                    iframePreviewRef.current.contentWindow.print();
+                  }
+                }}
                 style={{ padding: "8px 22px", borderRadius: 7, background: "#fff", color: "#1e3a5f", border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                 🖨 Imprimir
               </button>
