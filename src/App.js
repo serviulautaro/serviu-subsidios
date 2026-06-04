@@ -4297,6 +4297,7 @@ const datosSolicitud = {
       await guardarArchivoPersistente(nombreArch, pdfDataUrl, "application/pdf", carpeta);
       setShowModalSolicitud(false);
       setFormSolicitud({ subsidio: "", anioSubsidio: "" });
+      await cargarArchivos();
     } catch(e) { alert("Error generando solicitud: " + e.message); }
     finally { setGenerando(false); }
   };
