@@ -7506,15 +7506,17 @@ const datosSolicitud = {
               <button
                 onClick={() => {
                   if (htmlPreview) {
-                    // Documento HTML generado: abrir en ventana nueva limpia para imprimir
-                    const win = window.open('', '_blank');
-                    if (win) {
-                      win.document.write(htmlPreview);
-                      win.document.close();
-                      setTimeout(() => { win.focus(); win.print(); }, 400);
-                    }
+                    // Crear blob URL y abrir en pestaña nueva para imprimir
+                    const blob = new Blob([htmlPreview], { type: 'text/html;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
                   } else if (iframePreviewRef.current) {
-                    // Archivo PDF/externo: imprimir desde iframe
                     iframePreviewRef.current.contentWindow.focus();
                     iframePreviewRef.current.contentWindow.print();
                   }
