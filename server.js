@@ -157,25 +157,48 @@ async function migrarArchivosSuapabaseAPG() {
     );
     if (!rows.length) { console.log('[migrar] Sin archivos pendientes.'); return; }
     console.log('[migrar] Archivos a migrar:', rows.length);
+    const jwtKey = process.env.SUPABASE_JWT_SERVICE_ROLE;
+    const https = require('https');
+    const listarCarpeta = (prefix) => new Promise((resolve) => {
+      const opts = {
+        hostname: 'qirjfgjesjzikouehmib.supabase.co',
+        path: '/storage/v1/object/list/documentos-solicitantes',
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + jwtKey, 'Content-Type': 'application/json' }
+      };
+      const req = https.request(opts, r => {
+        let d = '';
+        r.on('data', c => d += c);
+        r.on('end', () => { try { resolve(JSON.parse(d)); } catch { resolve([]); } });
+      });
+      req.on('error', () => resolve([]));
+      req.write(JSON.stringify({ prefix, limit: 1000, offset: 0 }));
+      req.end();
+    });
+    const indice = {};
+    const procesarCarpeta = async (prefix) => {
+      const items = await listarCarpeta(prefix);
+      for (const item of items) {
+        if (item.id) {
+          indice[item.name] = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/authenticated/documentos-solicitantes/' + (prefix ? prefix.split('/').map(s=>encodeURIComponent(s)).join('/') + '/' : '') + encodeURIComponent(item.name);
+        } else {
+          await procesarCarpeta(prefix ? prefix + '/' + item.name : item.name);
+        }
+      }
+    };
+    await procesarCarpeta('');
+    console.log('[migrar] Archivos indexados:', Object.keys(indice).length);
     let ok = 0, fail = 0;
     for (const row of rows) {
       try {
-        const carpeta = (row.carpeta || '').split('/').map(s => encodeURIComponent(s)).join('/');         const carpetaSinPuntos = (row.carpeta || '').split('/').map(s => encodeURIComponent(s.replace(/\./g,''))).join('/');
-        const nombre = encodeURIComponent(row.nombre);
-        const publicUrl = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/public/documentos-solicitantes/' + carpeta + '/' + nombre;         const publicUrlSinPuntos = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/public/documentos-solicitantes/' + carpetaSinPuntos + '/' + nombre;
-        const authUrl   = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/authenticated/documentos-solicitantes/' + carpeta + '/' + nombre;
-        let buf = null, ct = 'application/octet-stream';
-        for (const [url, headers] of [[publicUrl, {}], [publicUrlSinPuntos, {}], [authUrl, { 'Authorization': 'Bearer ' + (process.env.SUPABASE_JWT_SERVICE_ROLE || SUPABASE_KEY) }]]) {
-          try {
-            const r = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-            if (!r.ok) continue;
-            const rct = r.headers.get('content-type') || '';
-            if (rct.includes('text/html') || rct.includes('application/json')) continue;
-            buf = Buffer.from(await r.arrayBuffer());
-            if (buf.length) { ct = rct || ct; break; }
-          } catch {}
-        }
-        if (!buf || !buf.length) { fail++; continue; }
+        const url = indice[row.nombre];
+        if (!url) { fail++; continue; }
+        const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + jwtKey }, signal: AbortSignal.timeout(15000) });
+        if (!r.ok) { fail++; continue; }
+        const ct = r.headers.get('content-type') || 'application/octet-stream';
+        if (ct.includes('text/html') || ct.includes('application/json')) { fail++; continue; }
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (!buf.length) { fail++; continue; }
         const dataUrl = 'data:' + ct + ';base64,' + buf.toString('base64');
         await requirePg().query(
           `UPDATE archivos_solicitante SET data_url=$1, mime_type=$2 WHERE id=$3`,
@@ -187,7 +210,6 @@ async function migrarArchivosSuapabaseAPG() {
     console.log('[migrar] ' + ok + ' OK, ' + fail + ' fallidos de ' + rows.length);
   } catch(e) { console.warn('[migrar] Error:', e.message); }
 }
-
 let schemaRuntimePromise = null;
 async function ensureRuntimeSchema() {
   if (!pgPool) return;
