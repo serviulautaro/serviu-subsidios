@@ -4284,10 +4284,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const generarSolicitud = async () => {
     setGenerando(true);
     try {
-      const datosSolicitud = {
-        nombre: persona.nombre, rut: persona.rut, direccion: persona.direccion,
-        telefono: persona.telefono, subsidio: formSolicitud.subsidio, anioSubsidio: formSolicitud.anioSubsidio
-      };
+      const subsidioCompleto = [formSolicitud.subsidio, formSolicitud.subsidio2].filter(Boolean).join(" / ");
+const anioCompleto = [formSolicitud.anioSubsidio, formSolicitud.anioSubsidio2].filter(Boolean).join(" / ");
+const datosSolicitud = {
+  nombre: persona.nombre, rut: persona.rut, direccion: persona.direccion,
+  telefono: persona.telefono, subsidio: subsidioCompleto, anioSubsidio: anioCompleto
+};
       const pdfDataUrl = await generarPdfSolicitudOficial(datosSolicitud);
       setHtmlPreview(`<iframe title="Solicitud oficial completada" src="${pdfDataUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
       const nombreArch = `SOLICITUD_${persona.nombre.split(' ')[0]}_${new Date().toISOString().slice(0,10)}.pdf`;
