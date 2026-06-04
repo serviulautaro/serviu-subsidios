@@ -73,22 +73,22 @@ const validarAdmin = (key) => {
 async function migrarArchivosGitAPG() {
   if (!pgPool) return;
   try {
-    // Recorrer recursivamente todos los archivos del directorio documentos
     const recorrer = (dir, base = '') => {
-      let resultado = [];
+      let r = [];
       try {
         for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
           const rel = base ? base + '/' + item.name : item.name;
-          if (item.isDirectory()) resultado = resultado.concat(recorrer(path.join(dir, item.name), rel));
-          else if (item.isFile() && !item.name.startsWith('.')) resultado.push({ ruta: path.join(dir, item.name), rel });
+          if (item.isDirectory()) r = r.concat(recorrer(path.join(dir, item.name), rel));
+          else if (item.isFile() && !item.name.startsWith('.')) r.push({ ruta: path.join(dir, item.name), rel });
         }
       } catch {}
-      return resultado;
+      return r;
     };
 
     const archivos = recorrer(docsDir);
     console.log('[migrar-git] Archivos en disco:', archivos.length);
-    let ok = 0;
+    const mimeMap = { '.pdf':'application/pdf','.html':'text/html','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png' };
+    let ok = 0, skip = 0;
 
     for (const { ruta, rel } of archivos) {
       try {
@@ -96,44 +96,54 @@ async function migrarArchivosGitAPG() {
         if (lastSlash === -1) continue;
         const carpeta = rel.substring(0, lastSlash);
         const nombre = rel.substring(lastSlash + 1);
+        const mime = mimeMap[path.extname(nombre).toLowerCase()] || 'application/octet-stream';
 
-        // Verificar si ya está en PG con data_url
-        const { rows: exists } = await requirePg().query(
-          `SELECT id FROM archivos_solicitante WHERE carpeta=$1 AND nombre=$2 AND data_url IS NOT NULL LIMIT 1`,
+        // Buscar registro existente en PG por carpeta+nombre
+        const { rows: existing } = await requirePg().query(
+          `SELECT id, persona_id, data_url FROM archivos_solicitante WHERE carpeta=$1 AND nombre=$2 LIMIT 1`,
           [carpeta, nombre]
         );
-        if (exists.length) continue; // Ya migrado
 
-        // Leer archivo y convertir a base64
+        // Si ya tiene data_url, saltar
+        if (existing.length && existing[0].data_url) { skip++; continue; }
+
         const buf = fs.readFileSync(ruta);
-        const ext = path.extname(nombre).toLowerCase();
-        const mimeMap = { '.pdf': 'application/pdf', '.html': 'text/html', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
-        const mime = mimeMap[ext] || 'application/octet-stream';
         const dataUrl = 'data:' + mime + ';base64,' + buf.toString('base64');
 
-        // Buscar persona_id por carpeta
-        const partesCarpeta = carpeta.split('/');
-        const rut = partesCarpeta[partesCarpeta.length - 1];
-        let personaId = null;
-        if (rut) {
-          const { rows: pRows } = await requirePg().query(
-            `SELECT id FROM personas WHERE rut=$1 OR rut ILIKE $1 LIMIT 1`, [rut]
-          );
-          if (pRows.length) personaId = pRows[0].id;
-        }
-
-        if (personaId) {
+        if (existing.length) {
+          // Actualizar con data_url
           await requirePg().query(
-            `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
-             VALUES ($1,$2,$3,$4,$5,$6)
-             ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type`,
-            [personaId + '_' + nombre, personaId, nombre, carpeta, dataUrl, mime]
+            `UPDATE archivos_solicitante SET data_url=$1, mime_type=$2 WHERE id=$3`,
+            [dataUrl, mime, existing[0].id]
           );
           ok++;
+        } else {
+          // Buscar persona_id — primero por carpeta exacta, luego por RUT
+          const partes = carpeta.split('/');
+          const rutCarpeta = partes[partes.length - 1];
+          let personaId = null;
+
+          // Intentar match por RUT en carpeta
+          for (const parte of partes.reverse()) {
+            const { rows } = await requirePg().query(
+              `SELECT id FROM personas WHERE rut=$1 OR rut ILIKE $1 LIMIT 1`, [parte]
+            );
+            if (rows.length) { personaId = rows[0].id; break; }
+          }
+
+          if (personaId) {
+            await requirePg().query(
+              `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
+               VALUES ($1,$2,$3,$4,$5,$6)
+               ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type`,
+              [personaId + '_' + nombre, personaId, nombre, carpeta, dataUrl, mime]
+            );
+            ok++;
+          }
         }
       } catch(e) { /* skip */ }
     }
-    console.log('[migrar-git] Completado: ' + ok + ' archivos guardados en PG');
+    console.log('[migrar-git] ' + ok + ' guardados, ' + skip + ' ya tenían data_url');
   } catch(e) { console.warn('[migrar-git] Error:', e.message); }
 }
 
@@ -439,12 +449,16 @@ app.get('/api/diagnostico', async (req, res) => {
   res.json(info);
 });
 
-// Endpoint manual para forzar migración
+// Endpoint manual para forzar migración (GET y POST para facilitar uso desde browser)
+app.get('/api/migrar-archivos', async (req, res) => {
+  migrarArchivosGitAPG().catch(e => console.warn('[migrar-git manual]', e.message));
+  migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar-supa manual]', e.message));
+  res.json({ ok: true, mensaje: 'Migración iniciada en segundo plano — revisa los logs del servidor' });
+});
 app.post('/api/migrar-archivos', async (req, res) => {
-  try {
-    migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar manual]', e.message));
-    res.json({ ok: true, mensaje: 'Migración iniciada en segundo plano' });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  migrarArchivosGitAPG().catch(e => console.warn('[migrar-git manual]', e.message));
+  migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar-supa manual]', e.message));
+  res.json({ ok: true, mensaje: 'Migración iniciada en segundo plano' });
 });
 
 app.get('/api/bootstrap', async (req, res) => {
