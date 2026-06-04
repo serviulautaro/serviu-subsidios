@@ -165,7 +165,7 @@ async function migrarArchivosSuapabaseAPG() {
         const publicUrl = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/public/documentos-solicitantes/' + carpeta + '/' + nombre;         const publicUrlSinPuntos = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/public/documentos-solicitantes/' + carpetaSinPuntos + '/' + nombre;
         const authUrl   = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/authenticated/documentos-solicitantes/' + carpeta + '/' + nombre;
         let buf = null, ct = 'application/octet-stream';
-        for (const [url, headers] of [[publicUrl, {}], [publicUrlSinPuntos, {}], [authUrl, { 'Authorization': 'Bearer ' + SUPABASE_KEY }]]) {
+        for (const [url, headers] of [[publicUrl, {}], [publicUrlSinPuntos, {}], [authUrl, { 'Authorization': 'Bearer ' + (process.env.SUPABASE_JWT_SERVICE_ROLE || SUPABASE_KEY) }]]) {
           try {
             const r = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
             if (!r.ok) continue;
