@@ -7081,6 +7081,7 @@ const datosSolicitud = {
               <input value={formSolicitud.subsidio} onChange={e => setFormSolicitud({...formSolicitud, subsidio: e.target.value})}
                 placeholder="Ej: SUBSIDIO RURAL - SUB. RURALES TITULO I"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
+                <input value={formSolicitud.subsidio2||""} onChange={e=>setFormSolicitud({...formSolicitud,subsidio2:e.target.value})} placeholder="Subsidio adicional (opcional)" style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:"#555"}} />
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Año del Subsidio *</div>
@@ -7088,6 +7089,7 @@ const datosSolicitud = {
                 placeholder="Ej: 1989"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
             </div>
+            <input value={formSolicitud.anioSubsidio2||""} onChange={e=>setFormSolicitud({...formSolicitud,anioSubsidio2:e.target.value})} placeholder="Año adicional (opcional)" style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:"#555"}} />
             <div style={{ background: "#ECFDF5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#059669" }}>
               <div><strong>Plantilla oficial:</strong> Formulario Solicitud Habilitación Inhabitabilidad 2026</div>
               <div>Se generará un PDF oficial completado automáticamente.</div>
