@@ -160,7 +160,7 @@ async function migrarArchivosSuapabaseAPG() {
     let ok = 0, fail = 0;
     for (const row of rows) {
       try {
-        const carpeta = (row.carpeta || '').split('/').map(s => encodeURIComponent(s)).join('/');
+        const carpeta = (row.carpeta || '').split('/').map(s => encodeURIComponent(s)).join('/');         const carpetaSinPuntos = (row.carpeta || '').split('/').map(s => encodeURIComponent(s.replace(/\./g,''))).join('/');
         const nombre = encodeURIComponent(row.nombre);
         const publicUrl = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/public/documentos-solicitantes/' + carpeta + '/' + nombre;
         const authUrl   = 'https://qirjfgjesjzikouehmib.supabase.co/storage/v1/object/authenticated/documentos-solicitantes/' + carpeta + '/' + nombre;
