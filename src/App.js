@@ -988,7 +988,7 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   draw(telefono, 205, 488, 8.5, 32);
   draw("Jcampos@munilautaro.cl", 205, 462, 8.5, 46);
   draw(subsidio, 205, 436, 8.2, 56);
-  draw(anioSolo(anioSubsidio), 205, 394, 8.5, 20);
+  draw(anioSubsidio, 205, 394, 8.5, 20);
   draw(dia, 149, 125, 8.5, 2);
   draw(mes, 206, 125, 8.5, 2);
   draw(anio, 269, 125, 8.5, 4);
