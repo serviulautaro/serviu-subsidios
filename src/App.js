@@ -4293,21 +4293,8 @@ const datosSolicitud = {
       const pdfDataUrl = await generarPdfSolicitudOficial(datosSolicitud);
       setHtmlPreview(`<iframe title="Solicitud oficial completada" src="${pdfDataUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
       const nombreArch = `SOLICITUD_${persona.nombre.split(' ')[0]}_${new Date().toISOString().slice(0,10)}.pdf`;
-      // Guardar en PostgreSQL directamente (persiste entre reinicios de Render)
-      try {
-        const r = await fetch(`${API}/api/archivo-base64`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            persona_id: persona.id,
-            nombre: nombreArch,
-            carpeta: carpeta,
-            data_url: pdfDataUrl,
-            mime_type: "application/pdf"
-          })
-        });
-        if (!r.ok) console.warn("[solicitud] Error guardando en PG:", await r.text());
-      } catch(e) { console.warn("[solicitud] Error fetch archivo-base64:", e.message); }
+      // Guardar PDF en BD via servidor Render
+      await guardarArchivoPersistente(nombreArch, pdfDataUrl, "application/pdf", carpeta);
       await _registrarArchivoSupa(nombreArch, carpeta);
       setArchivos(prev => prev.includes(nombreArch) ? prev : [nombreArch, ...prev]);
       setArchivosDatos(prev => ({ ...prev, [nombreArch]: { dataUrl: pdfDataUrl, mimeType: "application/pdf", carpeta } }));
