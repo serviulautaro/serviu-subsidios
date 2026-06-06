@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { supabase, IS_DEMO_MODE } from "./supabaseClient";
 import ComitesVivienda from "./components/ComitesVivienda";
 import InformesView from "./components/InformesView";
+import SiguientePaso from "./components/SiguientePaso";
 import JSZip from "jszip";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
@@ -2836,7 +2837,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [comiteParaAsignar, setComiteParaAsignar] = useState("");
   const [visitas, setVisitas] = useState([]);
   const [showFormVisita, setShowFormVisita] = useState(false);
-  const [formVisita, setFormVisita] = useState({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "" });
+  const [formVisita, setFormVisita] = useState({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "", siguientePaso: "", fechaCompromiso: "" });
   const [guardandoVisita, setGuardandoVisita] = useState(false);
   const [showFichaSolicitante, setShowFichaSolicitante] = useState(false);
 
@@ -3095,6 +3096,12 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     }
   };
 
+  const borrarSiguientePaso = async (id) => {
+    setVisitas(prev => prev.map(v => v.id === id ? { ...v, siguiente_paso: "", fecha_compromiso: "" } : v));
+    const { error } = await supabase.from("visitas").update({ siguiente_paso: "", fecha_compromiso: "" }).eq("id", id);
+    if (error) console.warn("[borrarSiguientePaso]", error.message);
+  };
+
   const agregarVisita = async (progDocs) => {
     const profesionalActual = formVisita.profesional || currentUser?.nombre || "";
     if (!formVisita.fecha || !profesionalActual) return;
@@ -3114,6 +3121,8 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       compromiso: formVisita.compromiso.trim(),
       docs_recibidos: recibidosLineas.join("\n"),
       profesional_recibio: formVisita.profesionalRecibio || (recibidosLineas.length ? profesionalActual : ""),
+      siguiente_paso: formVisita.siguientePaso.trim(),
+      fecha_compromiso: formVisita.fechaCompromiso,
     };
     // PASO 1: Guardar inmediatamente en localStorage (nunca se pierde)
     const LS_KEY = "visitas_pendientes_sync";
@@ -3124,7 +3133,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     // PASO 2: Actualizar UI de inmediato — el usuario puede seguir trabajando
     const listaFinal = fusionarVisitas([nueva], visitas);
     setVisitas(listaFinal);
-    setFormVisita({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "" });
+    setFormVisita({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "", siguientePaso: "", fechaCompromiso: "" });
     setShowFormVisita(false);
     setGuardandoVisita(false);
 
@@ -4503,7 +4512,10 @@ const datosSolicitud = {
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <div style={{ width: 58, height: 58, borderRadius: 29, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 24 }}>{persona.nombre[0].toUpperCase()}</div>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#1e3a5f" }}>{persona.nombre}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#1e3a5f" }}>{persona.nombre}</div>
+              <SiguientePaso visitas={visitas} onBorrar={borrarSiguientePaso} />
+            </div>
             <div style={{ fontSize: 13, color: "#888" }}>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
             {(persona.puntajeRSH || persona.integrantesFamiliares) && <div style={{ fontSize: 13, color: "#888" }}>{persona.puntajeRSH ? "RSH: " + persona.puntajeRSH : ""}{persona.integrantesFamiliares ? " - Grupo familiar: " + persona.integrantesFamiliares + " personas" : ""}</div>}
@@ -4718,7 +4730,7 @@ const datosSolicitud = {
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
         <div style={{ background: "#f8f7ff", borderBottom: "2px solid #7C3AED", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#4C1D95" }}>📋 Registro de Visitas a Oficina</div>
-          <button onClick={() => { setShowFormVisita(v => !v); setFormVisita({ fecha: todayISO(), profesional: currentUser?.nombre || "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: currentUser?.nombre || "" }); }}
+          <button onClick={() => { setShowFormVisita(v => !v); setFormVisita({ fecha: todayISO(), profesional: currentUser?.nombre || "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: currentUser?.nombre || "", siguientePaso: "", fechaCompromiso: "" }); }}
             style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
             {showFormVisita ? "✕ Cancelar" : "+ Agregar visita"}
           </button>
@@ -4814,6 +4826,21 @@ const datosSolicitud = {
                 <textarea value={formVisita.compromiso} onChange={e => setFormVisita(f => ({ ...f, compromiso: e.target.value }))}
                   placeholder="¿Qué comprometió el postulante?"
                   rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+            </div>
+
+            {/* Siguiente paso + Fecha compromiso */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#92400E", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Siguiente paso</label>
+                <textarea value={formVisita.siguientePaso} onChange={e => setFormVisita(f => ({ ...f, siguientePaso: e.target.value }))}
+                  placeholder="Ej: debe completar el ahorro para postular…"
+                  rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.siguientePaso ? "#F59E0B" : "#ddd"), fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#92400E", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Fecha del compromiso del solicitante</label>
+                <input type="date" value={formVisita.fechaCompromiso} onChange={e => setFormVisita(f => ({ ...f, fechaCompromiso: e.target.value }))}
+                  style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid " + (formVisita.fechaCompromiso ? "#F59E0B" : "#ddd"), fontSize: 13, boxSizing: "border-box" }} />
               </div>
             </div>
 

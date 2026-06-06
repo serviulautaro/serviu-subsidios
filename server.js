@@ -220,6 +220,8 @@ async function ensureRuntimeSchema() {
       ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "linea_tiempo_csp" jsonb DEFAULT '{}'::jsonb;
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "data_url" text;
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "mime_type" text;
+      ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "siguiente_paso" text;
+      ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "fecha_compromiso" text;
     `).catch(err => {
       schemaRuntimePromise = null;
       throw err;
