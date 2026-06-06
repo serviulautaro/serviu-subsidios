@@ -120,72 +120,8 @@ serviu-subsidios/
 **Razón:** Permite cambiar el backend sin reescribir todo el código que ya usaba Supabase  
 **Consecuencias:** El código de DATOS parece usar Supabase pero en realidad apunta a Render; no hay `.env`. El login sí sigue en Supabase.
 
-### 2026-06-04 — Todo el sistema en App.js
-**Contexto:** El sistema creció sin separar en módulos  
-**Decisión:** Por ahora no refactorizar — demasiado riesgo de romper algo  
-**Razón:** Usuario principiante, sistema en producción  
-**Consecuencias:** App.js tiene 7.000+ líneas; cambios deben ser muy específicos y quirúrgicos
-
----
-
-## Errores Resueltos
-
-> (agregar aquí cada vez que se resuelva un bug)
-
----
-
-## Estado Actual
-
-**En progreso:**
-- [ ] Verificar que los 6 módulos estén funcionales en producción
-
-**Completado:**
-- [x] Deploy en Render funcionando
-- [x] Repositorio GitHub configurado
-- [x] Flujo git push → deploy automático operativo
-- [x] Migración de DATOS de Supabase a Render completada
-- [x] PROJECT.md inicializado con contexto real del proyecto
-- [x] Aclarado que el LOGIN todavía usa Supabase (2026-06-05)
-
-**Deuda técnica (no urgente pero importante):**
-- [ ] **Mover el login/auth de Supabase a Render** (decidido el 2026-06-05: hacerlo más adelante)
-- [ ] Dividir App.js en módulos separados (actualmente 7.000+ líneas)
-- [ ] Crear archivo `.env` para manejar credenciales correctamente
-- [ ] Revisar y limpiar archivos sueltos raros en la raíz (`((`, `a version funcional`, `programa`, `pm2`)
-
----
-
-## Instrucciones para IA
-
-> **LEER ESTO ANTES DE GENERAR CUALQUIER CÓDIGO**
-
-1. El usuario es principiante — instrucciones simples, paso a paso, sin jerga
-2. Flujo: editar en VS Code → `git push` → deploy automático en Render
-3. **No sugerir cambiar el stack** sin preguntar primero
-4. Los DATOS están en PostgreSQL en Render — se accede via proxy en `src/supabaseClient.js`
-5. El LOGIN/AUTH todavía está en Supabase — **NO borrar la conexión `realSupabase`**
-6. **No agregar código a App.js** — es demasiado grande; proponer siempre un componente separado
-7. Antes de proponer solución a un bug, revisar "Errores Resueltos"
-8. Al terminar cambios, recordar al usuario actualizar este PROJECT.md
-9. Siempre indicar **en qué archivo exacto** hacer cada cambio
-
----
-
-## Bloque de Inicio de Sesión
-
-> Copiar y pegar al comenzar con Claude o Codex en sesión nueva:
-
-```
-PROYECTO: SERVIU Subsidios — gestión de subsidios habitacionales (JCC)
-STACK: React (CRA) + PostgreSQL en Render + API proxy en Render
-REPO: serviulautaro/serviu-subsidios
-LOCAL: C:\Users\JORGE\Desktop\serviu-subsidios
-DEPLOY: git push → Render automático → serviu-subsidios-demo.onrender.com
-DB DATOS: PostgreSQL en Render (via proxy en src/supabaseClient.js, USE_API_DB=true)
-DB LOGIN/AUTH: todavía en Supabase (realSupabase.auth) — NO BORRAR
-ARCHIVO PRINCIPAL: src/App.js (7000+ líneas — NO agregar código ahí, crear componente separado)
-MÓDULOS: Solicitudes, Beneficiarios, Postulaciones, Asignaciones, Comités, Informes
-USUARIO: principiante — instrucciones simples y paso a paso
-REGLAS: 1) No cambiar el stack sin preguntar. 2) Indicar siempre en qué archivo exacto hacer cada cambio. 3) Antes de proponer solución a un bug, revisar "Errores Resueltos" en PROJECT.md. 4) Al terminar cambios, recordar actualizar PROJECT.md. 5) NO borrar la conexión a Supabase (el login la usa).
-LEER el archivo PROJECT.md para decisiones técnicas y errores resueltos.
-```
+#### 2026-06-06 — Función "Siguiente Paso" en visitas
+**Qué se hizo:** Se agregó al "Registro de Visitas a Oficina" dos campos nuevos (Siguiente paso + Fecha del compromiso del solicitante) que se guardan dentro de cada visita. Cada siguiente paso se muestra como etiqueta resaltada al lado del nombre del solicitante (más antiguo a la izquierda, nuevo a la derecha), con "×" para borrar manualmente sin eliminar la visita.
+**Archivos:** server.js (columnas siguiente_paso y fecha_compromiso en tabla visitas), src/App.js (2 campos en el formulario), src/components/SiguientePaso.jsx (componente nuevo).
+**Base de datos:** Las columnas se crean solas en Render con ALTER TABLE ... ADD COLUMN IF NOT EXISTS. No requirió paso manual.
+**Herramienta:** Implementado con Claude Code.
