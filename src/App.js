@@ -10191,16 +10191,17 @@ export default function App() {
 
   const registrarAuditoria = async (accion, entidad, entidadId, detalle = {}) => {
     if (!currentUser?.id) return;
-    // Solo registrar si el id es un UUID válido (no "admin-recuperacion" u otros)
-    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(currentUser.id));
-    if (!esUuid) return;
     try {
       await supabase.rpc("registrar_auditoria", {
         p_user_id: currentUser.id,
         p_accion: accion,
         p_entidad: entidad,
         p_entidad_id: String(entidadId || ""),
-        p_detalle: detalle,
+        p_detalle: {
+          ...detalle,
+          usuario: detalle.usuario || currentUser.username || currentUser.usuario || "",
+          nombre_usuario: detalle.nombre_usuario || currentUser.nombre || "",
+        },
       });
     } catch { /* auditoría no bloquea operaciones */ }
   };

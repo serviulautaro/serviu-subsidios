@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 
+const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
+  ? window.location.origin
+  : "http://localhost:3001";
+
 const PROGRAMAS_META_BASE = [
   { id: "habitabilidad", nombre: "Habitabilidad de Vivienda (Desmarque de Vivienda)", descripcion: "Desmarque", color: "#2563EB", colorLight: "#EFF6FF", icon: "H" },
   { id: "csp_urbano", nombre: "Construccion Sitio Propio Urbano", descripcion: "Subsidio de construccion en sitio propio - zona urbana", color: "#059669", colorLight: "#ECFDF5", icon: "U" },
@@ -1047,28 +1051,40 @@ function PanelAuditoriaUsuarios({ currentUser }) {
 
   useEffect(() => {
     if (!esAdmin) return;
+    let cancelado = false;
     const cargar = async () => {
       setCargando(true);
       setError("");
-      const inicio = new Date((fechaInicio || hoyIso) + "T00:00:00");
-      const fin = new Date((fechaTermino || fechaInicio || hoyIso) + "T00:00:00");
-      fin.setDate(fin.getDate() + 1);
-      const { data, error: err } = await supabase
-        .from("audit_log")
-        .select("*")
-        .gte("creado", inicio.toISOString())
-        .lt("creado", fin.toISOString())
-        .neq("accion", "ingreso_sistema")
-        .order("creado", { ascending: false });
-      if (err) {
-        setError(err.message);
-        setLogs([]);
-      } else {
-        setLogs(data || []);
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 15000);
+      try {
+        const inicio = new Date((fechaInicio || hoyIso) + "T00:00:00");
+        const fin = new Date((fechaTermino || fechaInicio || hoyIso) + "T00:00:00");
+        fin.setDate(fin.getDate() + 1);
+        const params = new URLSearchParams({
+          select: "*",
+          orderBy: "creado",
+          orderAsc: "false",
+        });
+        params.set("gte[creado]", inicio.toISOString());
+        params.set("lt[creado]", fin.toISOString());
+        params.set("neq[accion]", "ingreso_sistema");
+        const res = await fetch(`${API_BASE}/api/db/audit_log?${params.toString()}`, { signal: controller.signal });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.ok === false) throw new Error(json.error || res.statusText || "No se pudo leer auditoria");
+        if (!cancelado) setLogs(Array.isArray(json.data) ? json.data : []);
+      } catch (err) {
+        if (!cancelado) {
+          setError(err.name === "AbortError" ? "La consulta de auditoria tardo demasiado. Intente nuevamente." : err.message);
+          setLogs([]);
+        }
+      } finally {
+        window.clearTimeout(timer);
+        if (!cancelado) setCargando(false);
       }
-      setCargando(false);
     };
     cargar();
+    return () => { cancelado = true; };
   }, [esAdmin, fechaInicio, fechaTermino, hoyIso]);
 
   const usuarioSeleccionado = usuarios.find(u => u.id === usuarioFiltro);

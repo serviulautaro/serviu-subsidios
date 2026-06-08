@@ -713,17 +713,32 @@ app.post('/api/rpc/:fn', async (req, res) => {
     }
     if (fn === 'registrar_auditoria') {
       try {
-        // Validar que p_user_id sea un UUID válido antes de consultar
         const uid = String(body.p_user_id || '');
         const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid);
-        if (esUuid) {
-          await requirePg().query(
-            `INSERT INTO audit_log(user_id, usuario, accion, entidad, entidad_id, detalle)
-             SELECT u.id, u.nombre, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb)
-             FROM app_users u WHERE u.id = $1 AND u.activo = true`,
-            [uid, body.p_accion, body.p_entidad, body.p_entidad_id, JSON.stringify(body.p_detalle || {})]
-          );
-        }
+        const detalle = body.p_detalle || {};
+        await requirePg().query(
+          `INSERT INTO audit_log(user_id, usuario, accion, entidad, entidad_id, detalle)
+           SELECT u.id, u.nombre, $3, $4, $5, COALESCE($6::jsonb, '{}'::jsonb)
+           FROM app_users u
+           WHERE u.activo = true
+             AND (
+               ($1::boolean = true AND u.id = $2::uuid)
+               OR lower(u.username) = lower(trim(COALESCE($7, '')))
+               OR lower(u.nombre) = lower(trim(COALESCE($8, '')))
+             )
+           ORDER BY CASE WHEN $1::boolean = true AND u.id = $2::uuid THEN 0 ELSE 1 END
+           LIMIT 1`,
+          [
+            esUuid,
+            esUuid ? uid : null,
+            body.p_accion,
+            body.p_entidad,
+            body.p_entidad_id,
+            JSON.stringify(detalle),
+            detalle.usuario || detalle.username || '',
+            detalle.nombre_usuario || detalle.nombre || '',
+          ]
+        );
       } catch(e) { console.warn('[auditoria]', e.message); }
       return res.json({ ok: true, data: null });
     }
