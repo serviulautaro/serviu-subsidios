@@ -1,4 +1,5 @@
 const express = require('express');
+require('dotenv').config();
 const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
@@ -34,6 +35,11 @@ const pgPool = process.env.DATABASE_URL
       connectionTimeoutMillis: 15000,
     })
   : null;
+if (pgPool) {
+  pgPool.on('error', (err) => {
+    console.error('[pg] Error de conexion en reposo:', err.message);
+  });
+}
 let cacheBootstrap = null;
 let cacheSolicitudes = null;
 const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita';
@@ -218,6 +224,7 @@ async function ensureRuntimeSchema() {
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "tipo" text;
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "linea_tiempo" jsonb DEFAULT '{}'::jsonb;
       ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "linea_tiempo_csp" jsonb DEFAULT '{}'::jsonb;
+      ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "pendiente_calificar" boolean DEFAULT false;
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "data_url" text;
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "mime_type" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "siguiente_paso" text;
@@ -255,6 +262,94 @@ const whereSql = (filtros = [], values = []) => {
   });
   return ' WHERE ' + partes.join(' AND ');
 };
+
+const COMITE_DESMARQUE = 'comite_desmarque';
+const PROGRAMA_DESMARQUE = 'habitabilidad';
+const NOMBRE_COMITE_DESMARQUE = 'DESMARQUE DE VIVIENDA';
+const textoRegla = (v) => String(v || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase()
+  .trim();
+const parseJsonSeguro = (v, fallback) => {
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object') return v;
+  if (typeof v !== 'string') return fallback;
+  try { return JSON.parse(v); } catch { return fallback; }
+};
+const docConVb = (doc = {}) => doc.vb === true || doc.vb === 'true' || doc.entregado === true;
+const docNombreNorm = (doc = {}) => textoRegla(doc.nombre);
+const valorDocTexto = (doc = {}) => textoRegla(doc.valor || doc.opcionSeleccionada || doc.etiqueta);
+const respuestaServiuLista = (sol = {}) => {
+  const docs = parseJsonSeguro(sol.documentos, []);
+  const respuesta = docs.find(doc =>
+    docNombreNorm(doc).includes('RESPUESTA') && docNombreNorm(doc).includes('SERVIU')
+  );
+  const texto = valorDocTexto(respuesta);
+  return docConVb(respuesta) && (texto.includes('DESMARCADO') || texto.includes('APROBADO'));
+};
+async function solicitudDesmarquePersona(personaId) {
+  if (!personaId) return null;
+  const { rows } = await requirePg().query(
+    `SELECT id, persona_id, programa_id, documentos
+     FROM "solicitudes"
+     WHERE persona_id=$1 AND programa_id=$2
+     LIMIT 1`,
+    [personaId, PROGRAMA_DESMARQUE]
+  );
+  return rows[0] || null;
+}
+async function personaTieneDesmarque(personaId) {
+  return !!(await solicitudDesmarquePersona(personaId));
+}
+async function datosPersonaRegla(personaId) {
+  if (!personaId) return null;
+  const { rows } = await requirePg().query(
+    `SELECT id, comite_id, estado_desmarque FROM "personas" WHERE id=$1 LIMIT 1`,
+    [personaId]
+  );
+  return rows[0] || null;
+}
+async function validarDesmarqueListoParaSegundoPrograma(row = {}) {
+  const personaId = row.persona_id || row.personaId;
+  const programaId = row.programa_id || row.programaId;
+  if (!personaId || !programaId || programaId === PROGRAMA_DESMARQUE) return;
+  const solDesmarque = await solicitudDesmarquePersona(personaId);
+  if (!solDesmarque) return;
+  const persona = await datosPersonaRegla(personaId);
+  const codigoDestino = row.codigo_comite || row.codigoComite || '';
+  if (persona && persona.comite_id && persona.comite_id !== COMITE_DESMARQUE && String(persona.comite_id) !== String(codigoDestino)) {
+    const err = new Error('Este desmarcado ya fue movido a otro programa y no puede moverse nuevamente.');
+    err.status = 409;
+    throw err;
+  }
+  const estadoDesmarcado = textoRegla(persona?.estado_desmarque) === 'DESMARCADO';
+  if (!estadoDesmarcado && !respuestaServiuLista(solDesmarque)) {
+    const err = new Error('No se puede mover desde Desmarque: falta completar el paso 9 (Respuesta SERVIU en DESMARCADO/APROBADO).');
+    err.status = 409;
+    throw err;
+  }
+}
+async function normalizarSolicitudProgramaUnico(row = {}, upsert = false) {
+  await validarDesmarqueListoParaSegundoPrograma(row);
+  const personaId = row.persona_id || row.personaId;
+  const programaId = row.programa_id || row.programaId;
+  if (!personaId || !programaId || programaId === PROGRAMA_DESMARQUE) return row;
+  const { rows } = await requirePg().query(
+    `SELECT id FROM "solicitudes"
+     WHERE persona_id=$1 AND programa_id<>$2 AND id<>COALESCE($3, '')
+     ORDER BY fecha DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [personaId, PROGRAMA_DESMARQUE, row.id || '']
+  );
+  if (rows.length && upsert) return { ...row, id: rows[0].id };
+  if (rows.length && !upsert) {
+    const err = new Error('El solicitante ya tiene un programa normal activo. Use mover/reemplazar, no agregar otro.');
+    err.status = 409;
+    throw err;
+  }
+  return row;
+}
 const aplicarOrdenRango = (query = {}, values = []) => {
   let sql = '';
   const orderCol = query.orderBy || query.order;
@@ -325,8 +420,14 @@ async function pgSelectSolicitudesListado() {
 async function pgInsert(table, rows = [], { upsert = false } = {}) {
   validarTabla(table);
   await ensureRuntimeSchema();
-  const lista = Array.isArray(rows) ? rows : [rows];
+  let lista = Array.isArray(rows) ? rows : [rows];
   if (!lista.length) return [];
+  if (table === 'solicitudes') {
+    lista = [];
+    for (const row of (Array.isArray(rows) ? rows : [rows])) {
+      lista.push(await normalizarSolicitudProgramaUnico(row || {}, upsert));
+    }
+  }
   const keys = [...new Set(lista.flatMap(row => Object.keys(row || {})))];
   if (!keys.length) return [];
   const values = [];
@@ -1392,7 +1493,7 @@ for (const name of Object.keys(interfaces)) {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log('Servidor SERVIU corriendo en puerto ' + PORT);
-  console.log('Base de datos: serviu.db');
+  console.log('Base de datos: ' + (pgPool ? 'PostgreSQL Render' : 'serviu.db local'));
   console.log('Acceso en red: http://' + ip + ':' + PORT);
   // Migrar archivos del repositorio git a PostgreSQL (archivos históricos)
   setTimeout(() => migrarArchivosGitAPG().catch(e => console.warn('[migrar-git startup]', e.message)), 3000);

@@ -2,7 +2,7 @@
 
 > Sistema web para gestionar solicitudes, postulaciones, asignaciones y beneficiarios de subsidios habitacionales del SERVIU (JCC).
 
-**Última actualización:** 2026-06-05  
+**Última actualización:** 2026-06-07  
 **IA utilizada:** Claude y Codex (ambos leen este archivo antes de tocar código)
 
 ---
@@ -107,6 +107,12 @@ serviu-subsidios/
 ---
 
 ## Decisiones Técnicas
+
+### 2026-06-07 - Reglas de asignacion Desmarque y marcha blanca
+**Contexto:** Se definio el plan final de asignacion: Desmarque conserva la solicitud `habitabilidad`, pero al moverse cambia `personas.comite_id` al nuevo comite destino.  
+**Decision:** Un desmarcado ya movido se detecta por tener solicitud Desmarque y `comite_id !== "comite_desmarque"`. Queda bloqueado para nuevos movimientos.  
+**Reglas:** Desmarque solo puede moverse si `estado_desmarque = "DESMARCADO"`. Los desmarcados se agrupan en "sin programa", "pendiente para calificar" y "con programa". Se agrego `personas.pendiente_calificar`.  
+**Backend:** `server.js` crea el campo nuevo si falta y valida antes de guardar solicitudes normales para impedir estados prohibidos.
 
 ### 2026-06-05 — El login se queda en Supabase (por ahora)
 **Contexto:** Al migrar la DB a Render, los datos se movieron pero el login (auth) se quedó en Supabase  

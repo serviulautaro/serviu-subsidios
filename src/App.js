@@ -5,6 +5,14 @@ import InformesView from "./components/InformesView";
 import SiguientePaso from "./components/SiguientePaso";
 import JSZip from "jszip";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import {
+  COMITE_DESMARQUE,
+  PROGRAMA_DESMARQUE,
+  esDesmarcado,
+  grupoDesmarcado,
+  yaMovido,
+  solicitudesNormalesPersona,
+} from "./utils/asignacionReglas";
 
 // Formatear RUT chileno: 10398338-K -> 10.398.338-Kh
 const formatRut = (rut) => {
@@ -1833,7 +1841,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
             s.programaId === "habitabilidad" &&
             (s.documentos || []).some(d =>
               d.nombre && d.nombre.includes("Respuesta SERVIU") &&
-              d.valor && d.valor.toLowerCase().includes("aprobado")
+              d.valor && (d.valor.toLowerCase().includes("aprobado") || d.valor.toLowerCase().includes("desmarcado"))
             )
           );
           const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
@@ -2873,9 +2881,8 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
 
   useEffect(() => {
     if (!personaId || !onCargarSolicitudesPersona) return;
-    const incompletas = misSols.length === 0 || misSols.some(s => s.documentosCargados !== true);
-    if (incompletas) onCargarSolicitudesPersona(personaId);
-  }, [personaId, firmaArchivosSolicitudes]); // eslint-disable-line react-hooks/exhaustive-deps
+    onCargarSolicitudesPersona(personaId);
+  }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visitasDesdeSolicitudes = () => {
     const visitasRecuperadas = [];
@@ -4060,10 +4067,6 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!resultadoRespuestaServiu) return;
     const res = resultadoRespuestaServiu;
     const nota = notaResultado;
-    setShowModalRespuestaServiu(false);
-    setResultadoRespuestaServiu("");
-    setNotaResultado("");
-    await new Promise(r => setTimeout(r, 50));
     let nuevoEstado = persona.estado_desmarque;
     if (res === "APROBADO") nuevoEstado = "DESMARCADO";
     else if (res === "RECHAZADO_APELABLE") nuevoEstado = "RECHAZADO APELABLE";
@@ -4071,21 +4074,44 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     try {
       const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
       const solDb = solsDb && solsDb[0];
+      if (!solDb) throw new Error("No se encontro la solicitud de Habitabilidad/Desmarque.");
       if (solDb) {
         const etiqueta = res === "APROBADO" ? "DESMARCADO"
           : res === "RECHAZADO_APELABLE" ? "RECHAZADO APELABLE"
           : "DESMARQUE RECHAZADO";
-        const docsActualizados = (solDb.documentos || []).map(d =>
-          d.nombre && d.nombre.includes("Respuesta SERVIU")
-            ? { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true }
-            : d
-        );
-        await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
+        const docsBase = Array.isArray(solDb.documentos) ? solDb.documentos : [];
+        let encontroRespuesta = false;
+        let docsActualizados = docsBase.map(d => {
+          if (!(d.nombre && d.nombre.includes("Respuesta SERVIU"))) return d;
+          encontroRespuesta = true;
+          return { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true, vb: true };
+        });
+        if (!encontroRespuesta) {
+          docsActualizados = [
+            ...docsActualizados,
+            {
+              nombre: "Respuesta SERVIU",
+              obligatorio: false,
+              valor: etiqueta + (nota ? " - " + nota : ""),
+              entregado: true,
+              vb: true,
+            },
+          ];
+        }
+        const { error: solError } = await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
+        if (solError) throw solError;
         onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
       }
-      await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones }).eq("id", persona.id);
+      const { error: personaError } = await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones }).eq("id", persona.id);
+      if (personaError) throw personaError;
       onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
-    } catch(e) { console.warn("[guardarRespuestaServiu]", e.message); }
+      setShowModalRespuestaServiu(false);
+      setResultadoRespuestaServiu("");
+      setNotaResultado("");
+    } catch(e) {
+      console.warn("[guardarRespuestaServiu]", e.message);
+      alert("No se pudo guardar el resultado de Respuesta SERVIU: " + (e.message || "error desconocido"));
+    }
   };
 
   const guardarFichaDesmarque = async () => {
@@ -6322,9 +6348,9 @@ const datosSolicitud = {
                           </div>
                         )}
                         {doc.entregado && (
-                          <div style={{ background: doc.valor && doc.valor.includes("APROBADO") ? "#E0F7FA" : "#FEF2F2", borderRadius: 7, padding: "8px 12px" }}>
-                            <div style={{ fontSize: 12, color: doc.valor && doc.valor.includes("APROBADO") ? "#0891B2" : "#DC2626", fontWeight: 700, marginBottom: 4 }}>
-                              {doc.valor && doc.valor.includes("APROBADO") ? "✅" : "❌"} {doc.valor}
+                          <div style={{ background: doc.valor && (doc.valor.includes("APROBADO") || doc.valor.includes("DESMARCADO")) ? "#E0F7FA" : "#FEF2F2", borderRadius: 7, padding: "8px 12px" }}>
+                            <div style={{ fontSize: 12, color: doc.valor && (doc.valor.includes("APROBADO") || doc.valor.includes("DESMARCADO")) ? "#0891B2" : "#DC2626", fontWeight: 700, marginBottom: 4 }}>
+                              {doc.valor && (doc.valor.includes("APROBADO") || doc.valor.includes("DESMARCADO")) ? "✅" : "❌"} {doc.valor}
                             </div>
                             {(doc.num_ord || doc.fecha_resp) && (
                               <div style={{ fontSize: 10, color: "#555", marginBottom: 4 }}>
@@ -8614,6 +8640,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const normFiltro = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const solicitudesVista = solicitudes.map(s => solicitudesCompletasComite[s.id] ? { ...s, ...solicitudesCompletasComite[s.id] } : s);
   const solicitudHabitabilidadPersona = (personaId) => solicitudesVista.find(s => (s.personaId || s.persona_id) === personaId && (s.programaId || s.programa_id) === "habitabilidad");
+  const tieneSolicitudDesmarquePersona = (personaId) => !!solicitudHabitabilidadPersona(personaId);
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudHabitabilidadPersona(p.id);
     return estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
@@ -8699,13 +8726,25 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   });
   const listosParaVisita = miembros.filter(esListoParaVisita);
   const condicionalesDesmarque = miembros.filter(estaCondicional);
+  const desmarcadosTodos = personas.filter(p => esDesmarcado(p) && tieneSolicitudDesmarquePersona(p.id));
+  const desmarcadosConPrograma = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "con_programa");
+  const desmarcadosPendientes = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "pendiente_calificar");
+  const desmarcadosSinPrograma = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "sin_programa");
   const lugaresRuralesListos = [...new Set(
     listosParaVisita
       .filter(p => normFiltro(p.tipo_comite || p.tipoComite || p.tipo) === "rural")
       .map(p => (p.sector || "").toString().trim())
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b, "es"));
-  const baseMiembros = esComiteDesmarque && tabDesmarque === "no_visitados"
+  const baseMiembros = esComiteDesmarque && filtroEstado === "DESMARCADO" && tabDesmarque === "des_con_programa"
+    ? desmarcadosConPrograma
+    : esComiteDesmarque && filtroEstado === "DESMARCADO" && tabDesmarque === "des_pendiente"
+      ? desmarcadosPendientes
+      : esComiteDesmarque && filtroEstado === "DESMARCADO" && tabDesmarque === "des_sin_programa"
+        ? desmarcadosSinPrograma
+        : esComiteDesmarque && filtroEstado === "DESMARCADO"
+          ? desmarcadosTodos
+          : esComiteDesmarque && tabDesmarque === "no_visitados"
     ? noVisitadosDesmarque
     : esComiteDesmarque && tabDesmarque === "listos"
       ? listosParaVisita
@@ -8877,6 +8916,26 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     setMotivoMovimiento("");
   };
 
+  const togglePendienteCalificar = async (e, persona) => {
+    e.stopPropagation();
+    const estaEnDesmarque = (persona.comiteId || persona.comite_id) === COMITE_DESMARQUE;
+    if (!estaEnDesmarque || !tieneSolicitudDesmarquePersona(persona.id)) {
+      alert("Solo se puede marcar pendiente para calificar a desmarcados que siguen en DESMARQUE.");
+      return;
+    }
+    const nuevoValor = !persona.pendiente_calificar;
+    const { error } = await supabase.from("personas").update({ pendiente_calificar: nuevoValor }).eq("id", persona.id);
+    if (error) {
+      alert("No se pudo guardar pendiente para calificar: " + error.message);
+      return;
+    }
+    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, pendiente_calificar: nuevoValor } : p));
+    await registrarAuditoria?.("marcar_pendiente_calificar", "personas", persona.id, {
+      solicitante: persona.nombre || "",
+      pendiente_calificar: nuevoValor,
+    });
+  };
+
   const moverPersona = async () => {
     const motivo = motivoMovimiento.trim();
     if (!personaMover || !comiteDestinoMover) return;
@@ -8886,6 +8945,22 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     }
     const destino = comitesDestino.find(c => c.id === comiteDestinoMover);
     if (!destino) return;
+
+    // Validacion Fase 1: Desmarque solo permite un segundo programa si paso 9 esta listo.
+    const solDesmarque = solicitudHabitabilidadPersona(personaMover.id);
+    const tieneSolicitudDesmarque = (id) => !!solicitudHabitabilidadPersona(id);
+    const esCasoDesmarque = !!solDesmarque;
+    if (esCasoDesmarque) {
+      if (yaMovido(personaMover, tieneSolicitudDesmarque)) {
+        alert("Este solicitante ya fue movido a otro programa y no puede moverse de nuevo.");
+        return;
+      }
+      if (!esDesmarcado(personaMover)) {
+        alert("Solo se puede mover a un desmarcado que completó el proceso (paso 9 en verde — DESMARCADO).");
+        return;
+      }
+    }
+
     setMoviendoPersona(true);
     try {
       const origenNombre = comite?.nombre || personaMover.comite || personaMover.comiteId || "Sin comité anterior";
@@ -8898,6 +8973,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         comiteId: destino.id,
         comite: destino.nombre,
         tipo_comite: tipoDestino,
+        pendiente_calificar: false,
         observaciones,
       };
 
@@ -8906,36 +8982,57 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         comite_id: destino.id,
         comite: destino.nombre,
         tipo_comite: tipoDestino,
+        pendiente_calificar: false,
         observaciones,
       }).eq("id", personaMover.id);
       if (personaError) throw personaError;
 
       const programaDestino = todosProgramas.find(p => p.id === destino.programaId);
-      if (programaDestino && !solicitudes.some(s => s.personaId === personaMover.id && s.programaId === programaDestino.id)) {
-        const nuevaSol = {
-          id: uid(),
-          personaId: personaMover.id,
-          personaNombre: personaMover.nombre,
-          programaId: programaDestino.id,
-          fecha: today(),
-          comite: destino.nombre,
-          codigoComite: destino.id,
-          tipoComite: tipoDestino,
-          documentos: (programaDestino.documentos || []).map(d => ({
-            nombre: d.nombre,
-            obligatorio: d.obligatorio,
-            entregado: false,
-            tipo: d.tipo || null,
-            opciones: d.opciones || null,
-            opcionSeleccionada: null,
-            etiqueta: null,
-            valor: d.valor || "",
-            requiereArchivo: !!d.requiereArchivo,
-            requiereTexto: !!d.requiereTexto,
-            etiquetaTexto: d.etiquetaTexto || "",
-          })),
-        };
-        await onSaveSolicitudes([...solicitudes, nuevaSol]);
+      if (programaDestino) {
+        const yaExisteSol = solicitudes.some(s => s.personaId === personaMover.id && s.programaId === programaDestino.id);
+
+        // No-Desmarque: reemplazar solicitudes previas de otros programas (no acumular).
+        // Se conserva siempre la solicitud de habitabilidad (del desmarcado).
+        let solicitudesBase = solicitudes;
+        if (programaDestino.id !== PROGRAMA_DESMARQUE) {
+          const solsViejas = solicitudesNormalesPersona(personaMover.id, solicitudes)
+            .filter(s => (s.programaId || s.programa_id) !== programaDestino.id);
+          if (solsViejas.length > 0) {
+            for (const solVieja of solsViejas) {
+              await sb.from("solicitudes").delete().eq("id", solVieja.id);
+            }
+            solicitudesBase = solicitudes.filter(s => !solsViejas.some(v => v.id === s.id));
+          }
+        }
+
+        if (!yaExisteSol) {
+          const nuevaSol = {
+            id: uid(),
+            personaId: personaMover.id,
+            personaNombre: personaMover.nombre,
+            programaId: programaDestino.id,
+            fecha: today(),
+            comite: destino.nombre,
+            codigoComite: destino.id,
+            tipoComite: tipoDestino,
+            documentos: (programaDestino.documentos || []).map(d => ({
+              nombre: d.nombre,
+              obligatorio: d.obligatorio,
+              entregado: false,
+              tipo: d.tipo || null,
+              opciones: d.opciones || null,
+              opcionSeleccionada: null,
+              etiqueta: null,
+              valor: d.valor || "",
+              requiereArchivo: !!d.requiereArchivo,
+              requiereTexto: !!d.requiereTexto,
+              etiquetaTexto: d.etiquetaTexto || "",
+            })),
+          };
+          await onSaveSolicitudes([...solicitudesBase, nuevaSol]);
+        } else if (solicitudesBase !== solicitudes) {
+          await onSaveSolicitudes(solicitudesBase);
+        }
       }
 
       onSavePersonas(personas.map(p => p.id === personaMover.id ? personaActualizada : p));
@@ -9092,10 +9189,26 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 border:"2px solid "+(filtroEstado===k?c:"#ddd"),
                 background:filtroEstado===k?c:"#fff",
                 color:filtroEstado===k?"#fff":"#555" }}>
-              {l} {k!=="todos" ? "("+miembros.filter(p => {
+              {l} {k==="DESMARCADO" ? "("+desmarcadosTodos.length+")" : k!=="todos" ? "("+miembros.filter(p => {
                 const estado = estadoDesmarquePersona(p);
                 return estado.key === k || p.estado_desmarque === k;
               }).length+")" : "("+miembros.length+")"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {esComiteDesmarque && filtroEstado === "DESMARCADO" && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          {[
+            ["todos", "Todos desmarcados", desmarcadosTodos.length, "#0E7490"],
+            ["des_sin_programa", "Sin programa", desmarcadosSinPrograma.length, "#1D4ED8"],
+            ["des_pendiente", "Pendiente para calificar", desmarcadosPendientes.length, "#B45309"],
+            ["des_con_programa", "Con programa", desmarcadosConPrograma.length, "#64748B"],
+          ].map(([key, label, count, color]) => (
+            <button key={key} onClick={() => setTabDesmarque(key)}
+              style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + (tabDesmarque === key ? color : "#d1d5db"), background: tabDesmarque === key ? color : "#fff", color: tabDesmarque === key ? "#fff" : "#334155", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+              {label} ({count})
             </button>
           ))}
         </div>
@@ -9126,11 +9239,14 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             s.programaId === "habitabilidad" &&
             (s.documentos || []).some(d =>
               d.nombre && d.nombre.includes("Respuesta SERVIU") &&
-              d.valor && d.valor.toLowerCase().includes("aprobado")
+              d.valor && (d.valor.toLowerCase().includes("aprobado") || d.valor.toLowerCase().includes("desmarcado"))
             )
           );
           const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
           const condicional = estaCondicional(p);
+          const grupoDesmarqueActual = tieneHabitabilidad && esDesmarcado(p) ? grupoDesmarcado(p, tieneSolicitudDesmarquePersona) : "";
+          const desmarcadoBloqueado = grupoDesmarqueActual === "con_programa";
+          const puedeMarcarPendiente = grupoDesmarqueActual && (p.comiteId || p.comite_id) === COMITE_DESMARQUE;
           return (
             <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: condicional ? "#FFFBEB" : desmarqueEnTramite ? "#FFF7ED" : "#fff", borderRadius: 12, padding: "16px 20px", border: condicional ? "2px solid #F59E0B" : desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -9153,6 +9269,16 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                       Condicional
                     </div>
                   )}
+                  {grupoDesmarqueActual === "pendiente_calificar" && (
+                    <div style={{ display: "inline-block", marginTop: 4, marginLeft: 4, background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}>
+                      Pendiente para calificar
+                    </div>
+                  )}
+                  {desmarcadoBloqueado && (
+                    <div style={{ display: "inline-block", marginTop: 4, marginLeft: 4, background: "#E5E7EB", color: "#374151", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}>
+                      Con programa - bloqueado
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -9166,7 +9292,15 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 <button onClick={(e) => abrirCondicionalidad(e, p)} style={{ background: condicional ? "#FEF3C7" : "#F8FAFC", color: condicional ? "#92400E" : "#334155", border: "1px solid " + (condicional ? "#F59E0B" : "#CBD5E1"), borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                   {condicional ? "Ver condición" : "Condicional"}
                 </button>
-                <button onClick={(e) => abrirMover(e, p)} style={{ background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Mover</button>
+                {puedeMarcarPendiente && (
+                  <button onClick={(e) => togglePendienteCalificar(e, p)} style={{ background: p.pendiente_calificar ? "#FFFBEB" : "#F8FAFC", color: p.pendiente_calificar ? "#92400E" : "#334155", border: "1px solid " + (p.pendiente_calificar ? "#F59E0B" : "#CBD5E1"), borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                    {p.pendiente_calificar ? "Quitar pendiente" : "Pendiente"}
+                  </button>
+                )}
+                <button onClick={(e) => !desmarcadoBloqueado && abrirMover(e, p)} disabled={desmarcadoBloqueado}
+                  style={{ background: desmarcadoBloqueado ? "#F3F4F6" : "#EFF6FF", color: desmarcadoBloqueado ? "#9CA3AF" : "#1D4ED8", border: "1px solid " + (desmarcadoBloqueado ? "#E5E7EB" : "#BFDBFE"), borderRadius: 8, padding: "6px 12px", cursor: desmarcadoBloqueado ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700 }}>
+                  {desmarcadoBloqueado ? "Bloqueado" : "Mover"}
+                </button>
               </div>
             </div>
           );
@@ -10259,6 +10393,7 @@ export default function App() {
     numero_recepcion:     x.numero_recepcion || "",
     fecha_recepcion:      x.fecha_recepcion || "",
     estado_desmarque:     x.estado_desmarque || "",
+    pendiente_calificar:  x.pendiente_calificar === true || x.pendiente_calificar === "true",
     observaciones:        x.observaciones || "",
     lineaTiempoCsp:       normalizarLineaTiempoCsp(x.linea_tiempo_csp),
     // Mapeos lowercase DB -> camelCase app (campos de fichas técnicas)
@@ -10561,6 +10696,7 @@ export default function App() {
         numero_recepcion: ultima.numero_recepcion || "",
         fecha_recepcion: ultima.fecha_recepcion || "",
         estado_desmarque: ultima.estado_desmarque || "NO VISITADO",
+        pendiente_calificar: !!ultima.pendiente_calificar,
         observaciones: ultima.observaciones || "",
         linea_tiempo_csp: normalizarLineaTiempoCsp(ultima.lineaTiempoCsp || ultima.linea_tiempo_csp),
       };
@@ -10760,10 +10896,19 @@ export default function App() {
 
       setSolicitudes(prev => {
         const porId = new Map((prev || []).map(sol => [sol.id, sol]));
-        solicitudesConFechas.forEach(sol => {
-          porId.set(sol.id, { ...(porId.get(sol.id) || {}), ...sol, documentosCargados: true });
-        });
-        return Array.from(porId.values());
+        const idsActualizados = new Set(solicitudesConFechas.map(sol => sol.id));
+        const otrasPersonas = (prev || []).filter(sol =>
+          (sol.personaId || sol.persona_id) !== personaId || idsActualizados.has(sol.id)
+        );
+        const solicitudesPersona = solicitudesConFechas.map(sol => ({
+          ...(porId.get(sol.id) || {}),
+          ...sol,
+          documentosCargados: true,
+        }));
+        return [
+          ...otrasPersonas.filter(sol => !idsActualizados.has(sol.id)),
+          ...solicitudesPersona,
+        ];
       });
 
       // Sincronizar fechas pendientes via servidor Render
