@@ -29,7 +29,7 @@ function makeFilterChain(method, tabla, action, payload) {
 
   const chain = {
     eq: (col, val) => {
-      filters.push({ col, value: val });
+      filters.push({ col, op: 'eq', value: val });
       return chain;
     },
     // Permite usar como promesa directamente (await o .then())
@@ -60,10 +60,13 @@ function makeSelectChain(tabla, cols) {
   let orderCol = null, orderAsc = true;
 
   const chain = {
-    eq: (col, val) => { filters.push({ col, value: val }); return chain; },
+    eq: (col, val) => { filters.push({ col, op: 'eq', value: val }); return chain; },
+    neq: (col, val) => { filters.push({ col, op: 'neq', value: val }); return chain; },
+    gte: (col, val) => { filters.push({ col, op: 'gte', value: val }); return chain; },
+    lt: (col, val) => { filters.push({ col, op: 'lt', value: val }); return chain; },
     order: (col, opts = {}) => { orderCol = col; orderAsc = opts.ascending !== false; return chain; },
     then: (resolve) => {
-      const qp = filters.map(f => `eq[${f.col}]=${encodeURIComponent(f.value)}`).join('&');
+      const qp = filters.map(f => `${f.op || 'eq'}[${f.col}]=${encodeURIComponent(f.value)}`).join('&');
       const orderPart = orderCol ? `&orderBy=${orderCol}&orderAsc=${orderAsc}` : '';
       return apiCall('GET', `/api/db/${tabla}?${qp}&select=${cols || '*'}${orderPart}`)
         .then(r => resolve({ data: r.data || r, error: null }))

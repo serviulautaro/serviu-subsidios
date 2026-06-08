@@ -244,21 +244,23 @@ const columnasSelect = (select = '*') => {
 const filtrosDesdeQuery = (query = {}) => {
   const filtros = [];
   Object.entries(query).forEach(([key, value]) => {
-    // Formato 1: eq[col]=valor
-    const match = key.match(/^eq\[(.+)\]$/);
-    if (match) { filtros.push({ col: match[1], value }); return; }
+    // Formato 1: op[col]=valor (eq, neq, gte, lt)
+    const match = key.match(/^(eq|neq|gte|lt)\[(.+)\]$/);
+    if (match) { filtros.push({ op: match[1], col: match[2], value }); return; }
     // Formato 2: col=eq.valor (compatibilidad Supabase)
     if (typeof value === 'string' && value.startsWith('eq.')) {
-      filtros.push({ col: key, value: value.slice(3) });
+      filtros.push({ op: 'eq', col: key, value: value.slice(3) });
     }
   });
   return filtros;
 };
+const OPERADORES_SQL = { eq: '=', neq: '<>', gte: '>=', lt: '<' };
 const whereSql = (filtros = [], values = []) => {
   if (!filtros.length) return '';
   const partes = filtros.map(f => {
+    const op = OPERADORES_SQL[f.op || 'eq'] || '=';
     values.push(f.value);
-    return `${quoteIdent(f.col)} = $${values.length}`;
+    return `${quoteIdent(f.col)} ${op} $${values.length}`;
   });
   return ' WHERE ' + partes.join(' AND ');
 };
