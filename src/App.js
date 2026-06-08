@@ -210,6 +210,20 @@ const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
 const apiPath = (prefix, routePath = "", fileName = "") =>
   API + prefix + encodeRoutePath(routePath) + (fileName ? "/" + encodePathPart(fileName) : "");
+const usuarioAuditoriaHeaders = () => {
+  try {
+    const raw = sessionStorage.getItem("serviu_user") || localStorage.getItem("serviu_user");
+    const user = raw ? JSON.parse(raw) : null;
+    return {
+      ...(user?.id ? { "X-Serviu-User-Id": String(user.id) } : {}),
+      ...(user?.username || user?.usuario ? { "X-Serviu-Username": String(user.username || user.usuario) } : {}),
+      ...(user?.nombre ? { "X-Serviu-User-Name": String(user.nombre) } : {}),
+    };
+  } catch {
+    return {};
+  }
+};
+const jsonHeaders = () => ({ "Content-Type": "application/json", ...usuarioAuditoriaHeaders() });
 const STORAGE_BUCKET = "documentos-solicitantes";
 const safeStorageSegment = (value = "") => {
   const base = String(value || "")
@@ -2914,7 +2928,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     try {
       const res = await fetch(`${API}/api/db/${tabla}/update`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonHeaders(),
         body: JSON.stringify({ filters: filtros, values: valores })
       });
       const json = await res.json().catch(() => ({}));
@@ -3085,7 +3099,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
             const apiBase2 = (typeof window !== 'undefined' && !['localhost','127.0.0.1'].includes(window.location.hostname))
               ? window.location.origin : 'http://localhost:3001';
             const r2 = await fetch(`${apiBase2}/api/db/visitas/insert`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([v])
+              method: 'POST', headers: jsonHeaders(), body: JSON.stringify([v])
             });
             if (r2.ok) ok = true;
           } catch {}
@@ -3155,7 +3169,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       for (const v of porSincronizar) {
         try {
           const r = await fetch(`${apiBase}/api/db/visitas/insert`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: jsonHeaders(),
             body: JSON.stringify([v])
           });
           if (r.ok) sincronizadas.push(v.id);
@@ -3622,7 +3636,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           if (intento > 0) await new Promise(r => setTimeout(r, 1500));
           const r = await fetch(`${API}/api/archivo-base64`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: jsonHeaders(),
             body: JSON.stringify({
               persona_id: persona.id,
               nombre: nombreSubido,
@@ -3893,7 +3907,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (intento > 0) await new Promise(r => setTimeout(r, 1500));
         const r = await fetch(`${API}/api/db/archivos_solicitante/delete`, {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
+          headers: jsonHeaders(),
           body: JSON.stringify({ filters: [{ col: "persona_id", value: persona.id }, { col: "nombre", value: nombre }] })
         });
         if (r.ok) { borradoDePG = true; break; }
@@ -10148,7 +10162,10 @@ export default function App() {
     setCurrentUser(usuario);
     lastActivityRef.current = Date.now();
     limpiarSesionNavegador();
-    try { sessionStorage.setItem("serviu_session_active", "1"); } catch {}
+    try {
+      sessionStorage.setItem("serviu_session_active", "1");
+      sessionStorage.setItem("serviu_user", JSON.stringify(usuario));
+    } catch {}
     try {
       const { error } = await supabase.rpc("registrar_auditoria", {
         p_user_id: usuario.id,
@@ -10729,7 +10746,7 @@ export default function App() {
         try {
           const res = await fetch(`${API}/api/db/personas/insert`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: jsonHeaders(),
             body: JSON.stringify([nuevaPersonaPayload])
           });
           const json = await res.json().catch(() => ({}));
@@ -10774,7 +10791,7 @@ export default function App() {
             if (i > 0) await new Promise(r => setTimeout(r, 1500));
             try {
               const res = await fetch(`${API}/api/db/solicitudes/insert`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
+                method: "POST", headers: jsonHeaders(),
                 body: JSON.stringify(solPayload)
               });
               const json = await res.json().catch(() => ({}));
@@ -10943,7 +10960,7 @@ export default function App() {
           try {
             const res = await fetch(`${API}/api/db/solicitudes/update`, {
               method: "PATCH",
-              headers: { "Content-Type": "application/json" },
+              headers: jsonHeaders(),
               body: JSON.stringify({
                 filters: [{ col: "id", value: sol.id }],
                 values: { documentos: JSON.stringify(p.documentos), fecha_visita: p.fecha || "" }

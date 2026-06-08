@@ -14,6 +14,13 @@ export const IS_DEMO_MODE = process.env.REACT_APP_DEMO_MODE === 'true' && !USE_A
 
 async function apiCall(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  try {
+    const rawUser = sessionStorage.getItem('serviu_user') || localStorage.getItem('serviu_user');
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    if (user?.id) opts.headers['X-Serviu-User-Id'] = String(user.id);
+    if (user?.username || user?.usuario) opts.headers['X-Serviu-Username'] = String(user.username || user.usuario);
+    if (user?.nombre) opts.headers['X-Serviu-User-Name'] = String(user.nombre);
+  } catch {}
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(API + path, opts);
   if (!res.ok) {

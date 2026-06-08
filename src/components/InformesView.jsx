@@ -335,6 +335,10 @@ function accionTexto(accion) {
     eliminar_programa: "Programa eliminado",
     registrar_visita: "Visita registrada",
     mover_solicitante: "Solicitante movido",
+    api_insert: "Registro creado",
+    api_upsert: "Registro guardado",
+    api_update: "Registro actualizado",
+    api_delete: "Registro eliminado",
     crear_usuario_autorizado: "Usuario autorizado creado",
     bloquear_usuario_autorizado: "Usuario autorizado bloqueado",
     desbloquear_usuario_autorizado: "Usuario autorizado desbloqueado",
@@ -367,6 +371,14 @@ function detalleAuditoria(detalle, accion = "") {
       docs ? `Solicitud/documentos: ${docs}` : "",
     ].filter(Boolean).join(" | ");
   }
+  if (["api_insert", "api_upsert", "api_update", "api_delete"].includes(accion)) {
+    return [
+      detalle.tabla ? `Tabla: ${detalle.tabla}` : "",
+      detalle.cantidad ? `Registros: ${detalle.cantidad}` : "",
+      Array.isArray(detalle.campos) && detalle.campos.length ? `Campos: ${detalle.campos.join(", ")}` : "",
+      Array.isArray(detalle.ids) && detalle.ids.length ? `IDs: ${detalle.ids.join(", ")}` : "",
+    ].filter(Boolean).join(" | ");
+  }
   const partes = [];
   Object.entries(detalle || {}).forEach(([k, val]) => {
     if (val === undefined || val === null || val === "") return;
@@ -393,7 +405,7 @@ function imprimirAuditoria(fechaInicio, fechaTermino, logs, usuarioFiltro = "Tod
     <div class="stats">
       <div class="stat"><span class="k">Usuarios con actividad</span><b>${Object.keys(grupos).length}</b></div>
       <div class="stat"><span class="k">Modificaciones</span><b>${logs.length}</b></div>
-      <div class="stat"><span class="k">Documentos subidos</span><b>${logs.filter(l => l.accion === "subir_documento").length}</b></div>
+      <div class="stat"><span class="k">Documentos subidos</span><b>${logs.filter(l => l.accion === "subir_documento" || ((l.accion === "api_insert" || l.accion === "api_upsert") && l.detalle?.tabla === "archivos_solicitante")).length}</b></div>
       <div class="stat"><span class="k">Generado</span><b style="font-size:16px">${new Date().toLocaleTimeString("es-CL")}</b></div>
     </div>
     ${Object.entries(grupos).map(([usuario, items]) => `<div class="program-box">
@@ -1098,7 +1110,10 @@ function PanelAuditoriaUsuarios({ currentUser }) {
     return acc;
   }, {});
   const modificaciones = logsFiltrados.length;
-  const documentosSubidos = logsFiltrados.filter(l => l.accion === "subir_documento").length;
+  const documentosSubidos = logsFiltrados.filter(l =>
+    l.accion === "subir_documento" ||
+    ((l.accion === "api_insert" || l.accion === "api_upsert") && l.detalle?.tabla === "archivos_solicitante")
+  ).length;
 
   if (!esAdmin) {
     return <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: 14, color: "#991b1b", fontWeight: 800 }}>

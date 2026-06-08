@@ -541,6 +541,12 @@ app.post('/api/archivo-base64', async (req, res) => {
     );
     // Registrar en SQLite también
     try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run((carpeta||'') + '/' + nombre, carpeta||'', nombre); } catch {}
+    await registrarAuditoriaAutomatica(req, 'api_upsert', 'archivos_solicitante', [{
+      id: persona_id + '_' + nombre,
+      persona_id,
+      nombre,
+      carpeta: carpeta || '',
+    }], { campos: ['nombre', 'carpeta', 'data_url', 'mime_type'] });
     console.log('[archivo-base64] Guardado en PG:', nombre, 'persona:', persona_id);
     res.json({ ok: true, nombre });
   } catch(e) {
@@ -630,6 +636,57 @@ app.get('/api/solicitudes', async (req, res) => {
   }
 });
 
+const usuarioAuditoriaDesdeReq = (req) => ({
+  id: req.get('X-Serviu-User-Id') || '',
+  username: req.get('X-Serviu-Username') || '',
+  nombre: req.get('X-Serviu-User-Name') || '',
+});
+const resumenValoresAuditoria = (values = {}) => {
+  const omitidos = new Set(['documentos', 'data_url', 'archivoData', 'base64', 'contenido', 'buffer']);
+  return Object.keys(values || {}).filter(k => !omitidos.has(k));
+};
+async function registrarAuditoriaAutomatica(req, accion, tabla, data = [], detalle = {}) {
+  if (!pgPool || tabla === 'audit_log') return;
+  try {
+    const user = usuarioAuditoriaDesdeReq(req);
+    const uid = String(user.id || '');
+    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid);
+    const filas = Array.isArray(data) ? data : [data].filter(Boolean);
+    const payload = {
+      tabla,
+      cantidad: filas.length,
+      ids: filas.map(r => r?.id).filter(Boolean).slice(0, 20),
+      ...detalle,
+    };
+    const result = await requirePg().query(
+      `INSERT INTO audit_log(user_id, usuario, accion, entidad, entidad_id, detalle)
+       SELECT u.id, u.nombre, $3, $4, $5, COALESCE($6::jsonb, '{}'::jsonb)
+       FROM app_users u
+       WHERE u.activo = true
+         AND (
+           ($1::boolean = true AND u.id = $2::uuid)
+           OR lower(u.username) = lower(trim(COALESCE($7, '')))
+           OR lower(u.nombre) = lower(trim(COALESCE($8, '')))
+         )
+       ORDER BY CASE WHEN $1::boolean = true AND u.id = $2::uuid THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [
+        esUuid,
+        esUuid ? uid : null,
+        accion,
+        tabla,
+        payload.ids?.[0] || '',
+        JSON.stringify(payload),
+        user.username,
+        user.nombre,
+      ]
+    );
+    if (!result.rowCount) console.warn('[auditoria auto] Usuario no encontrado para', accion, tabla);
+  } catch (e) {
+    console.warn('[auditoria auto]', e.message);
+  }
+}
+
 app.get('/api/db/:table', async (req, res) => {
   try {
     const data = await pgSelect(req.params.table, req.query);
@@ -642,6 +699,7 @@ app.get('/api/db/:table', async (req, res) => {
 app.post('/api/db/:table/insert', async (req, res) => {
   try {
     const data = await pgInsert(req.params.table, req.body?.rows || req.body || []);
+    await registrarAuditoriaAutomatica(req, 'api_insert', req.params.table, data);
     res.json({ ok: true, data });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
@@ -651,6 +709,7 @@ app.post('/api/db/:table/insert', async (req, res) => {
 app.post('/api/db/:table/upsert', async (req, res) => {
   try {
     const data = await pgInsert(req.params.table, req.body?.rows || req.body || [], { upsert: true });
+    await registrarAuditoriaAutomatica(req, 'api_upsert', req.params.table, data);
     res.json({ ok: true, data });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
@@ -660,6 +719,10 @@ app.post('/api/db/:table/upsert', async (req, res) => {
 app.patch('/api/db/:table/update', async (req, res) => {
   try {
     const data = await pgUpdate(req.params.table, req.body?.filters || [], req.body?.values || {});
+    await registrarAuditoriaAutomatica(req, 'api_update', req.params.table, data, {
+      filtros: req.body?.filters || [],
+      campos: resumenValoresAuditoria(req.body?.values || {}),
+    });
     res.json({ ok: true, data });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
@@ -669,6 +732,9 @@ app.patch('/api/db/:table/update', async (req, res) => {
 app.delete('/api/db/:table/delete', async (req, res) => {
   try {
     const data = await pgDelete(req.params.table, req.body?.filters || []);
+    await registrarAuditoriaAutomatica(req, 'api_delete', req.params.table, data, {
+      filtros: req.body?.filters || [],
+    });
     res.json({ ok: true, data });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
