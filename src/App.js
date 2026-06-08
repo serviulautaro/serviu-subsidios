@@ -356,7 +356,7 @@ const estadoLineaDesmarque = (sol = {}) => {
   const respuestaServiu = buscarDocDesmarque(docs, ["respuesta", "serviu"]);
   const respuestaTexto = valorDocTexto(respuestaServiu);
   const respuestaDetalle = detalleResultadoDoc(respuestaServiu);
-  const respuestaIngresada = docConVb(respuestaServiu);
+  const respuestaIngresada = docConVb(respuestaServiu) && !!respuestaTexto;
   const desmarcado = respuestaIngresada && (respuestaTexto.includes("DESMARCADO") || respuestaTexto.includes("APROBADO"));
   const serviuRechazadoApelable = respuestaTexto.includes("APELAR") || respuestaTexto.includes("APELABLE");
   const serviuRechazado = respuestaTexto.includes("RECHAZADO") && !serviuRechazadoApelable;
