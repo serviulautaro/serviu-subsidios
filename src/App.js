@@ -9,6 +9,7 @@ import {
   COMITE_DESMARQUE,
   PROGRAMA_DESMARQUE,
   esDesmarcado,
+  respuestaServiuLista,
   grupoDesmarcado,
   yaMovido,
   solicitudesNormalesPersona,
@@ -8954,7 +8955,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         alert("Este solicitante ya fue movido a otro programa y no puede moverse de nuevo.");
         return;
       }
-      if (!esDesmarcado(personaMover)) {
+      const desmarqueListo = esDesmarcado(personaMover) || respuestaServiuLista(solDesmarque);
+      if (!desmarqueListo) {
         alert("Solo se puede mover a un desmarcado que completó el proceso (paso 9 en verde — DESMARCADO).");
         return;
       }
@@ -8972,6 +8974,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         comiteId: destino.id,
         comite: destino.nombre,
         tipo_comite: tipoDestino,
+        estado_desmarque: esCasoDesmarque ? "DESMARCADO" : personaMover.estado_desmarque,
         pendiente_calificar: false,
         observaciones,
       };
@@ -8981,6 +8984,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
         comite_id: destino.id,
         comite: destino.nombre,
         tipo_comite: tipoDestino,
+        estado_desmarque: esCasoDesmarque ? "DESMARCADO" : personaMover.estado_desmarque,
         pendiente_calificar: false,
         observaciones,
       }).eq("id", personaMover.id);
@@ -8988,7 +8992,11 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
 
       const programaDestino = todosProgramas.find(p => p.id === destino.programaId);
       if (programaDestino) {
-        const yaExisteSol = solicitudes.some(s => s.personaId === personaMover.id && s.programaId === programaDestino.id);
+        const solExistenteDestino = solicitudes.find(s =>
+          (s.personaId || s.persona_id) === personaMover.id &&
+          (s.programaId || s.programa_id) === programaDestino.id
+        );
+        const yaExisteSol = !!solExistenteDestino;
 
         // No-Desmarque: reemplazar solicitudes previas de otros programas (no acumular).
         // Se conserva siempre la solicitud de habitabilidad (del desmarcado).
@@ -9029,7 +9037,21 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             })),
           };
           await onSaveSolicitudes([...solicitudesBase, nuevaSol]);
-        } else if (solicitudesBase !== solicitudes) {
+        } else {
+          const solActualizada = {
+            ...solExistenteDestino,
+            comite: destino.nombre,
+            codigoComite: destino.id,
+            codigo_comite: destino.id,
+            tipoComite: tipoDestino,
+            tipo_comite: tipoDestino,
+          };
+          await sb.from("solicitudes").update({
+            comite: destino.nombre,
+            codigo_comite: destino.id,
+            tipo_comite: tipoDestino,
+          }).eq("id", solExistenteDestino.id);
+          solicitudesBase = solicitudesBase.map(s => s.id === solExistenteDestino.id ? solActualizada : s);
           await onSaveSolicitudes(solicitudesBase);
         }
       }
