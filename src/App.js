@@ -8645,6 +8645,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const sol = solicitudHabitabilidadPersona(p.id);
     return estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
   };
+  const estadoClaveDesmarquePersona = (p) => estadoDesmarquePersona(p)?.key || "";
+  const esDesmarcadoActual = (p) =>
+    tieneSolicitudDesmarquePersona(p.id) && estadoClaveDesmarquePersona(p) === "DESMARCADO";
   const lineasCondicionalidad = (persona = {}) => String(persona.observaciones || "")
     .split(/\n+/)
     .filter(linea => /\[CONDICIONAL (ACTIVA|CUMPLIDA)\]/i.test(linea));
@@ -8658,10 +8661,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const sol = solicitudHabitabilidadPersona(p.id);
     if (!sol) return false;
     const st = estadoLineaDesmarque(sol);
-    const estadoGuardado = String(p.estado_desmarque || p.estadoDesmarque || "").trim().toUpperCase();
-    const sigueNoVisitado = !estadoGuardado || estadoGuardado === "NO VISITADO";
-    return sigueNoVisitado &&
-      st.calificacion.estado === "CALIFICA" &&
+    return st.calificacion.estado === "CALIFICA" &&
       !st.visitado &&
       !st.solicitudDom &&
       !st.informeIngresado &&
@@ -8721,12 +8721,11 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   }, [comiteId, miembros.map(p => p.id).join("|"), solicitudes.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const noVisitadosDesmarque = miembros.filter(p => {
     const estado = estadoDesmarquePersona(p);
-    const estadoGuardado = String(p.estado_desmarque || p.estadoDesmarque || "").toUpperCase();
-    return estado.key === "NO VISITADO" || estado.label === "No Visitado" || estadoGuardado === "NO VISITADO";
+    return estado.key === "NO VISITADO" || estado.label === "No Visitado";
   });
   const listosParaVisita = miembros.filter(esListoParaVisita);
   const condicionalesDesmarque = miembros.filter(estaCondicional);
-  const desmarcadosTodos = personas.filter(p => esDesmarcado(p) && tieneSolicitudDesmarquePersona(p.id));
+  const desmarcadosTodos = personas.filter(esDesmarcadoActual);
   const desmarcadosConPrograma = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "con_programa");
   const desmarcadosPendientes = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "pendiente_calificar");
   const desmarcadosSinPrograma = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "sin_programa");
@@ -8756,7 +8755,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       (p.rut || "").includes(search) ||
       (p.comuna || "").toLowerCase().includes(search.toLowerCase());
     const estado = estadoDesmarquePersona(p);
-    const matchEstado = !esComiteDesmarque || filtroEstado === "todos" || estado.key === filtroEstado || p.estado_desmarque === filtroEstado;
+    const matchEstado = !esComiteDesmarque || filtroEstado === "todos" || estado.key === filtroEstado;
     const tipo = normFiltro(p.tipo_comite || p.tipoComite || p.tipo);
     const matchTipoListos = !esComiteDesmarque || tabDesmarque !== "listos" || !filtroTipoListos || tipo === normFiltro(filtroTipoListos);
     const matchLugarRural = !esComiteDesmarque || tabDesmarque !== "listos" || filtroTipoListos !== "RURAL" || !filtroLugarRuralListos || normFiltro(p.sector) === normFiltro(filtroLugarRuralListos);
@@ -9191,7 +9190,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 color:filtroEstado===k?"#fff":"#555" }}>
               {l} {k==="DESMARCADO" ? "("+desmarcadosTodos.length+")" : k!=="todos" ? "("+miembros.filter(p => {
                 const estado = estadoDesmarquePersona(p);
-                return estado.key === k || p.estado_desmarque === k;
+                return estado.key === k;
               }).length+")" : "("+miembros.length+")"}
             </button>
           ))}
