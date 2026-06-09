@@ -639,24 +639,45 @@ const LINEA_TIEMPO_CSP = [
   { id: "comite_pj", label: "Comité con PJ" },
   { id: "llamado_licitacion", label: "Llamado a licitación" },
   { id: "adjudicacion_empresa", label: "Adjudicación Empresa" },
+  { id: "visita_constructora", label: "Visita de constructora", fecha: "fecha_visita_constructora", observacion: "observacion_visita_constructora" },
   { id: "inicio_actividades_serviu", label: "Inicio actividades SERVIU" },
+  { id: "solicitante_califica_serviu", label: "Solicitante califica SERVIU", decision: "solicitante_serviu" },
   { id: "pre_banco", label: "Pre Banco", detalle: "Reuniones Normativas - Área Social", reuniones: true },
   { id: "preparacion_proyecto_constructora", label: "Preparación Proyecto Constructora", detalle: "Área Técnica", reuniones: true },
+  { id: "ahorro_minimo", label: "Cumple con ahorro mínimo", decision: "ahorro_minimo", positivo: "Sí", negativo: "No" },
   { id: "ingreso_proyecto_serviu", label: "Ingreso proyecto SERVIU" },
   { id: "observaciones_serviu", label: "Observaciones SERVIU" },
   { id: "calificacion_serviu", label: "Calificación SERVIU", decision: "serviu" },
   { id: "postulacion_serviu", label: "Postulación SERVIU" },
+  { id: "subsidio_asignado", label: "Subsidio asignado", decision: "subsidio_asignado", positivo: "Sí", negativo: "No" },
   { id: "ejecucion_obras", label: "Ejecución de las obras" },
 ];
 const decisionLineaTiempoCsp = (linea = {}, tipo = "") => linea[`decision_${tipo}`] || "";
-const lineaTiempoCspCortada = (linea = {}, etapaIndex = 0) =>
-  (decisionLineaTiempoCsp(linea, "documentos") === "no_califica" && etapaIndex > 4) ||
-  (decisionLineaTiempoCsp(linea, "serviu") === "no_califica" && etapaIndex > 16);
+const notaDecisionLineaTiempoCsp = (linea = {}, tipo = "") => String(linea[`nota_${tipo}`] || "").trim();
+const DECISIONES_CSP_CORTAN = new Set(["documentos", "solicitante_serviu", "ahorro_minimo", "serviu", "subsidio_asignado"]);
+const corteLineaTiempoCsp = (linea = {}) => {
+  const idx = LINEA_TIEMPO_CSP.findIndex(etapa =>
+    etapa.decision &&
+    DECISIONES_CSP_CORTAN.has(etapa.decision) &&
+    decisionLineaTiempoCsp(linea, etapa.decision) === "no_califica"
+  );
+  if (idx < 0) return null;
+  const etapa = LINEA_TIEMPO_CSP[idx];
+  return { idx, etapa, tipo: etapa.decision, nota: notaDecisionLineaTiempoCsp(linea, etapa.decision) };
+};
+const lineaTiempoCspCortada = (linea = {}, etapaIndex = 0) => {
+  const corte = corteLineaTiempoCsp(linea);
+  return !!corte && etapaIndex > corte.idx;
+};
 const normalizarLineaTiempoCsp = (valor = {}) => {
   if (typeof valor === "string") {
     try { valor = JSON.parse(valor); } catch { valor = {}; }
   }
   return valor && typeof valor === "object" && !Array.isArray(valor) ? valor : {};
+};
+const estadoNoCalificaCspPersona = (persona = {}) => {
+  const linea = normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp);
+  return corteLineaTiempoCsp(linea);
 };
 const normalizarNombreSolicitante = (valor = "") =>
   String(valor || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("es-CL");
@@ -1857,6 +1878,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
           const comite = buscarComitePersona(comites, p);
           const comiteNombreVisible = comite?.nombre || p.comite || "";
           const esPrioritario = solicitantePrioritario(p.id, solicitudes);
+          const noCalificaCsp = estadoNoCalificaCspPersona(p);
 
           // Detectar "Desmarque en trámite": tiene habitabilidad + otro programa,
           // y Respuesta SERVIU no está aprobada
@@ -1873,17 +1895,22 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
 
           return (
             <div key={p.id} onClick={() => onDetail(p.id)} style={{
-              background: esPrioritario ? "#FFFBEB" : desmarqueEnTramite ? "#FFF7ED" : "#fff",
+              background: noCalificaCsp ? "#FEF2F2" : esPrioritario ? "#FFFBEB" : desmarqueEnTramite ? "#FFF7ED" : "#fff",
               borderRadius: 12, padding: "16px 20px",
-              border: esPrioritario ? "2px solid #F59E0B" : desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de",
+              border: noCalificaCsp ? "2px solid #DC2626" : esPrioritario ? "2px solid #F59E0B" : desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de",
               display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer"
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 22, background: esPrioritario ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: noCalificaCsp ? "#DC2626" : esPrioritario ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{p.nombre[0].toUpperCase()}</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: noCalificaCsp ? "#DC2626" : "#111827" }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
                   {comiteNombreVisible && <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 2 }}>● {comiteNombreVisible}</div>}
+                  {noCalificaCsp && (
+                    <div style={{ display: "inline-block", marginTop: 4, background: "#DC2626", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 900 }}>
+                      No califica: {noCalificaCsp.nota || noCalificaCsp.etapa?.label}
+                    </div>
+                  )}
                   {desmarqueEnTramite && (
                     <div style={{ display: "inline-block", marginTop: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: 0.3 }}>
                       ⚠ Desmarque en trámite
@@ -3386,6 +3413,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const guardarLineaTiempoPersonaCsp = async () => {
     if (!persona) return;
+    const faltaNota = LINEA_TIEMPO_CSP.find(etapa =>
+      etapa.decision &&
+      decisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) === "no_califica" &&
+      !notaDecisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision)
+    );
+    if (faltaNota) {
+      alert(`Debe ingresar la nota o razón para: ${faltaNota.label}`);
+      return;
+    }
     if (!window.confirm("¿Está seguro de guardar los cambios de la línea de tiempo de este solicitante?")) return;
     setGuardandoLineaTiempoPersona(true);
     try {
@@ -3406,6 +3442,31 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const cancelarEdicionLineaTiempoPersona = () => {
     setLineaTiempoPersonaCsp(normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
     setEditandoLineaTiempoPersona(false);
+  };
+
+  const cambiarDecisionLineaTiempoPersona = (etapa, valor) => {
+    if (!etapa?.decision) return;
+    if (valor === "no_califica") {
+      const anterior = notaDecisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision);
+      const nota = window.prompt(`Ingrese la razón de la no calificación para "${etapa.label}":`, anterior);
+      if (!nota || !nota.trim()) {
+        alert("Debe escribir una nota para guardar No califica.");
+        return;
+      }
+      setLineaTiempoPersonaCsp(prev => ({
+        ...prev,
+        [etapa.id]: true,
+        [`decision_${etapa.decision}`]: "no_califica",
+        [`nota_${etapa.decision}`]: nota.trim(),
+      }));
+      return;
+    }
+    setLineaTiempoPersonaCsp(prev => ({
+      ...prev,
+      [etapa.id]: true,
+      [`decision_${etapa.decision}`]: "califica",
+      [`nota_${etapa.decision}`]: "",
+    }));
   };
 
   useEffect(() => {
@@ -4581,6 +4642,7 @@ const datosSolicitud = {
     const c = conteoDocumentosSolicitud(s.documentos || [], s.programaId);
     return { completos: acc.completos + c.completos, total: acc.total + c.total };
   }, { completos: 0, total: 0 });
+  const noCalificaCspActual = estadoNoCalificaCspPersona(persona);
 
   return (
     <div>
@@ -4591,9 +4653,14 @@ const datosSolicitud = {
           <div style={{ width: 58, height: 58, borderRadius: 29, background: "#1e3a5f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 24 }}>{persona.nombre[0].toUpperCase()}</div>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#1e3a5f" }}>{persona.nombre}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: noCalificaCspActual ? "#DC2626" : "#1e3a5f" }}>{persona.nombre}</div>
               <SiguientePaso visitas={visitas} onBorrar={borrarSiguientePaso} />
             </div>
+            {noCalificaCspActual && (
+              <div style={{ marginTop: 5, display: "inline-block", background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 900 }}>
+                No califica en {noCalificaCspActual.etapa?.label}: {noCalificaCspActual.nota || "Sin nota registrada"}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: "#888" }}>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
             {(persona.puntajeRSH || persona.integrantesFamiliares) && <div style={{ fontSize: 13, color: "#888" }}>{persona.puntajeRSH ? "RSH: " + persona.puntajeRSH : ""}{persona.integrantesFamiliares ? " - Grupo familiar: " + persona.integrantesFamiliares + " personas" : ""}</div>}
@@ -4703,6 +4770,7 @@ const datosSolicitud = {
               const bloqueadaPorCorte = lineaTiempoCspCortada(lineaTiempoPersonaCsp, idx);
               const bloqueada = !editandoLineaTiempoPersona || bloqueadaPorCorte;
               const decision = etapa.decision ? decisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
+              const notaDecision = etapa.decision ? notaDecisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
               const reunionesMarcadas = etapa.reuniones ? [1, 2, 3, 4, 5].filter(n => lineaTiempoPersonaCsp[`${etapa.id}_reunion_${n}`]).length : 0;
               return (
                 <div key={etapa.id}
@@ -4727,14 +4795,33 @@ const datosSolicitud = {
                   {etapa.detalle && <div style={{ fontSize: 10, marginTop: 3, opacity: .82 }}>{etapa.detalle}</div>}
                   {etapa.decision && (
                     <div style={{ display: "flex", gap: 5, marginTop: 8 }}>
-                      <button type="button" disabled={bloqueada} onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [`decision_${etapa.decision}`]: "califica" }))}
+                      <button type="button" disabled={bloqueada} onClick={() => cambiarDecisionLineaTiempoPersona(etapa, "califica")}
                         style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "califica" ? "#059669" : "#D1FAE5", color: decision === "califica" ? "#fff" : "#047857", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
-                        Califica
+                        {etapa.positivo || "Califica"}
                       </button>
-                      <button type="button" disabled={bloqueada} onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [`decision_${etapa.decision}`]: "no_califica" }))}
+                      <button type="button" disabled={bloqueada} onClick={() => cambiarDecisionLineaTiempoPersona(etapa, "no_califica")}
                         style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "no_califica" ? "#DC2626" : "#FEE2E2", color: decision === "no_califica" ? "#fff" : "#B91C1C", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
-                        No califica
+                        {etapa.negativo || "No califica"}
                       </button>
+                    </div>
+                  )}
+                  {etapa.decision && decision === "no_califica" && (
+                    <div style={{ marginTop: 7, background: "#FFF1F2", border: "1px solid #FCA5A5", borderRadius: 6, padding: "5px 6px", color: "#B91C1C", fontSize: 10, fontWeight: 800, lineHeight: 1.25 }}>
+                      Nota: {notaDecision || "Debe ingresar razón"}
+                    </div>
+                  )}
+                  {etapa.fecha && (
+                    <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                      <input type="date" disabled={bloqueada}
+                        value={lineaTiempoPersonaCsp[etapa.fecha] || ""}
+                        onChange={e => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [etapa.fecha]: e.target.value }))}
+                        style={{ width: "100%", boxSizing: "border-box", border: "1px solid #CBD5E1", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "#1e3a5f", background: bloqueada ? "#F3F4F6" : "#fff" }} />
+                      <textarea disabled={bloqueada}
+                        value={lineaTiempoPersonaCsp[etapa.observacion] || ""}
+                        onChange={e => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [etapa.observacion]: e.target.value }))}
+                        placeholder="Observaciones"
+                        rows={2}
+                        style={{ width: "100%", boxSizing: "border-box", resize: "vertical", border: "1px solid #CBD5E1", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "#1e3a5f", background: bloqueada ? "#F3F4F6" : "#fff" }} />
                     </div>
                   )}
                   {etapa.reuniones && (
@@ -9316,16 +9403,22 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           );
           const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
           const condicional = estaCondicional(p);
+          const noCalificaCsp = estadoNoCalificaCspPersona(p);
           const grupoDesmarqueActual = tieneHabitabilidad && esDesmarcado(p) ? grupoDesmarcado(p, tieneSolicitudDesmarquePersona) : "";
           const desmarcadoBloqueado = grupoDesmarqueActual === "con_programa";
           const puedeMarcarPendiente = grupoDesmarqueActual && (p.comiteId || p.comite_id) === COMITE_DESMARQUE;
           return (
-            <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: condicional ? "#FFFBEB" : desmarqueEnTramite ? "#FFF7ED" : "#fff", borderRadius: 12, padding: "16px 20px", border: condicional ? "2px solid #F59E0B" : desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+            <div key={p.id} onClick={() => onDetail(p.id)} style={{ background: noCalificaCsp ? "#FEF2F2" : condicional ? "#FFFBEB" : desmarqueEnTramite ? "#FFF7ED" : "#fff", borderRadius: 12, padding: "16px 20px", border: noCalificaCsp ? "2px solid #DC2626" : condicional ? "2px solid #F59E0B" : desmarqueEnTramite ? "2px solid #F97316" : "1px solid #e8e3de", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 22, background: condicional ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{(p.nombre || "?")[0].toUpperCase()}</div>
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: noCalificaCsp ? "#DC2626" : condicional ? "#F59E0B" : desmarqueEnTramite ? "#F97316" : "#7C3AED", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{(p.nombre || "?")[0].toUpperCase()}</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: noCalificaCsp ? "#DC2626" : "#111827" }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
+                  {noCalificaCsp && (
+                    <div style={{ display: "inline-block", marginTop: 4, background: "#DC2626", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 900 }}>
+                      No califica: {noCalificaCsp.nota || noCalificaCsp.etapa?.label}
+                    </div>
+                  )}
                   {estadoDesmarqueVisible && (
                     <span style={{ display:"inline-block", marginTop:4, background: estadoDesmarqueVisible.bg, color: estadoDesmarqueVisible.color, borderRadius: 10, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
                       {estadoDesmarqueVisible.label}
