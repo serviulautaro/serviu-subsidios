@@ -210,6 +210,8 @@ const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
 const apiPath = (prefix, routePath = "", fileName = "") =>
   API + prefix + encodeRoutePath(routePath) + (fileName ? "/" + encodePathPart(fileName) : "");
+const archivoRegistroId = (personaId = "", carpeta = "", nombre = "") =>
+  [personaId, carpeta, nombre].map(v => String(v || "").trim()).join("__");
 const usuarioAuditoriaHeaders = () => {
   try {
     const raw = sessionStorage.getItem("serviu_user") || localStorage.getItem("serviu_user");
@@ -3536,7 +3538,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   // Registra un archivo en Supabase asociado al solicitante
   const _registrarArchivoSupa = async (nombre, carp, extra = {}) => {
     const base = {
-      id: `${persona.id}_${nombre}`,
+      id: archivoRegistroId(persona.id, carp || carpeta, nombre),
       persona_id: persona.id,
       nombre,
       carpeta: carp || carpeta
@@ -3551,7 +3553,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!dataUrl || !persona?.id) return;
     try {
       await supabase.from("archivos_solicitante").upsert({
-        id: `${persona.id}_${nombre}`,
+        id: archivoRegistroId(persona.id, carp || carpeta, nombre),
         persona_id: persona.id,
         nombre,
         carpeta: carp || carpeta,
@@ -3679,7 +3681,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     // Trae nombre + carpeta de todos los archivos de esta persona
     let pgNames = [];
     try {
-      const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type`;
+      const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type&soloDisponibles=true`;
       const r = await fetch(urlPG);
       const json = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -3779,14 +3781,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       if (!url) return false;
       // Nunca intentar URLs de Supabase Storage — ya no se usa
       if (esUrlSupabaseStorage(url)) return false;
+      const esperaHtml = nombre.toLowerCase().endsWith(".html");
       try {
         let res = await fetch(url, { method: "HEAD", cache: "no-store" });
         let contentType = res.headers.get("content-type") || "";
-        if (res.ok && !contentType.includes("text/html") && !contentType.includes("application/json")) return true;
+        if (res.ok && !contentType.includes("application/json") && (esperaHtml || !contentType.includes("text/html"))) return true;
         if (res.status === 405 || !res.ok) {
           res = await fetch(url, { method: "GET", cache: "no-store", headers: { Range: "bytes=0-0" } });
           contentType = res.headers.get("content-type") || "";
-          return res.ok && !contentType.includes("text/html") && !contentType.includes("application/json");
+          return res.ok && !contentType.includes("application/json") && (esperaHtml || !contentType.includes("text/html"));
         }
       } catch {}
       return false;

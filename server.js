@@ -142,7 +142,7 @@ async function migrarArchivosGitAPG() {
               `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
                VALUES ($1,$2,$3,$4,$5,$6)
                ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type`,
-              [personaId + '_' + nombre, personaId, nombre, carpeta, dataUrl, mime]
+              [archivoRegistroId(personaId, carpeta, nombre), personaId, nombre, carpeta, dataUrl, mime]
             );
             ok++;
           }
@@ -400,6 +400,9 @@ async function pgSelect(table, query = {}) {
   const values = [];
   let sql = `SELECT ${columnasSelect(query.select)} FROM ${quoteIdent(table)}`;
   sql += whereSql(filtrosDesdeQuery(query), values);
+  if (table === 'archivos_solicitante' && String(query.soloDisponibles || '') === 'true') {
+    sql += sql.includes(' WHERE ') ? ' AND data_url IS NOT NULL' : ' WHERE data_url IS NOT NULL';
+  }
   sql += aplicarOrdenRango(query, values);
   const { rows } = await requirePg().query(sql, values);
   return rows;
@@ -537,12 +540,12 @@ app.post('/api/archivo-base64', async (req, res) => {
       `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
        VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type, carpeta=EXCLUDED.carpeta`,
-      [persona_id + '_' + nombre, persona_id, nombre, carpeta || '', data_url, mime_type || 'application/octet-stream']
+      [archivoRegistroId(persona_id, carpeta || '', nombre), persona_id, nombre, carpeta || '', data_url, mime_type || 'application/octet-stream']
     );
     // Registrar en SQLite también
     try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run((carpeta||'') + '/' + nombre, carpeta||'', nombre); } catch {}
     await registrarAuditoriaAutomatica(req, 'api_upsert', 'archivos_solicitante', [{
-      id: persona_id + '_' + nombre,
+      id: archivoRegistroId(persona_id, carpeta || '', nombre),
       persona_id,
       nombre,
       carpeta: carpeta || '',
@@ -947,11 +950,14 @@ function normalizarArchivoLocal(value = '') {
     .trim();
 }
 
+const archivoRegistroId = (personaId = '', carpeta = '', nombre = '') =>
+  [personaId, carpeta, nombre].map(v => String(v || '').trim()).join('__');
+
 function buscarArchivoLocal(carpetaRel, archivo) {
   const directo = safeDocsPath(carpetaRel, archivo);
   if (fs.existsSync(directo) && fs.statSync(directo).isFile()) return directo;
   const objetivo = normalizarArchivoLocal(path.basename(archivo));
-  const carpetaNorm = normalizarArchivoLocal(carpetaRel).replace(/\\/g, '/');
+  const carpetaBase = safeDocsPath(carpetaRel);
   const candidatos = [];
   const recorrer = (dir) => {
     let items = [];
@@ -962,9 +968,8 @@ function buscarArchivoLocal(carpetaRel, archivo) {
       if (item.isFile() && normalizarArchivoLocal(item.name) === objetivo) candidatos.push(full);
     }
   };
-  recorrer(docsDir);
-  if (!candidatos.length) return null;
-  return candidatos.find(c => normalizarArchivoLocal(path.relative(docsDir, c)).replace(/\\/g, '/').includes(carpetaNorm)) || candidatos[0];
+  recorrer(carpetaBase);
+  return candidatos[0] || null;
 }
 
 // Usar memoria para archivos — Render no tiene disco persistente
@@ -1000,7 +1005,7 @@ app.post('/subir/{*path}', upload.single('archivo'), async (req, res) => {
           `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
            VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type, carpeta=EXCLUDED.carpeta`,
-          [personaId + '_' + nombre, personaId, nombre, carpetaRel, dataUrl, mimeType]
+          [archivoRegistroId(personaId, carpetaRel, nombre), personaId, nombre, carpetaRel, dataUrl, mimeType]
         );
         console.log('[subir] Guardado en PG:', nombre, 'persona:', personaId);
       } catch(e) { console.warn('[subir] PG error:', e.message); }
@@ -1042,7 +1047,7 @@ app.get('/archivos/{*path}', async (req, res) => {
   if (pgPool) {
     try {
       const { rows } = await requirePg().query(
-        `SELECT nombre FROM archivos_solicitante WHERE carpeta=$1 AND nombre IS NOT NULL`,
+        `SELECT nombre FROM archivos_solicitante WHERE carpeta=$1 AND nombre IS NOT NULL AND data_url IS NOT NULL`,
         [carpetaRel]
       );
       rows.forEach(r => archivosSet.add(r.nombre));
@@ -1064,16 +1069,6 @@ async function servirDesdeDB(res, nombre, carpeta) {
         `SELECT data_url, mime_type FROM archivos_solicitante
          WHERE nombre=$1 AND carpeta=$2 AND data_url IS NOT NULL LIMIT 1`,
         [nombre, carpeta]
-      );
-      rows = r.rows;
-    }
-    // Si no encontró con carpeta exacta, buscar solo por nombre
-    if (!rows.length) {
-      const r = await requirePg().query(
-        `SELECT data_url, mime_type FROM archivos_solicitante
-         WHERE nombre=$1 AND data_url IS NOT NULL
-         ORDER BY id LIMIT 1`,
-        [nombre]
       );
       rows = r.rows;
     }
