@@ -701,8 +701,15 @@ const normComiteComparar = (v) => (v || "").toString().toLowerCase().trim()
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
   .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
 const codigoComitePorConstituir = (comiteRef = {}) => {
+  const id = String(comiteRef.id || "").trim();
+  const codigo = String(comiteRef.codigo || "").trim();
+  // Alias legacy "falta constituir": solo para ids historicos, no para comites nuevos.
+  if (["gr6R", "comite_5"].includes(id) || ["gr6R", "comite_5"].includes(codigo)) return "gr6R";
+  if (["gr2U", "comite_7"].includes(id) || ["gr2U", "comite_7"].includes(codigo)) return "gr2U";
   const texto = normComiteComparar(`${comiteRef.id || ""} ${comiteRef.codigo || ""} ${comiteRef.nombre || ""} ${comiteRef.tipo || ""} ${comiteRef.programaId || comiteRef.programa_id || ""}`);
-  const esPorConstituir = texto.includes("por constituir") || texto.includes("falta constituir");
+  const nombre = normComiteComparar(comiteRef.nombre);
+  const esPorConstituir = nombre === normComiteComparar("Comité de Vivienda Rural (Por Constituir)") ||
+    nombre === normComiteComparar("Comité de Vivienda Urbano (Por Constituir)");
   if (!esPorConstituir) return "";
   const esUrbano = texto.includes("urbano") || texto.includes("csp urbano") || texto.includes("csp_urbano") || texto.includes("gru");
   return esUrbano ? "gr2U" : "gr6R";
@@ -1847,7 +1854,8 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
           const dp = getDocPct(p.id);
           const solsAll = getSols(p.id);
           const sols = solsAll.length;
-          const comite = comites.find(c => c.id === p.comiteId);
+          const comite = buscarComitePersona(comites, p);
+          const comiteNombreVisible = comite?.nombre || p.comite || "";
           const esPrioritario = solicitantePrioritario(p.id, solicitudes);
 
           // Detectar "Desmarque en trámite": tiene habitabilidad + otro programa,
@@ -1875,7 +1883,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
-                  {comite && <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 2 }}>● {comite.nombre}</div>}
+                  {comiteNombreVisible && <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 2 }}>● {comiteNombreVisible}</div>}
                   {desmarqueEnTramite && (
                     <div style={{ display: "inline-block", marginTop: 4, background: "#F97316", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: 0.3 }}>
                       ⚠ Desmarque en trámite
