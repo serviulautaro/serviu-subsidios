@@ -3148,7 +3148,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       siguiente_paso: formVisita.siguientePaso.trim(),
       fecha_compromiso: formVisita.fechaCompromiso,
     };
-    // PASO 1: Guardar inmediatamente en localStorage (nunca se pierde)
+    // PASO 1: Guardar inmediatamente en localStorage para evitar pérdida de datos.
     const LS_KEY = "visitas_pendientes_sync";
     const pendientes = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
     pendientes.push(nueva);
@@ -3175,7 +3175,23 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
             body: JSON.stringify([v])
           });
           if (r.ok) sincronizadas.push(v.id);
-          else console.warn("[visitas insert] Error:", r.status);
+          else {
+            console.warn("[visitas insert] Error:", r.status);
+            const minimo = {
+              id: v.id,
+              persona_id: v.persona_id,
+              fecha: v.fecha,
+              profesional: v.profesional,
+              solicitud: v.solicitud || "",
+              compromiso: v.compromiso || "",
+            };
+            const retry = await fetch(`${apiBase}/api/db/visitas/insert`, {
+              method: 'POST', headers: jsonHeaders(),
+              body: JSON.stringify([minimo])
+            });
+            if (retry.ok) sincronizadas.push(v.id);
+            else console.warn("[visitas insert retry]", retry.status);
+          }
         } catch (e) { console.warn("[visitas insert]", e.message); }
       }
       if (sincronizadas.length > 0) {
@@ -3386,7 +3402,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   useEffect(() => {
     // Limpiar datos del solicitante anterior inmediatamente al cambiar de persona
-    setVisitas([]);
+    setVisitas(prev => []);
     setArchivos([]);
     setArchivosRutas({});
     setArchivosDatos({});
@@ -3717,6 +3733,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     fsViejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
     const fsFiles = [...new Set([...fsNuevos, ...fsViejos])];
 
+    (solicitudes || [])
+      .filter(s => s.personaId === personaId)
+      .flatMap(s => s.documentos || [])
+      .filter(d => d.archivo && (d.archivoData || d.storagePath))
+      .forEach(d => {
+        if (!pgNames.includes(d.archivo)) pgNames.push(d.archivo);
+        rutasMap[d.archivo] = d.carpeta || rutasMap[d.archivo] || carpeta;
+        datosMap[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "" };
+      });
+
     // UNIÓN: PG + disco (sin duplicados)
     const todos = [...new Set([...pgNames, ...fsFiles])];
 
@@ -3982,7 +4008,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           .forEach(d => {
             archivosSet.add(d.archivo);
             rutasPorArchivo[d.archivo] = d.carpeta || carpetaSol;
-            datosPorArchivo[d.archivo] = d.archivoData || "";
+            datosPorArchivo[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpetaSol, storagePath: d.storagePath || "" };
           });
 
         // Desde Supabase

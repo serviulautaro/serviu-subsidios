@@ -397,9 +397,17 @@ const aligerarSolicitudListado = (sol = {}) => ({
 async function pgSelect(table, query = {}) {
   validarTabla(table);
   await ensureRuntimeSchema();
+  const filtros = filtrosDesdeQuery(query);
+  if (table === 'solicitudes' && String(query.select || '*').trim() === '*') {
+    const filtroId = filtros.find(f => f.col === 'id');
+    if (filtroId) {
+      const { rows } = await requirePg().query('SELECT * FROM "solicitudes" WHERE "id" = $1', [filtroId.value]);
+      return rows;
+    }
+  }
   const values = [];
   let sql = `SELECT ${columnasSelect(query.select)} FROM ${quoteIdent(table)}`;
-  sql += whereSql(filtrosDesdeQuery(query), values);
+  sql += whereSql(filtros, values);
   if (table === 'archivos_solicitante' && String(query.soloDisponibles || '') === 'true') {
     sql += sql.includes(' WHERE ') ? ' AND data_url IS NOT NULL' : ' WHERE data_url IS NOT NULL';
   }

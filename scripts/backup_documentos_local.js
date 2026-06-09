@@ -24,6 +24,15 @@ const COMITES_FIJOS = [
 ];
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const fetchConTimeout = async (url, options = {}, timeoutMs = 45000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
 const norm = value => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -88,7 +97,7 @@ async function getJson(route, tries = 10) {
   let last = '';
   for (let i = 1; i <= tries; i++) {
     try {
-      const res = await fetch(API + route, { headers: { accept: 'application/json' } });
+      const res = await fetchConTimeout(API + route, { headers: { accept: 'application/json' } });
       const text = await res.text();
       last = `${res.status} ${text.slice(0, 120)}`;
       if (res.ok && text.trim().startsWith('{')) return JSON.parse(text);

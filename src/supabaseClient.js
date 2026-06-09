@@ -43,8 +43,14 @@ function makeFilterChain(method, tabla, action, payload) {
     then: (resolve, reject) => {
       let promise;
       if (method === 'DELETE') {
+        if (!filters.length) {
+          promise = Promise.reject(new Error('delete sin filtros bloqueado por seguridad'));
+        } else
         promise = apiCall('DELETE', `/api/db/${tabla}/delete`, { filters });
       } else if (method === 'UPDATE') {
+        if (!filters.length) {
+          promise = Promise.reject(new Error('update sin filtros bloqueado por seguridad'));
+        } else
         promise = apiCall('PATCH', `/api/db/${tabla}/update`, { filters, values: payload });
       } else if (method === 'SELECT') {
         const qp = filters.map(f => `eq[${f.col}]=${encodeURIComponent(f.value)}`).join('&');
