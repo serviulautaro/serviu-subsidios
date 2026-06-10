@@ -7,12 +7,10 @@ import JSZip from "jszip";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import {
   COMITE_DESMARQUE,
-  PROGRAMA_DESMARQUE,
   esDesmarcado,
   respuestaServiuLista,
   grupoDesmarcado,
   yaMovido,
-  solicitudesNormalesPersona,
 } from "./utils/asignacionReglas";
 
 // Formatear RUT chileno: 10398338-K -> 10.398.338-Kh
@@ -604,6 +602,12 @@ const COMITES_FIJOS = [
   { codigo:"gr2U", nombre:"Comité de Vivienda Urbano (Por Constituir)",       tipo:"URBANO" },
 ];
 
+const COMITES_HABITABILIDAD = [
+  { id: "comite_desmarque", codigo: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
+  { id: "habitabilidad_urbano", codigo: "habitabilidad_urbano", nombre: "HABITABILIDAD URBANO", tipo: "URBANO", programaId: "habitabilidad" },
+  { id: "habitabilidad_rural", codigo: "habitabilidad_rural", nombre: "HABITABILIDAD RURAL", tipo: "RURAL", programaId: "habitabilidad" },
+];
+
 // Directiva de cada comité (fuente de verdad para el cargo automático)
 const COMITES_DIRECTIVA = [
   { codigo:"gr1R", directiva:[{rol:"Presidente",nombre:"Juan Pérez González"},{rol:"Secretario",nombre:"Carlos Hernán Paillaleo Paillaleo"},{rol:"Tesorero",nombre:"Elías Fernando Apablaza Riffo"},{rol:"1er Director",nombre:"Juan Carlos Huenchuan Méndez"}]},
@@ -695,9 +699,10 @@ const comitesBaseCompletos = () => COMITES_FIJOS.map(c => {
   const directiva = COMITES_DIRECTIVA.find(d => d.codigo === c.codigo)?.directiva || [];
   return { ...c, ...datos, id: c.codigo, directiva };
 });
+const comitesFijosSistema = () => [...comitesBaseCompletos(), ...COMITES_HABITABILIDAD];
 
 const buscarComitePersona = (comites = [], persona = {}) => {
-  const base = comitesBaseCompletos();
+  const base = comitesFijosSistema();
   const todos = [...base, ...(comites || [])];
   const encontrado = todos.find(c =>
     c.id === persona.comiteId ||
@@ -736,7 +741,7 @@ const codigoComitePorConstituir = (comiteRef = {}) => {
   return esUrbano ? "gr2U" : "gr6R";
 };
 const referenciasComite = (comiteRef = {}) => {
-  const base = comitesBaseCompletos();
+  const base = comitesFijosSistema();
   const refs = [comiteRef.id, comiteRef.codigo].filter(Boolean).map(String);
   const codigoAlias = codigoComitePorConstituir(comiteRef);
   if (codigoAlias) refs.push(codigoAlias);
@@ -1509,9 +1514,10 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
   const todosProgramas = combinarProgramas(programasCustom);
 
   const comitesMergedBase = [
-    ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, programaId: c.tipo === "Urbano" ? "csp_urbano" : "csp_rural" })),
+    ...COMITES_HABITABILIDAD,
+    ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, programaId: c.tipo === "URBANO" ? "csp_urbano" : "csp_rural" })),
     ...(comites||[])
-      .filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
+      .filter(sc => sc.nombre && ![...COMITES_FIJOS, ...COMITES_HABITABILIDAD].some(f => normN(f.nombre) === normN(sc.nombre)))
       .map(sc => ({
         id: sc.id,
         nombre: sc.nombre,
@@ -3244,8 +3250,9 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const asignarComite = async () => {
     const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
     const todosComites = [
+      ...COMITES_HABITABILIDAD,
       ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo })),
-      ...(comites||[]).filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
+      ...(comites||[]).filter(sc => sc.nombre && ![...COMITES_FIJOS, ...COMITES_HABITABILIDAD].some(f => normN(f.nombre) === normN(sc.nombre)))
         .map(sc => ({ id: sc.id, nombre: sc.nombre, tipo: sc.programaId === "csp_urbano" ? "URBANO" : "RURAL" }))
     ];
     const sel = todosComites.find(c => c.id === comiteParaAsignar);
@@ -4870,8 +4877,9 @@ const datosSolicitud = {
               {(() => {
                 const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
                 const lista = [
+                  ...COMITES_HABITABILIDAD,
                   ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, codigo: c.codigo })),
-                  ...(comites||[]).filter(sc => sc.nombre && !COMITES_FIJOS.some(f => normN(f.nombre) === normN(sc.nombre)))
+                  ...(comites||[]).filter(sc => sc.nombre && ![...COMITES_FIJOS, ...COMITES_HABITABILIDAD].some(f => normN(f.nombre) === normN(sc.nombre)))
                     .map(sc => ({ id: sc.id, nombre: sc.nombre, tipo: sc.programaId === "csp_urbano" ? "URBANO" : "RURAL", codigo: null }))
                 ];
                 return lista.map(c => (
@@ -8136,6 +8144,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   const normLocal = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const rutKey = (v) => (v || "").toString().replace(/[^0-9kK]/g, "").toUpperCase();
   const comitesDisponibles = [
+    ...COMITES_HABITABILIDAD,
     ...COMITES_FIJOS.map(c => ({ id: c.codigo, codigo: c.codigo, nombre: c.nombre, tipo: c.tipo })),
     ...(comites || [])
   ];
@@ -8751,6 +8760,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const [personaMover, setPersonaMover] = useState(null);
   const [comiteDestinoMover, setComiteDestinoMover] = useState("");
   const [motivoMovimiento, setMotivoMovimiento] = useState("");
+  const [claveMoverAdmin, setClaveMoverAdmin] = useState("");
+  const [claveMoverError, setClaveMoverError] = useState(false);
   const [moviendoPersona, setMoviendoPersona] = useState(false);
   const [personaCondicional, setPersonaCondicional] = useState(null);
   const [notaCondicional, setNotaCondicional] = useState("");
@@ -8764,13 +8775,14 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     c.id === comiteId ||
     c.codigo === comiteId ||
     normComiteComparar(c.nombre) === normComiteComparar(comiteId)
-  ) || comitesBaseCompletos().find(c => c.id === comiteId || c.codigo === comiteId);
+  ) || comitesFijosSistema().find(c => c.id === comiteId || c.codigo === comiteId);
   if (!comite) return null;
 
   const esComiteDesmarque = comiteId === "comite_desmarque" || comite.programaId === "habitabilidad" || /DESMARQUE/i.test(comite.nombre || "");
   const todosProgramas = combinarProgramas(programasCustom);
   const comitesDestino = [
-    { id: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
+    { id: "__sin_comite__", nombre: "SIN COMITE / QUITAR DE COMITE", tipo: "", programaId: "" },
+    ...COMITES_HABITABILIDAD,
     ...COMITES_FIJOS.map(c => ({
       id: c.codigo,
       nombre: c.nombre,
@@ -8790,6 +8802,14 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const solicitudesVista = solicitudes.map(s => solicitudesCompletasComite[s.id] ? { ...s, ...solicitudesCompletasComite[s.id] } : s);
   const solicitudHabitabilidadPersona = (personaId) => solicitudesVista.find(s => (s.personaId || s.persona_id) === personaId && (s.programaId || s.programa_id) === "habitabilidad");
   const tieneSolicitudDesmarquePersona = (personaId) => !!solicitudHabitabilidadPersona(personaId);
+  const movimientoRequiereAdmin = (persona = {}, destinoId = comiteDestinoMover) => {
+    if (destinoId === "__sin_comite__") return true;
+    const sol = solicitudHabitabilidadPersona(persona.id);
+    if (!sol) return false;
+    if (yaMovido(persona, tieneSolicitudDesmarquePersona)) return true;
+    const desmarqueListo = esDesmarcado(persona) || respuestaServiuLista(sol);
+    return !desmarqueListo;
+  };
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudHabitabilidadPersona(p.id);
     return estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
@@ -9062,6 +9082,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     setPersonaMover(persona);
     setComiteDestinoMover("");
     setMotivoMovimiento("");
+    setClaveMoverAdmin("");
+    setClaveMoverError(false);
   };
 
   const togglePendienteCalificar = async (e, persona) => {
@@ -9093,12 +9115,18 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     }
     const destino = comitesDestino.find(c => c.id === comiteDestinoMover);
     if (!destino) return;
+    const requiereAdmin = movimientoRequiereAdmin(personaMover, destino.id);
+    if (requiereAdmin && claveMoverAdmin !== ADMIN_KEY) {
+      setClaveMoverError(true);
+      alert("Debe ingresar la clave de administrador para mover o quitar este solicitante.");
+      return;
+    }
 
     // Validacion Fase 1: Desmarque solo permite un segundo programa si paso 9 esta listo.
     const solDesmarque = solicitudHabitabilidadPersona(personaMover.id);
     const tieneSolicitudDesmarque = (id) => !!solicitudHabitabilidadPersona(id);
     const esCasoDesmarque = !!solDesmarque;
-    if (esCasoDesmarque) {
+    if (esCasoDesmarque && !requiereAdmin) {
       if (yaMovido(personaMover, tieneSolicitudDesmarque)) {
         alert("Este solicitante ya fue movido a otro programa y no puede moverse de nuevo.");
         return;
@@ -9116,12 +9144,13 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       const usuario = currentUser?.nombre || "Usuario no identificado";
       const nota = `[${today()}] Cambio de comité/programa: ${origenNombre} -> ${destino.nombre}. Motivo: ${motivo}. Usuario: ${usuario}`;
       const observaciones = [personaMover.observaciones, nota].filter(Boolean).join("\n");
+      const quitandoComite = destino.id === "__sin_comite__";
       const tipoDestino = destino.tipo || (destino.programaId === "csp_urbano" ? "URBANO" : destino.programaId === "csp_rural" ? "RURAL" : "");
       const personaActualizada = {
         ...personaMover,
-        comiteId: destino.id,
-        comite: destino.nombre,
-        tipo_comite: tipoDestino,
+        comiteId: quitandoComite ? "" : destino.id,
+        comite: quitandoComite ? "" : destino.nombre,
+        tipo_comite: quitandoComite ? "" : tipoDestino,
         estado_desmarque: esCasoDesmarque ? "DESMARCADO" : personaMover.estado_desmarque,
         pendiente_calificar: false,
         observaciones,
@@ -9129,9 +9158,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
 
       const { supabase: sb } = await import("./supabaseClient");
       const { error: personaError } = await sb.from("personas").update({
-        comite_id: destino.id,
-        comite: destino.nombre,
-        tipo_comite: tipoDestino,
+        comite_id: quitandoComite ? "" : destino.id,
+        comite: quitandoComite ? "" : destino.nombre,
+        tipo_comite: quitandoComite ? "" : tipoDestino,
         estado_desmarque: esCasoDesmarque ? "DESMARCADO" : personaMover.estado_desmarque,
         pendiente_calificar: false,
         observaciones,
@@ -9139,26 +9168,15 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       if (personaError) throw personaError;
 
       const programaDestino = todosProgramas.find(p => p.id === destino.programaId);
-      if (programaDestino) {
+      if (programaDestino && !quitandoComite) {
         const solExistenteDestino = solicitudes.find(s =>
           (s.personaId || s.persona_id) === personaMover.id &&
           (s.programaId || s.programa_id) === programaDestino.id
         );
         const yaExisteSol = !!solExistenteDestino;
 
-        // No-Desmarque: reemplazar solicitudes previas de otros programas (no acumular).
-        // Se conserva siempre la solicitud de habitabilidad (del desmarcado).
+        // Regla permanente: al mover no se borran solicitudes ni documentos existentes.
         let solicitudesBase = solicitudes;
-        if (programaDestino.id !== PROGRAMA_DESMARQUE) {
-          const solsViejas = solicitudesNormalesPersona(personaMover.id, solicitudes)
-            .filter(s => (s.programaId || s.programa_id) !== programaDestino.id);
-          if (solsViejas.length > 0) {
-            for (const solVieja of solsViejas) {
-              await sb.from("solicitudes").delete().eq("id", solVieja.id);
-            }
-            solicitudesBase = solicitudes.filter(s => !solsViejas.some(v => v.id === s.id));
-          }
-        }
 
         if (!yaExisteSol) {
           const nuevaSol = {
@@ -9215,6 +9233,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       setPersonaMover(null);
       setComiteDestinoMover("");
       setMotivoMovimiento("");
+      setClaveMoverAdmin("");
+      setClaveMoverError(false);
       alert("Solicitante movido correctamente. La razón del cambio quedó guardada en observaciones.");
     } catch (err) {
       console.error("Error moviendo solicitante", err);
@@ -9472,9 +9492,9 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                     {p.pendiente_calificar ? "Quitar pendiente" : "Pendiente"}
                   </button>
                 )}
-                <button onClick={(e) => !desmarcadoBloqueado && abrirMover(e, p)} disabled={desmarcadoBloqueado}
-                  style={{ background: desmarcadoBloqueado ? "#F3F4F6" : "#EFF6FF", color: desmarcadoBloqueado ? "#9CA3AF" : "#1D4ED8", border: "1px solid " + (desmarcadoBloqueado ? "#E5E7EB" : "#BFDBFE"), borderRadius: 8, padding: "6px 12px", cursor: desmarcadoBloqueado ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700 }}>
-                  {desmarcadoBloqueado ? "Bloqueado" : "Mover"}
+                <button onClick={(e) => abrirMover(e, p)}
+                  style={{ background: desmarcadoBloqueado ? "#FFF7ED" : "#EFF6FF", color: desmarcadoBloqueado ? "#C2410C" : "#1D4ED8", border: "1px solid " + (desmarcadoBloqueado ? "#FDBA74" : "#BFDBFE"), borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                  {desmarcadoBloqueado ? "Mover (admin)" : "Mover"}
                 </button>
               </div>
             </div>
@@ -9517,6 +9537,18 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
               rows={4}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid " + (motivoMovimiento.trim() ? "#F59E0B" : "#ddd"), fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }} />
           </div>
+          {movimientoRequiereAdmin(personaMover, comiteDestinoMover) && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", borderRadius: 10, padding: "10px 12px", marginBottom: 10, fontSize: 13, fontWeight: 700 }}>
+                Este movimiento requiere clave de administrador porque el solicitante esta bloqueado, en proceso de desmarque o se quitara del comite.
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#991B1B", textTransform: "uppercase", marginBottom: 5 }}>Clave administrador *</div>
+              <input type="password" value={claveMoverAdmin} onChange={e => { setClaveMoverAdmin(e.target.value); setClaveMoverError(false); }}
+                placeholder="Clave de administrador"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: claveMoverError ? "2px solid #DC2626" : "1.5px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
+              {claveMoverError && <div style={{ marginTop: 6, color: "#DC2626", fontSize: 12, fontWeight: 800 }}>Clave incorrecta.</div>}
+            </div>
+          )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <button onClick={() => setPersonaMover(null)} disabled={moviendoPersona}
               style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
