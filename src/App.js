@@ -3426,9 +3426,19 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setGuardandoLineaTiempoPersona(true);
     try {
       await syncPersona({ lineaTiempoCsp: lineaTiempoPersonaCsp, linea_tiempo_csp: lineaTiempoPersonaCsp });
+      const corte = corteLineaTiempoCsp(lineaTiempoPersonaCsp);
+      const etapasMarcadas = LINEA_TIEMPO_CSP
+        .filter(etapa => lineaTiempoPersonaCsp[etapa.id])
+        .map(etapa => etapa.label);
       await registrarAuditoria?.("guardar_linea_tiempo_solicitante_csp", "personas", persona.id, {
         solicitante: persona.nombre,
-        marcadas: Object.entries(lineaTiempoPersonaCsp).filter(([, v]) => !!v).map(([k]) => k),
+        accion_descripcion: corte
+          ? `${persona.nombre} no califica en ${corte.etapa?.label} por: ${corte.nota || "Sin nota registrada"}`
+          : `${persona.nombre} actualizo la linea de tiempo CSP`,
+        no_califica: !!corte,
+        etapa_no_califica: corte?.etapa?.label || "",
+        nota_no_califica: corte?.nota || "",
+        marcadas: etapasMarcadas,
       });
     } catch (err) {
       console.warn("[linea tiempo solicitante csp]", err?.message || err);

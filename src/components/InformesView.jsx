@@ -320,7 +320,23 @@ function formatFechaHora(value) {
   }
 }
 
-function accionTexto(accion) {
+function accionTexto(accion, detalle = {}) {
+  const tabla = detalle?.tabla || "";
+  if (accion === "api_insert" || accion === "api_upsert") {
+    if (tabla === "personas") return "Solicitante guardado";
+    if (tabla === "solicitudes") return "Solicitud guardada";
+    if (tabla === "archivos_solicitante") return "Documento guardado";
+  }
+  if (accion === "api_update") {
+    if (tabla === "personas") return "Solicitante actualizado";
+    if (tabla === "solicitudes") return "Solicitud/documentos actualizados";
+    if (tabla === "archivos_solicitante") return "Documento actualizado";
+  }
+  if (accion === "api_delete") {
+    if (tabla === "archivos_solicitante") return "Documento enviado a papelera";
+    if (tabla === "personas") return "Solicitante eliminado";
+    if (tabla === "solicitudes") return "Solicitud eliminada";
+  }
   const map = {
     ingreso_sistema: "Ingreso al sistema",
     cambio_clave: "Cambio de clave",
@@ -335,6 +351,7 @@ function accionTexto(accion) {
     eliminar_programa: "Programa eliminado",
     registrar_visita: "Visita registrada",
     mover_solicitante: "Solicitante movido",
+    guardar_linea_tiempo_solicitante_csp: "Linea de tiempo CSP guardada",
     api_insert: "Registro creado",
     api_upsert: "Registro guardado",
     api_update: "Registro actualizado",
@@ -350,6 +367,19 @@ function accionTexto(accion) {
 function detalleAuditoria(detalle, accion = "") {
   if (!detalle) return "";
   if (typeof detalle === "string") return detalle;
+  if (detalle.accion_descripcion) return detalle.accion_descripcion;
+  if (detalle.resumen) return detalle.resumen;
+  if (accion === "guardar_linea_tiempo_solicitante_csp") {
+    const solicitante = detalle.solicitante || detalle.persona || "";
+    if (detalle.no_califica) {
+      return `${solicitante ? solicitante + " " : ""}no califica en ${detalle.etapa_no_califica || "linea de tiempo CSP"} por: ${detalle.nota_no_califica || "Sin nota registrada"}`.trim();
+    }
+    const etapas = Array.isArray(detalle.marcadas) ? detalle.marcadas.join(", ") : "";
+    return [
+      solicitante ? `Solicitante: ${solicitante}` : "",
+      etapas ? `Etapas marcadas: ${etapas}` : "Linea de tiempo CSP actualizada",
+    ].filter(Boolean).join(" | ");
+  }
   if (accion === "subir_documento") {
     const doc = detalle.archivo || detalle.documento || detalle.nombreArchivo || detalle.nombre_archivo || "";
     const solicitante = detalle.solicitante || detalle.persona || "";
@@ -373,6 +403,9 @@ function detalleAuditoria(detalle, accion = "") {
   }
   if (["api_insert", "api_upsert", "api_update", "api_delete"].includes(accion)) {
     return [
+      detalle.solicitante ? `Solicitante: ${detalle.solicitante}` : "",
+      detalle.documento ? `Documento: ${detalle.documento}` : "",
+      detalle.programa ? `Programa: ${detalle.programa}` : "",
       detalle.tabla ? `Tabla: ${detalle.tabla}` : "",
       detalle.cantidad ? `Registros: ${detalle.cantidad}` : "",
       Array.isArray(detalle.campos) && detalle.campos.length ? `Campos: ${detalle.campos.join(", ")}` : "",
@@ -390,7 +423,7 @@ function detalleAuditoria(detalle, accion = "") {
 function solicitanteAuditoria(log) {
   const d = log.detalle || {};
   if (typeof d === "string") return "";
-  return d.solicitante || d.persona || d.nombre || d.personaNombre || d.persona_nombre || "";
+  return d.solicitante || d.persona || d.nombre || d.personaNombre || d.persona_nombre || d.postulante || "";
 }
 
 function imprimirAuditoria(fechaInicio, fechaTermino, logs, usuarioFiltro = "Todos los usuarios") {
@@ -411,7 +444,7 @@ function imprimirAuditoria(fechaInicio, fechaTermino, logs, usuarioFiltro = "Tod
     ${Object.entries(grupos).map(([usuario, items]) => `<div class="program-box">
       <div class="program-title">${usuario} - ${items.length} accion(es)</div>
       <table><thead><tr><th>Fecha y hora</th><th>Accion</th><th>Solicitante</th><th>Detalle</th></tr></thead><tbody>
-        ${items.map(log => `<tr><td>${formatFechaHora(log.creado)}</td><td>${accionTexto(log.accion)}</td><td>${v(solicitanteAuditoria(log))}</td><td>${v(detalleAuditoria(log.detalle, log.accion))}</td></tr>`).join("")}
+        ${items.map(log => `<tr><td>${formatFechaHora(log.creado)}</td><td>${accionTexto(log.accion, log.detalle)}</td><td>${v(solicitanteAuditoria(log))}</td><td>${v(detalleAuditoria(log.detalle, log.accion))}</td></tr>`).join("")}
       </tbody></table>
     </div>`).join("")}
   </div>`;
@@ -1165,7 +1198,7 @@ function PanelAuditoriaUsuarios({ currentUser }) {
           <thead><tr style={{ background: "#f9fafb" }}><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Fecha y hora</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Accion</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Solicitante</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Detalle</th></tr></thead>
           <tbody>{items.map(log => <tr key={log.id}>
             <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>{formatFechaHora(log.creado)}</td>
-            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", fontWeight: 800 }}>{accionTexto(log.accion)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", fontWeight: 800 }}>{accionTexto(log.accion, log.detalle)}</td>
             <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(solicitanteAuditoria(log))}</td>
             <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(detalleAuditoria(log.detalle, log.accion))}</td>
           </tr>)}</tbody>

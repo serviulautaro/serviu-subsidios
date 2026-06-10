@@ -656,6 +656,42 @@ const resumenValoresAuditoria = (values = {}) => {
   const omitidos = new Set(['documentos', 'data_url', 'archivoData', 'base64', 'contenido', 'buffer']);
   return Object.keys(values || {}).filter(k => !omitidos.has(k));
 };
+const primerTextoAuditoria = (...valores) => {
+  for (const valor of valores) {
+    const texto = String(valor || '').trim();
+    if (texto) return texto;
+  }
+  return '';
+};
+const detalleHumanoAuditoriaAutomatica = (accion, tabla, filas = [], detalle = {}) => {
+  const primero = Array.isArray(filas) ? (filas[0] || {}) : (filas || {});
+  const solicitante = primerTextoAuditoria(
+    primero.solicitante,
+    primero.persona,
+    tabla === 'archivos_solicitante' ? '' : primero.nombre,
+    primero.persona_nombre,
+    primero.personaNombre,
+    detalle.solicitante,
+    detalle.persona
+  );
+  const documento = primerTextoAuditoria(primero.nombre_archivo, primero.nombre, primero.archivo, detalle.documento);
+  const programa = primerTextoAuditoria(primero.programa_nombre, primero.programaNombre, primero.programa_id, primero.programaId, detalle.programa);
+  const campos = Array.isArray(detalle.campos) ? detalle.campos.filter(Boolean) : [];
+  let resumen = '';
+  if (tabla === 'personas') {
+    if (accion === 'api_insert' || accion === 'api_upsert') resumen = `Solicitante guardado${solicitante ? `: ${solicitante}` : ''}`;
+    if (accion === 'api_update') resumen = `Solicitante actualizado${solicitante ? `: ${solicitante}` : ''}${campos.length ? ` | Campos: ${campos.join(', ')}` : ''}`;
+    if (accion === 'api_delete') resumen = `Solicitante eliminado${solicitante ? `: ${solicitante}` : ''}`;
+  } else if (tabla === 'solicitudes') {
+    if (accion === 'api_insert' || accion === 'api_upsert') resumen = `Solicitud guardada${solicitante ? ` para ${solicitante}` : ''}${programa ? ` | Programa: ${programa}` : ''}`;
+    if (accion === 'api_update') resumen = `Solicitud/documentos actualizados${solicitante ? ` para ${solicitante}` : ''}${programa ? ` | Programa: ${programa}` : ''}${campos.length ? ` | Campos: ${campos.join(', ')}` : ''}`;
+    if (accion === 'api_delete') resumen = `Solicitud eliminada${solicitante ? ` para ${solicitante}` : ''}${programa ? ` | Programa: ${programa}` : ''}`;
+  } else if (tabla === 'archivos_solicitante') {
+    if (accion === 'api_delete') resumen = `Documento enviado a papelera${documento ? `: ${documento}` : ''}${solicitante ? ` | Solicitante: ${solicitante}` : ''}`;
+    else resumen = `Documento guardado${documento ? `: ${documento}` : ''}${solicitante ? ` | Solicitante: ${solicitante}` : ''}`;
+  }
+  return { resumen, solicitante, documento, programa };
+};
 async function registrarAuditoriaAutomatica(req, accion, tabla, data = [], detalle = {}) {
   if (!pgPool || tabla === 'audit_log') return;
   try {
@@ -663,10 +699,12 @@ async function registrarAuditoriaAutomatica(req, accion, tabla, data = [], detal
     const uid = String(user.id || '');
     const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid);
     const filas = Array.isArray(data) ? data : [data].filter(Boolean);
+    const humano = detalleHumanoAuditoriaAutomatica(accion, tabla, filas, detalle);
     const payload = {
       tabla,
       cantidad: filas.length,
       ids: filas.map(r => r?.id).filter(Boolean).slice(0, 20),
+      ...humano,
       ...detalle,
     };
     const result = await requirePg().query(
