@@ -681,8 +681,47 @@ const estadoNoCalificaCspPersona = (persona = {}) => {
   const linea = normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp);
   return corteLineaTiempoCsp(linea);
 };
+const NOMBRES_PROPIOS_COMUNES = new Set([
+  "ADRIANA","ADRIAN","AGUSTIN","ALAN","ALBA","ALBERTO","ALEJANDRA","ALEJANDRO","ALEX","ALEXANDER","ALFONSO","ALICIA","ALONSO","AMANDA","AMELIA","ANA","ANDREA","ANDRES","ANGEL","ANGELA","ANTONIA","ANTONIO","ARIEL","ARTURO","AURORA",
+  "BARBARA","BASTIAN","BEATRIZ","BELEN","BENJAMIN","BERNARDO","BLANCA","BORIS","BRUNO",
+  "CAMILA","CAMILO","CARLA","CARLOS","CARMEN","CAROLINA","CATALINA","CECILIA","CESAR","CLAUDIA","CLAUDIO","CONSTANZA","CRISTIAN","CRISTINA",
+  "DANIEL","DANIELA","DAVID","DENISE","DIEGO","DOMINGO",
+  "EDUARDO","ELENA","ELIAS","ELIZABETH","EMILIO","ENRIQUE","ESTEBAN","EUGENIA","EUGENIO","EVELYN",
+  "FABIOLA","FELIPE","FERNANDA","FERNANDO","FRANCISCA","FRANCISCO",
+  "GABRIEL","GABRIELA","GLADYS","GONZALO","GRACIELA","GUILLERMO",
+  "HECTOR","HERNAN","HUGO",
+  "IGNACIO","INES","IRIS","ISABEL","ISIDORA","IVAN",
+  "JACQUELINE","JAVIER","JAVIERA","JESSICA","JOAQUIN","JORGE","JOSE","JOSEFA","JUAN","JUANA","JULIA","JULIO",
+  "KAREN","KARINA","KATHERINE","KATIA","KELLY","KEVIN",
+  "LAURA","LEONARDO","LETICIA","LIDIA","LILIANA","LORENA","LORETO","LUIS","LUISA",
+  "MAGDALENA","MANUEL","MARCELA","MARCELO","MARGARITA","MARGOT","MARIA","MARIO","MARTA","MARTIN","MATIAS","MAXIMILIANO","MIGUEL","MIRIAM","MONICA",
+  "NANCY","NATALIA","NICOLAS","NOEMI",
+  "OLGA","OMAR","ONORIA","ORFELINA","OSCAR",
+  "PABLO","PATRICIA","PAULA","PEDRO","PILAR","PRISCILLA",
+  "RAFAEL","RAUL","REBECA","RENATO","RICARDO","ROBERTO","RODRIGO","ROSA","ROSARIO","RUBEN",
+  "SAMUEL","SANDRA","SEBASTIAN","SERGIO","SOFIA","SOLEDAD",
+  "TAMARA","TANIA","TERESA","TOMAS",
+  "VALENTINA","VALERIA","VERONICA","VICTOR","VICTORIA","VIVIANA",
+  "WALTER","WILSON","XIMENA","YASNA","YENNY","YESSICA","YOLANDA"
+]);
+const tokenNombrePlano = (valor = "") =>
+  String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-ZÑ]/gi, "")
+    .toLocaleUpperCase("es-CL");
+const nombrePareceNombrePropio = (token = "") => NOMBRES_PROPIOS_COMUNES.has(tokenNombrePlano(token));
+const ordenarNombreSolicitante = (valor = "") => {
+  const limpio = String(valor || "").replace(/[,;]+/g, " ").replace(/\s+/g, " ").trim().toLocaleUpperCase("es-CL");
+  const partes = limpio.split(" ").filter(Boolean);
+  if (partes.length < 3 || !nombrePareceNombrePropio(partes[0])) return limpio;
+  if (nombrePareceNombrePropio(partes[partes.length - 2])) return limpio;
+  const apellidos = partes.slice(-2);
+  const nombres = partes.slice(0, -2);
+  return [...apellidos, ...nombres].join(" ");
+};
 const normalizarNombreSolicitante = (valor = "") =>
-  String(valor || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("es-CL");
+  ordenarNombreSolicitante(valor);
 
 // Normaliza nombre para comparación (sin tildes, minúsculas, sin caracteres especiales)
 function normNomDirectiva(s) {
@@ -1513,7 +1552,7 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
   const [motivoSinComite, setMotivoSinComite] = useState("");
 
   const CAMPOS = [
-    ["nombre", "Apellidos y nombres *", "text", "12"],
+    ["nombre", "Apellido paterno + apellido materno + nombres *", "text", "12"],
     ["rut", "Cédula de identidad *", "text", "6"],
     ["telefono", "Telefono", "tel", "6"],
     ["direccion", "Direccion", "text", "12"],
@@ -1631,9 +1670,9 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
                   ) : (
                     <>
                       <input type={t} value={form[k] || ""} onChange={e => setForm({ ...form, [k]: k === "nombre" ? e.target.value.toLocaleUpperCase("es-CL") : e.target.value })}
-                        placeholder={k === "nombre" ? "APELLIDOS PRIMERO, LUEGO NOMBRES" : ""}
+                        placeholder={k === "nombre" ? "APELLIDO PATERNO APELLIDO MATERNO NOMBRES" : ""}
                         style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, boxSizing: "border-box" }} />
-                      {k === "nombre" && <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>Ingrese APELLIDOS primero y luego NOMBRES. Se guardará en MAYÚSCULAS.</div>}
+                      {k === "nombre" && <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>APELLIDOS PRIMERO, LUEGO NOMBRES: ingrese APELLIDO PATERNO + APELLIDO MATERNO + NOMBRES. Si escribe los nombres primero, el sistema intentara reordenarlo y siempre guardara en MAYUSCULAS.</div>}
                     </>
                   )}
                 </div>
