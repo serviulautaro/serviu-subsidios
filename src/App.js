@@ -754,6 +754,22 @@ const referenciasComite = (comiteRef = {}) => {
   if (fijo) refs.push(fijo.id, fijo.codigo);
   return [...new Set(refs.filter(Boolean).map(String))];
 };
+const nombreComiteSistema = (nombre = "") => normalizarNombreSolicitante(nombre);
+const claveUnicaComiteSistema = (comiteRef = {}) =>
+  codigoComitePorConstituir(comiteRef) ||
+  normComiteComparar(comiteRef.nombre) ||
+  String(comiteRef.id || comiteRef.codigo || "");
+const deduplicarComitesSistema = (lista = []) => {
+  const vistos = new Set();
+  return (lista || [])
+    .map(c => c.id === "__sin_comite__" ? c : { ...c, nombre: nombreComiteSistema(c.nombre) })
+    .filter(c => {
+      const clave = c.id === "__sin_comite__" ? c.id : claveUnicaComiteSistema(c);
+      if (!clave || vistos.has(clave)) return false;
+      vistos.add(clave);
+      return true;
+    });
+};
 const personaPerteneceAComite = (persona = {}, comiteRef = {}, solicitudes = []) => {
   const refs = referenciasComite(comiteRef);
   const personaIdComite = String(persona.comiteId || persona.comite_id || "");
@@ -8759,6 +8775,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const [claveError, setClaveError] = useState(false);
   const [personaMover, setPersonaMover] = useState(null);
   const [comiteDestinoMover, setComiteDestinoMover] = useState("");
+  const [programaDestinoAbierto, setProgramaDestinoAbierto] = useState("");
   const [motivoMovimiento, setMotivoMovimiento] = useState("");
   const [claveMoverAdmin, setClaveMoverAdmin] = useState("");
   const [claveMoverError, setClaveMoverError] = useState(false);
@@ -8780,7 +8797,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
 
   const esComiteDesmarque = comiteId === "comite_desmarque" || comite.programaId === "habitabilidad" || /DESMARQUE/i.test(comite.nombre || "");
   const todosProgramas = combinarProgramas(programasCustom);
-  const comitesDestino = [
+  const comitesDestino = deduplicarComitesSistema([
     { id: "__sin_comite__", nombre: "SIN COMITE / QUITAR DE COMITE", tipo: "", programaId: "" },
     ...COMITES_HABITABILIDAD,
     ...COMITES_FIJOS.map(c => ({
@@ -8790,7 +8807,22 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       programaId: c.tipo === "URBANO" ? "csp_urbano" : "csp_rural",
     })),
     ...(comites || []),
-  ].filter((c, idx, arr) => c.id !== comiteId && arr.findIndex(x => x.id === c.id) === idx);
+  ]).filter(c => c.id !== comiteId);
+  const nombreProgramaDestino = (programaId = "") =>
+    todosProgramas.find(p => p.id === programaId)?.nombre || programaId || "OTROS PROGRAMAS";
+  const gruposDestino = comitesDestino
+    .filter(c => c.id !== "__sin_comite__")
+    .reduce((acc, c) => {
+      const key = c.programaId || "otros";
+      if (!acc[key]) acc[key] = { id: key, nombre: nombreProgramaDestino(c.programaId), comites: [] };
+      acc[key].comites.push(c);
+      return acc;
+    }, {});
+  const gruposDestinoOrdenados = Object.values(gruposDestino).sort((a, b) => {
+    const ia = todosProgramas.findIndex(p => p.id === a.id);
+    const ib = todosProgramas.findIndex(p => p.id === b.id);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.nombre.localeCompare(b.nombre, "es");
+  });
 
   const ordenarSolicitantes = (lista = []) => [...lista].sort((a, b) =>
     String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" })
@@ -9081,6 +9113,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     e.stopPropagation();
     setPersonaMover(persona);
     setComiteDestinoMover("");
+    setProgramaDestinoAbierto("");
     setMotivoMovimiento("");
     setClaveMoverAdmin("");
     setClaveMoverError(false);
@@ -9232,6 +9265,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       });
       setPersonaMover(null);
       setComiteDestinoMover("");
+      setProgramaDestinoAbierto("");
       setMotivoMovimiento("");
       setClaveMoverAdmin("");
       setClaveMoverError(false);
@@ -9520,15 +9554,37 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Comité / programa de destino</div>
-            <select value={comiteDestinoMover} onChange={e => setComiteDestinoMover(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #ddd", background: "#fff", fontSize: 14, boxSizing: "border-box" }}>
-              <option value="">-- Seleccionar destino --</option>
-              {comitesDestino.map(c => {
-                const prog = todosProgramas.find(p => p.id === c.programaId);
-                return <option key={c.id} value={c.id}>{c.nombre}{prog ? " - " + prog.nombre : ""}</option>;
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 5 }}>Comite / programa de destino</div>
+            <button type="button" onClick={() => setComiteDestinoMover("__sin_comite__")}
+              style={{ width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 9, border: "1.5px solid " + (comiteDestinoMover === "__sin_comite__" ? "#DC2626" : "#CBD5E1"), background: comiteDestinoMover === "__sin_comite__" ? "#FEF2F2" : "#fff", color: "#991B1B", fontSize: 13, fontWeight: 800, cursor: "pointer", marginBottom: 10 }}>
+              QUITAR DE COMITE / DEJAR SIN COMITE
+            </button>
+            <div style={{ border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+              {gruposDestinoOrdenados.map(grupo => {
+                const abierto = programaDestinoAbierto === grupo.id;
+                const seleccionadoEnGrupo = grupo.comites.some(c => c.id === comiteDestinoMover);
+                return (
+                  <div key={grupo.id} style={{ borderBottom: "1px solid #E2E8F0" }}>
+                    <button type="button" onClick={() => setProgramaDestinoAbierto(abierto ? "" : grupo.id)}
+                      style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", border: "none", background: seleccionadoEnGrupo ? "#EFF6FF" : "#F8FAFC", color: "#1e3a5f", cursor: "pointer", textAlign: "left", fontSize: 13, fontWeight: 900 }}>
+                      <span>{grupo.nombre}</span>
+                      <span style={{ color: seleccionadoEnGrupo ? "#1D4ED8" : "#64748B", fontSize: 12 }}>{grupo.comites.length} comite(s) {abierto ? "Ocultar" : "Ver"}</span>
+                    </button>
+                    {abierto && (
+                      <div style={{ padding: 10, display: "grid", gap: 8, background: "#fff" }}>
+                        {grupo.comites.map(c => (
+                          <button key={c.id} type="button" onClick={() => setComiteDestinoMover(c.id)}
+                            style={{ width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8, border: "1.5px solid " + (comiteDestinoMover === c.id ? "#059669" : "#E2E8F0"), background: comiteDestinoMover === c.id ? "#ECFDF5" : "#fff", color: comiteDestinoMover === c.id ? "#047857" : "#0F172A", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+                            {c.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
               })}
-            </select>
+            </div>
+            {!comiteDestinoMover && <div style={{ marginTop: 7, color: "#64748B", fontSize: 12, fontWeight: 700 }}>Seleccione primero un programa y luego el comite correspondiente.</div>}
           </div>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626", textTransform: "uppercase", marginBottom: 5 }}>Razón del cambio *</div>
