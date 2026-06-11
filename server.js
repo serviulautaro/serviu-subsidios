@@ -8,6 +8,7 @@ const Database = require('better-sqlite3');
 const { execFileSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 const { Pool } = require('pg');
+const JSZip = require('jszip');
 // (documentos generados en HTML — sin dependencia docx)
 
 const app = express();
@@ -795,6 +796,77 @@ app.delete('/api/db/:table/delete', async (req, res) => {
     res.json({ ok: true, data });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+const nombreSeguroZip = (nombre = '', fallback = 'archivo') => {
+  const limpio = path.basename(String(nombre || '').replace(/\\/g, '/')).trim();
+  return limpio || fallback;
+};
+const carpetaSeguraZip = (persona = {}) => {
+  const rut = String(persona.rut || '').replace(/[^0-9kK]/g, '');
+  const nombre = String(persona.nombre || 'SIN_NOMBRE')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .slice(0, 90) || 'SIN_NOMBRE';
+  return `${nombre}${rut ? '_' + rut : ''}`;
+};
+const bufferDesdeDataUrl = (dataUrl = '') => {
+  const texto = String(dataUrl || '');
+  if (!texto.startsWith('data:')) return Buffer.from(texto);
+  const coma = texto.indexOf(',');
+  if (coma === -1) return Buffer.alloc(0);
+  const header = texto.slice(0, coma).toLowerCase();
+  const data = texto.slice(coma + 1);
+  return header.includes(';base64')
+    ? Buffer.from(data, 'base64')
+    : Buffer.from(decodeURIComponent(data), 'utf8');
+};
+
+app.post('/api/zip-documentos', async (req, res) => {
+  try {
+    if (!pgPool) return res.status(503).json({ ok: false, error: 'DATABASE_URL no configurada.' });
+    const personasReq = Array.isArray(req.body?.personas) ? req.body.personas : [];
+    const ids = [...new Set(personasReq.map(p => String(p.id || '').trim()).filter(Boolean))];
+    if (!ids.length) return res.status(400).json({ ok: false, error: 'No se enviaron solicitantes.' });
+
+    const personasPorId = new Map(personasReq.map(p => [String(p.id), p]));
+    const { rows } = await requirePg().query(
+      `SELECT persona_id, nombre, carpeta, data_url, mime_type
+       FROM archivos_solicitante
+       WHERE persona_id = ANY($1::text[])
+         AND nombre IS NOT NULL
+         AND data_url IS NOT NULL
+       ORDER BY persona_id, nombre`,
+      [ids]
+    );
+
+    const zip = new JSZip();
+    let agregados = 0;
+    for (const row of rows) {
+      const persona = personasPorId.get(String(row.persona_id)) || { id: row.persona_id };
+      const folder = zip.folder(carpetaSeguraZip(persona));
+      const buffer = bufferDesdeDataUrl(row.data_url);
+      if (!buffer.length) continue;
+      folder.file(nombreSeguroZip(row.nombre, `documento_${agregados + 1}`), buffer);
+      agregados++;
+    }
+
+    if (!agregados) {
+      return res.status(404).json({ ok: false, error: 'No se encontraron documentos disponibles para el ZIP.' });
+    }
+
+    const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const fecha = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="Documentos_${ids.length}solicitantes_${fecha}.zip"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (e) {
+    console.error('[zip-documentos]', e);
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 

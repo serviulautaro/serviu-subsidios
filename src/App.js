@@ -3,7 +3,6 @@ import { supabase, IS_DEMO_MODE } from "./supabaseClient";
 import ComitesVivienda from "./components/ComitesVivienda";
 import InformesView from "./components/InformesView";
 import SiguientePaso from "./components/SiguientePaso";
-import JSZip from "jszip";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import {
   COMITE_DESMARQUE,
@@ -4139,113 +4138,22 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (zipSeleccionados.length === 0) return;
     setGenerandoZip(true);
     try {
-      const zip = new JSZip();
-      let totalAgregados = 0;
-      for (const p of zipSeleccionados) {
-        const rutLimpia = (p.rut || "").replace(/[^0-9kK]/g, "");
-        const nombreCarpeta = `${(p.nombre || "SIN_NOMBRE").replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "")}_${rutLimpia}`;
-        const folder = zip.folder(nombreCarpeta);
-
-        // Calcular carpeta del solicitante en el servidor
-        const carpetaSol = carpetaPrograma(p, solicitudes);
-        const carpetaViejaSol = carpetaNombre(p.nombre, p.rut);
-
-        // Obtener lista de archivos: Supabase + servidor local
-        const archivosSet = new Set();
-        const rutasPorArchivo = {};
-        const datosPorArchivo = {};
-
-        (solicitudes || [])
-          .filter(s => s.personaId === p.id)
-          .flatMap(s => s.documentos || [])
-          .filter(d => d.archivo && (d.archivoData || d.storagePath))
-          .forEach(d => {
-            archivosSet.add(d.archivo);
-            rutasPorArchivo[d.archivo] = d.carpeta || carpetaSol;
-            datosPorArchivo[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpetaSol, storagePath: d.storagePath || "" };
-          });
-
-        // Fuente principal: PostgreSQL via Render, incluyendo data_url para no depender de Supabase.
-        try {
-          const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(p.id)}&select=nombre,carpeta,mime_type,data_url&soloDisponibles=true`;
-          const r = await fetch(urlPG, { cache: "no-store" });
-          const json = await r.json().catch(() => ({}));
-          const filas = r.ok ? (json.data || json || []) : [];
-          filas.forEach(a => {
-            if (!a.nombre) return;
-            archivosSet.add(a.nombre);
-            rutasPorArchivo[a.nombre] = a.carpeta || carpetaSol;
-            datosPorArchivo[a.nombre] = {
-              dataUrl: a.data_url || datosPorArchivo[a.nombre]?.dataUrl || "",
-              mimeType: a.mime_type || datosPorArchivo[a.nombre]?.mimeType || "",
-              carpeta: a.carpeta || carpetaSol,
-              storagePath: datosPorArchivo[a.nombre]?.storagePath || ""
-            };
-          });
-        } catch (e) {
-          console.warn("[ZIP PG]", e.message);
-        }
-
-        // Desde servidor local (nueva carpeta y vieja)
-        for (const carp of [carpetaSol, carpetaViejaSol]) {
-          if (!carp) continue;
-          try {
-            const r = await fetch(apiPath("/archivos/", carp));
-            if (r.ok) {
-              const lista = await r.json();
-              lista.forEach(nombre => {
-                archivosSet.add(nombre);
-                if (!rutasPorArchivo[nombre]) rutasPorArchivo[nombre] = carp;
-              });
-            }
-          } catch {}
-        }
-
-        // Descargar y agregar cada archivo al ZIP
-        for (const nombre of archivosSet) {
-          const rutaArch = rutasPorArchivo[nombre] || carpetaSol;
-          const respaldo = datosPorArchivo[nombre];
-          try {
-            let blob = null;
-            const dataUrl = respaldo?.dataUrl || "";
-            if (String(dataUrl).startsWith("data:")) {
-              const respData = await fetch(dataUrl);
-              blob = await respData.blob();
-            } else {
-              const urls = [
-                apiPath("/files/", rutaArch, nombre),
-                apiPath("/archivo-local/", rutaArch, nombre),
-                `${API}/archivo-generado/${encodeURIComponent(p.id)}/${encodeURIComponent(nombre)}`
-              ];
-              for (const url of urls) {
-                const resp = await fetch(url, { cache: "no-store" });
-                const contentType = resp.headers.get("content-type") || "";
-                if (resp.ok && !contentType.includes("application/json") && !contentType.includes("text/html")) {
-                  blob = await resp.blob();
-                  break;
-                }
-                if (resp.ok && nombre.toLowerCase().endsWith(".html") && contentType.includes("text/html")) {
-                  blob = await resp.blob();
-                  break;
-                }
-              }
-            }
-            if (blob && blob.size > 0) {
-              folder.file(nombre, blob);
-              totalAgregados++;
-            }
-          } catch (e) {
-            console.warn("[ZIP archivo]", nombre, e.message);
-          }
-        }
+      const res = await fetch(`${API}/api/zip-documentos`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({
+          personas: zipSeleccionados.map(p => ({ id: p.id, nombre: p.nombre, rut: p.rut }))
+        })
+      });
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok) {
+        const err = contentType.includes("application/json")
+          ? await res.json().catch(() => ({}))
+          : {};
+        throw new Error(err.error || "No se pudo generar el ZIP.");
       }
-      if (totalAgregados === 0) {
-        alert("No se encontraron documentos disponibles para agregar al ZIP. Revise que los archivos esten cargados en la carpeta del solicitante.");
-        setGenerandoZip(false);
-        return;
-      }
-
-      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const blob = await res.blob();
+      if (!blob.size) throw new Error("El ZIP generado no contiene documentos.");
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const fecha = new Date().toISOString().slice(0, 10);
