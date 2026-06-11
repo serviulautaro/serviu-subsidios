@@ -604,8 +604,6 @@ const COMITES_FIJOS = [
 
 const COMITES_HABITABILIDAD = [
   { id: "comite_desmarque", codigo: "comite_desmarque", nombre: "DESMARQUE DE VIVIENDA", tipo: "DESMARQUE", programaId: "habitabilidad" },
-  { id: "habitabilidad_urbano", codigo: "habitabilidad_urbano", nombre: "HABITABILIDAD URBANO", tipo: "URBANO", programaId: "habitabilidad" },
-  { id: "habitabilidad_rural", codigo: "habitabilidad_rural", nombre: "HABITABILIDAD RURAL", tipo: "RURAL", programaId: "habitabilidad" },
 ];
 
 // Directiva de cada comité (fuente de verdad para el cargo automático)
@@ -9563,15 +9561,16 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
               {gruposDestinoOrdenados.map(grupo => {
                 const abierto = programaDestinoAbierto === grupo.id;
                 const seleccionadoEnGrupo = grupo.comites.some(c => c.id === comiteDestinoMover);
+                const programaColor = todosProgramas.find(p => p.id === grupo.id)?.color || "#1e3a5f";
                 return (
                   <div key={grupo.id} style={{ borderBottom: "1px solid #E2E8F0" }}>
                     <button type="button" onClick={() => setProgramaDestinoAbierto(abierto ? "" : grupo.id)}
-                      style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", border: "none", background: seleccionadoEnGrupo ? "#EFF6FF" : "#F8FAFC", color: "#1e3a5f", cursor: "pointer", textAlign: "left", fontSize: 13, fontWeight: 900 }}>
-                      <span>{grupo.nombre}</span>
-                      <span style={{ color: seleccionadoEnGrupo ? "#1D4ED8" : "#64748B", fontSize: 12 }}>{grupo.comites.length} comite(s) {abierto ? "Ocultar" : "Ver"}</span>
+                      style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "13px 14px", border: "none", background: programaColor, color: "#fff", cursor: "pointer", textAlign: "left", fontSize: 13, fontWeight: 900, textTransform: "uppercase" }}>
+                      <span style={{ letterSpacing: 0 }}>PROGRAMA: {grupo.nombre}</span>
+                      <span style={{ background: "rgba(255,255,255,0.18)", color: "#fff", borderRadius: 999, padding: "4px 10px", fontSize: 12, whiteSpace: "nowrap" }}>{grupo.comites.length} comite(s) {abierto ? "Ocultar" : "Ver"}</span>
                     </button>
                     {abierto && (
-                      <div style={{ padding: 10, display: "grid", gap: 8, background: "#fff" }}>
+                      <div style={{ padding: 10, display: "grid", gap: 8, background: seleccionadoEnGrupo ? "#F8FAFC" : "#fff" }}>
                         {grupo.comites.map(c => (
                           <button key={c.id} type="button" onClick={() => setComiteDestinoMover(c.id)}
                             style={{ width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8, border: "1.5px solid " + (comiteDestinoMover === c.id ? "#059669" : "#E2E8F0"), background: comiteDestinoMover === c.id ? "#ECFDF5" : "#fff", color: comiteDestinoMover === c.id ? "#047857" : "#0F172A", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
