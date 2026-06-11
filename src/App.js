@@ -1834,10 +1834,24 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
     setClaveError(false);
   };
 
-  const confirmarEliminar = () => {
+  const confirmarEliminar = async () => {
     if (claveInput === ADMIN_KEY) {
-      onSave(personas.filter(x => x.id !== pendingDeleteId));
-      setPendingDeleteId(null);
+      try {
+        const res = await fetch(`${API}/api/db/personas/delete`, {
+          method: "DELETE",
+          headers: jsonHeaders(),
+          body: JSON.stringify({ filters: [{ op: "eq", col: "id", value: pendingDeleteId }] })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.ok === false) {
+          throw new Error(json.error || "No se pudo eliminar en el servidor.");
+        }
+        onSave(personas.filter(x => x.id !== pendingDeleteId));
+        setPendingDeleteId(null);
+        setClaveInput("");
+      } catch (err) {
+        alert("No se pudo eliminar el solicitante en la base principal. No se quitara de pantalla para evitar que vuelva a aparecer. Detalle: " + (err?.message || err));
+      }
     } else {
       setClaveError(true);
     }

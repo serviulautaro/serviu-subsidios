@@ -748,6 +748,8 @@ app.get('/api/db/:table', async (req, res) => {
 app.post('/api/db/:table/insert', async (req, res) => {
   try {
     const data = await pgInsert(req.params.table, req.body?.rows || req.body || []);
+    cacheBootstrap = null;
+    if (req.params.table === 'solicitudes') cacheSolicitudes = null;
     await registrarAuditoriaAutomatica(req, 'api_insert', req.params.table, data);
     res.json({ ok: true, data });
   } catch (e) {
@@ -758,6 +760,8 @@ app.post('/api/db/:table/insert', async (req, res) => {
 app.post('/api/db/:table/upsert', async (req, res) => {
   try {
     const data = await pgInsert(req.params.table, req.body?.rows || req.body || [], { upsert: true });
+    cacheBootstrap = null;
+    if (req.params.table === 'solicitudes') cacheSolicitudes = null;
     await registrarAuditoriaAutomatica(req, 'api_upsert', req.params.table, data);
     res.json({ ok: true, data });
   } catch (e) {
@@ -768,6 +772,8 @@ app.post('/api/db/:table/upsert', async (req, res) => {
 app.patch('/api/db/:table/update', async (req, res) => {
   try {
     const data = await pgUpdate(req.params.table, req.body?.filters || [], req.body?.values || {});
+    cacheBootstrap = null;
+    if (req.params.table === 'solicitudes') cacheSolicitudes = null;
     await registrarAuditoriaAutomatica(req, 'api_update', req.params.table, data, {
       filtros: req.body?.filters || [],
       campos: resumenValoresAuditoria(req.body?.values || {}),
@@ -781,6 +787,8 @@ app.patch('/api/db/:table/update', async (req, res) => {
 app.delete('/api/db/:table/delete', async (req, res) => {
   try {
     const data = await pgDelete(req.params.table, req.body?.filters || []);
+    cacheBootstrap = null;
+    if (req.params.table === 'solicitudes') cacheSolicitudes = null;
     await registrarAuditoriaAutomatica(req, 'api_delete', req.params.table, data, {
       filtros: req.body?.filters || [],
     });
