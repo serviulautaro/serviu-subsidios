@@ -4140,6 +4140,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setGenerandoZip(true);
     try {
       const zip = new JSZip();
+      let totalAgregados = 0;
       for (const p of zipSeleccionados) {
         const rutLimpia = (p.rut || "").replace(/[^0-9kK]/g, "");
         const nombreCarpeta = `${(p.nombre || "SIN_NOMBRE").replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "")}_${rutLimpia}`;
@@ -4164,23 +4165,26 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
             datosPorArchivo[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpetaSol, storagePath: d.storagePath || "" };
           });
 
-        // Desde Supabase
-        let { data: supaArch, error: supaArchError } = await supabase
-          .from("archivos_solicitante")
-          .select("nombre, carpeta, storage_bucket, storage_path")
-          .eq("persona_id", p.id);
-        if (supaArchError) {
-          const retry = await supabase
-            .from("archivos_solicitante")
-            .select("nombre, carpeta")
-            .eq("persona_id", p.id);
-          supaArch = retry.data;
+        // Fuente principal: PostgreSQL via Render, incluyendo data_url para no depender de Supabase.
+        try {
+          const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(p.id)}&select=nombre,carpeta,mime_type,data_url&soloDisponibles=true`;
+          const r = await fetch(urlPG, { cache: "no-store" });
+          const json = await r.json().catch(() => ({}));
+          const filas = r.ok ? (json.data || json || []) : [];
+          filas.forEach(a => {
+            if (!a.nombre) return;
+            archivosSet.add(a.nombre);
+            rutasPorArchivo[a.nombre] = a.carpeta || carpetaSol;
+            datosPorArchivo[a.nombre] = {
+              dataUrl: a.data_url || datosPorArchivo[a.nombre]?.dataUrl || "",
+              mimeType: a.mime_type || datosPorArchivo[a.nombre]?.mimeType || "",
+              carpeta: a.carpeta || carpetaSol,
+              storagePath: datosPorArchivo[a.nombre]?.storagePath || ""
+            };
+          });
+        } catch (e) {
+          console.warn("[ZIP PG]", e.message);
         }
-        (supaArch || []).forEach(a => {
-          archivosSet.add(a.nombre);
-          rutasPorArchivo[a.nombre] = a.carpeta || carpetaSol;
-          if (!datosPorArchivo[a.nombre]) datosPorArchivo[a.nombre] = "";
-        });
 
         // Desde servidor local (nueva carpeta y vieja)
         for (const carp of [carpetaSol, carpetaViejaSol]) {
@@ -4200,15 +4204,45 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         // Descargar y agregar cada archivo al ZIP
         for (const nombre of archivosSet) {
           const rutaArch = rutasPorArchivo[nombre] || carpetaSol;
-          const url = datosPorArchivo[nombre] || apiPath("/files/", rutaArch, nombre);
+          const respaldo = datosPorArchivo[nombre];
           try {
-            const resp = await fetch(url);
-            if (resp.ok) {
-              const blob = await resp.blob();
-              folder.file(nombre, blob);
+            let blob = null;
+            const dataUrl = respaldo?.dataUrl || "";
+            if (String(dataUrl).startsWith("data:")) {
+              const respData = await fetch(dataUrl);
+              blob = await respData.blob();
+            } else {
+              const urls = [
+                apiPath("/files/", rutaArch, nombre),
+                apiPath("/archivo-local/", rutaArch, nombre),
+                `${API}/archivo-generado/${encodeURIComponent(p.id)}/${encodeURIComponent(nombre)}`
+              ];
+              for (const url of urls) {
+                const resp = await fetch(url, { cache: "no-store" });
+                const contentType = resp.headers.get("content-type") || "";
+                if (resp.ok && !contentType.includes("application/json") && !contentType.includes("text/html")) {
+                  blob = await resp.blob();
+                  break;
+                }
+                if (resp.ok && nombre.toLowerCase().endsWith(".html") && contentType.includes("text/html")) {
+                  blob = await resp.blob();
+                  break;
+                }
+              }
             }
-          } catch {}
+            if (blob && blob.size > 0) {
+              folder.file(nombre, blob);
+              totalAgregados++;
+            }
+          } catch (e) {
+            console.warn("[ZIP archivo]", nombre, e.message);
+          }
         }
+      }
+      if (totalAgregados === 0) {
+        alert("No se encontraron documentos disponibles para agregar al ZIP. Revise que los archivos esten cargados en la carpeta del solicitante.");
+        setGenerandoZip(false);
+        return;
       }
 
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
