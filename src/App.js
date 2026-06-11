@@ -4734,195 +4734,6 @@ const datosSolicitud = {
           </div>
         </div>
       </div>
-
-      {misSols.length > 1 && (
-        <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 20, border: "1px solid #dbeafe" }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Programa a revisar</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {misSols.map(sol => {
-              const prog = todosProgramas.find(p => p.id === (sol.programaId || sol.programa_id));
-              const activo = (sol.programaId || sol.programa_id) === programaSeleccionadoId;
-              const conteo = conteoDocumentosSolicitud(sol.documentos || [], sol.programaId || sol.programa_id);
-              return (
-                <button key={sol.id} type="button" onClick={() => setProgramaTrabajoId(sol.programaId || sol.programa_id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    border: "1.5px solid " + (activo ? (prog?.color || "#1e3a5f") : "#CBD5E1"),
-                    background: activo ? (prog?.colorLight || "#EFF6FF") : "#F8FAFC",
-                    color: activo ? (prog?.color || "#1e3a5f") : "#475569",
-                    borderRadius: 10,
-                    padding: "10px 13px",
-                    fontSize: 13,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}>
-                  <span>{prog?.icon || "P"}</span>
-                  <span>{prog?.nombre || sol.programaId}</span>
-                  <span style={{ fontSize: 11, opacity: .78 }}>{conteo.completos}/{conteo.total}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {tieneSolicitudCsp && (
-        <div style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", marginBottom: 20, border: "1px solid #dbeafe" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f" }}>Línea de tiempo CSP del solicitante</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>{editandoLineaTiempoPersona ? "Modifique las etapas y luego guarde los cambios." : "Presione Modificar línea de tiempo para editar las etapas."}</div>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {!editandoLineaTiempoPersona ? (
-                <button onClick={() => setEditandoLineaTiempoPersona(true)}
-                  style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
-                  Modificar línea de tiempo
-                </button>
-              ) : (
-                <>
-                  <button onClick={cancelarEdicionLineaTiempoPersona} disabled={guardandoLineaTiempoPersona}
-                    style={{ background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
-                    Cancelar
-                  </button>
-                  <button onClick={guardarLineaTiempoPersonaCsp} disabled={guardandoLineaTiempoPersona}
-                    style={{ background: guardandoLineaTiempoPersona ? "#94A3B8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
-                    {guardandoLineaTiempoPersona ? "Guardando..." : "Guardar línea de tiempo"}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {LINEA_TIEMPO_CSP.map((etapa, idx) => {
-              const marcada = !!lineaTiempoPersonaCsp[etapa.id];
-              const bloqueadaPorCorte = lineaTiempoCspCortada(lineaTiempoPersonaCsp, idx);
-              const bloqueada = !editandoLineaTiempoPersona || bloqueadaPorCorte;
-              const decision = etapa.decision ? decisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
-              const notaDecision = etapa.decision ? notaDecisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
-              const reunionesMarcadas = etapa.reuniones ? [1, 2, 3, 4, 5].filter(n => lineaTiempoPersonaCsp[`${etapa.id}_reunion_${n}`]).length : 0;
-              return (
-                <div key={etapa.id}
-                  title={etapa.detalle || etapa.label}
-                  style={{
-                    minWidth: 155,
-                    flex: "1 1 155px",
-                    textAlign: "left",
-                    border: bloqueadaPorCorte ? "2px solid #E5E7EB" : marcada ? "2px solid #1D6FA4" : decision === "no_califica" ? "2px solid #FCA5A5" : decision === "califica" ? "2px solid #10B981" : "2px solid #CBD5E1",
-                    background: bloqueadaPorCorte ? "#F3F4F6" : marcada ? "#DBEAFE" : decision === "no_califica" ? "#FEF2F2" : decision === "califica" ? "#ECFDF5" : "#F8FAFC",
-                    color: bloqueadaPorCorte ? "#9CA3AF" : marcada ? "#1e3a5f" : decision === "califica" ? "#047857" : decision === "no_califica" ? "#B91C1C" : "#475569",
-                    borderRadius: 9,
-                    padding: "9px 10px",
-                    boxShadow: marcada ? "0 0 0 3px rgba(29,111,164,0.18)" : decision ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
-                  }}>
-                  <div style={{ fontSize: 10, fontWeight: 900, opacity: .75 }}>ETAPA {idx + 1}</div>
-                  <button type="button" disabled={bloqueada}
-                    onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: !prev[etapa.id] }))}
-                    style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: 0, padding: 0, color: "inherit", cursor: bloqueada ? "not-allowed" : "pointer" }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "✓ " : ""}{etapa.label}</div>
-                  </button>
-                  {etapa.detalle && <div style={{ fontSize: 10, marginTop: 3, opacity: .82 }}>{etapa.detalle}</div>}
-                  {etapa.decision && (
-                    <div style={{ display: "flex", gap: 5, marginTop: 8 }}>
-                      <button type="button" disabled={bloqueada} onClick={() => cambiarDecisionLineaTiempoPersona(etapa, "califica")}
-                        style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "califica" ? "#059669" : "#D1FAE5", color: decision === "califica" ? "#fff" : "#047857", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
-                        {etapa.positivo || "Califica"}
-                      </button>
-                      <button type="button" disabled={bloqueada} onClick={() => cambiarDecisionLineaTiempoPersona(etapa, "no_califica")}
-                        style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "no_califica" ? "#DC2626" : "#FEE2E2", color: decision === "no_califica" ? "#fff" : "#B91C1C", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
-                        {etapa.negativo || "No califica"}
-                      </button>
-                    </div>
-                  )}
-                  {etapa.decision && decision === "no_califica" && (
-                    <div style={{ marginTop: 7, background: "#FFF1F2", border: "1px solid #FCA5A5", borderRadius: 6, padding: "5px 6px", color: "#B91C1C", fontSize: 10, fontWeight: 800, lineHeight: 1.25 }}>
-                      Nota: {notaDecision || "Debe ingresar razón"}
-                    </div>
-                  )}
-                  {etapa.fecha && (
-                    <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-                      <input type="date" disabled={bloqueada}
-                        value={lineaTiempoPersonaCsp[etapa.fecha] || ""}
-                        onChange={e => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [etapa.fecha]: e.target.value }))}
-                        style={{ width: "100%", boxSizing: "border-box", border: "1px solid #CBD5E1", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "#1e3a5f", background: bloqueada ? "#F3F4F6" : "#fff" }} />
-                      <textarea disabled={bloqueada}
-                        value={lineaTiempoPersonaCsp[etapa.observacion] || ""}
-                        onChange={e => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [etapa.observacion]: e.target.value }))}
-                        placeholder="Observaciones"
-                        rows={2}
-                        style={{ width: "100%", boxSizing: "border-box", resize: "vertical", border: "1px solid #CBD5E1", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "#1e3a5f", background: bloqueada ? "#F3F4F6" : "#fff" }} />
-                    </div>
-                  )}
-                  {etapa.reuniones && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, marginTop: 8 }}>
-                      {[1, 2, 3, 4, 5].map(n => {
-                        const key = `${etapa.id}_reunion_${n}`;
-                        const vb = !!lineaTiempoPersonaCsp[key];
-                        return (
-                          <button key={key} type="button" disabled={bloqueada}
-                            onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [key]: !prev[key] }))}
-                            title={`Reunión ${n} - VB`}
-                            style={{ border: 0, borderRadius: 6, padding: "5px 2px", background: vb ? "#059669" : "#E5E7EB", color: vb ? "#fff" : "#475569", fontSize: 10, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
-                            R{n}
-                          </button>
-                        );
-                      })}
-                      <div style={{ gridColumn: "1 / -1", fontSize: 10, color: "#64748b", marginTop: 2 }}>{reunionesMarcadas}/5 VB</div>
-                    </div>
-                  )}
-                  {bloqueadaPorCorte && <div style={{ fontSize: 10, marginTop: 6, color: "#9CA3AF", fontWeight: 800 }}>Avance cortado por No califica</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Modal asignar comité */}
-      {showAsignarComite && (
-        <Modal title="Asignar comité al solicitante" onClose={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: "#555", marginBottom: 12 }}>
-              Selecciona el comité para <strong>{persona.nombre}</strong>:
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              {(() => {
-                const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
-                const lista = [
-                  ...COMITES_HABITABILIDAD,
-                  ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, codigo: c.codigo })),
-                  ...(comites||[]).filter(sc => sc.nombre && ![...COMITES_FIJOS, ...COMITES_HABITABILIDAD].some(f => normN(f.nombre) === normN(sc.nombre)))
-                    .map(sc => ({ id: sc.id, nombre: sc.nombre, tipo: sc.programaId === "csp_urbano" ? "URBANO" : "RURAL", codigo: null }))
-                ];
-                return lista.map(c => (
-                  <div key={c.id} onClick={() => setComiteParaAsignar(c.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 9, border: "2px solid " + (comiteParaAsignar === c.id ? "#7C3AED" : "#e5e7eb"), background: comiteParaAsignar === c.id ? "#f5f3ff" : "#fff", cursor: "pointer" }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 8, background: comiteParaAsignar === c.id ? "#7C3AED" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: c.codigo ? 11 : 14, fontWeight: 800, color: comiteParaAsignar === c.id ? "#fff" : "#6b7280", fontFamily: "monospace", flexShrink: 0 }}>
-                      {c.codigo || (c.tipo === "URBANO" ? "🏙️" : "🌾")}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: comiteParaAsignar === c.id ? "#4C1D95" : "#111827" }}>{c.nombre}</div>
-                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{c.tipo === "RURAL" ? "🌾 Rural" : "🏙️ Urbano"}</div>
-                    </div>
-                    {comiteParaAsignar === c.id && <span style={{ color: "#7C3AED", fontWeight: 700, fontSize: 16 }}>✓</span>}
-                  </div>
-                ));
-              })()}
-            </div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 16, borderTop: "1px solid #f0ede8" }}>
-            <button onClick={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}
-              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-            <button onClick={asignarComite} disabled={!comiteParaAsignar}
-              style={{ padding: "9px 22px", borderRadius: 8, background: comiteParaAsignar ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: comiteParaAsignar ? "pointer" : "not-allowed" }}>
-              Confirmar asignación
-            </button>
-          </div>
-        </Modal>
-      )}
-
       {/* ── REGISTRO DE VISITAS A OFICINA ─────────────────────────────────── */}
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
         <div style={{ background: "#f8f7ff", borderBottom: "2px solid #7C3AED", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -5143,6 +4954,196 @@ const datosSolicitud = {
           )}
         </div>
       </div>
+
+
+      {misSols.length > 1 && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 20, border: "1px solid #dbeafe" }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Programa a revisar</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {misSols.map(sol => {
+              const prog = todosProgramas.find(p => p.id === (sol.programaId || sol.programa_id));
+              const activo = (sol.programaId || sol.programa_id) === programaSeleccionadoId;
+              const conteo = conteoDocumentosSolicitud(sol.documentos || [], sol.programaId || sol.programa_id);
+              return (
+                <button key={sol.id} type="button" onClick={() => setProgramaTrabajoId(sol.programaId || sol.programa_id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    border: "1.5px solid " + (activo ? (prog?.color || "#1e3a5f") : "#CBD5E1"),
+                    background: activo ? (prog?.colorLight || "#EFF6FF") : "#F8FAFC",
+                    color: activo ? (prog?.color || "#1e3a5f") : "#475569",
+                    borderRadius: 10,
+                    padding: "10px 13px",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}>
+                  <span>{prog?.icon || "P"}</span>
+                  <span>{prog?.nombre || sol.programaId}</span>
+                  <span style={{ fontSize: 11, opacity: .78 }}>{conteo.completos}/{conteo.total}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {tieneSolicitudCsp && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", marginBottom: 20, border: "1px solid #dbeafe" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: "#1e3a5f" }}>Línea de tiempo CSP del solicitante</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>{editandoLineaTiempoPersona ? "Modifique las etapas y luego guarde los cambios." : "Presione Modificar línea de tiempo para editar las etapas."}</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {!editandoLineaTiempoPersona ? (
+                <button onClick={() => setEditandoLineaTiempoPersona(true)}
+                  style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
+                  Modificar línea de tiempo
+                </button>
+              ) : (
+                <>
+                  <button onClick={cancelarEdicionLineaTiempoPersona} disabled={guardandoLineaTiempoPersona}
+                    style={{ background: "#fff", color: "#475569", border: "1px solid #CBD5E1", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
+                    Cancelar
+                  </button>
+                  <button onClick={guardarLineaTiempoPersonaCsp} disabled={guardandoLineaTiempoPersona}
+                    style={{ background: guardandoLineaTiempoPersona ? "#94A3B8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 15px", fontSize: 13, fontWeight: 900, cursor: guardandoLineaTiempoPersona ? "not-allowed" : "pointer" }}>
+                    {guardandoLineaTiempoPersona ? "Guardando..." : "Guardar línea de tiempo"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {LINEA_TIEMPO_CSP.map((etapa, idx) => {
+              const marcada = !!lineaTiempoPersonaCsp[etapa.id];
+              const bloqueadaPorCorte = lineaTiempoCspCortada(lineaTiempoPersonaCsp, idx);
+              const bloqueada = !editandoLineaTiempoPersona || bloqueadaPorCorte;
+              const decision = etapa.decision ? decisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
+              const notaDecision = etapa.decision ? notaDecisionLineaTiempoCsp(lineaTiempoPersonaCsp, etapa.decision) : "";
+              const reunionesMarcadas = etapa.reuniones ? [1, 2, 3, 4, 5].filter(n => lineaTiempoPersonaCsp[`${etapa.id}_reunion_${n}`]).length : 0;
+              return (
+                <div key={etapa.id}
+                  title={etapa.detalle || etapa.label}
+                  style={{
+                    minWidth: 155,
+                    flex: "1 1 155px",
+                    textAlign: "left",
+                    border: bloqueadaPorCorte ? "2px solid #E5E7EB" : marcada ? "2px solid #1D6FA4" : decision === "no_califica" ? "2px solid #FCA5A5" : decision === "califica" ? "2px solid #10B981" : "2px solid #CBD5E1",
+                    background: bloqueadaPorCorte ? "#F3F4F6" : marcada ? "#DBEAFE" : decision === "no_califica" ? "#FEF2F2" : decision === "califica" ? "#ECFDF5" : "#F8FAFC",
+                    color: bloqueadaPorCorte ? "#9CA3AF" : marcada ? "#1e3a5f" : decision === "califica" ? "#047857" : decision === "no_califica" ? "#B91C1C" : "#475569",
+                    borderRadius: 9,
+                    padding: "9px 10px",
+                    boxShadow: marcada ? "0 0 0 3px rgba(29,111,164,0.18)" : decision ? "0 0 0 2px rgba(16,185,129,0.12)" : "none",
+                  }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, opacity: .75 }}>ETAPA {idx + 1}</div>
+                  <button type="button" disabled={bloqueada}
+                    onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: !prev[etapa.id] }))}
+                    style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: 0, padding: 0, color: "inherit", cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, lineHeight: 1.2 }}>{marcada ? "✓ " : ""}{etapa.label}</div>
+                  </button>
+                  {etapa.detalle && <div style={{ fontSize: 10, marginTop: 3, opacity: .82 }}>{etapa.detalle}</div>}
+                  {etapa.decision && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 8 }}>
+                      <button type="button" disabled={bloqueada} onClick={() => cambiarDecisionLineaTiempoPersona(etapa, "califica")}
+                        style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "califica" ? "#059669" : "#D1FAE5", color: decision === "califica" ? "#fff" : "#047857", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                        {etapa.positivo || "Califica"}
+                      </button>
+                      <button type="button" disabled={bloqueada} onClick={() => cambiarDecisionLineaTiempoPersona(etapa, "no_califica")}
+                        style={{ flex: 1, border: 0, borderRadius: 6, padding: "5px 6px", background: decision === "no_califica" ? "#DC2626" : "#FEE2E2", color: decision === "no_califica" ? "#fff" : "#B91C1C", fontSize: 11, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                        {etapa.negativo || "No califica"}
+                      </button>
+                    </div>
+                  )}
+                  {etapa.decision && decision === "no_califica" && (
+                    <div style={{ marginTop: 7, background: "#FFF1F2", border: "1px solid #FCA5A5", borderRadius: 6, padding: "5px 6px", color: "#B91C1C", fontSize: 10, fontWeight: 800, lineHeight: 1.25 }}>
+                      Nota: {notaDecision || "Debe ingresar razón"}
+                    </div>
+                  )}
+                  {etapa.fecha && (
+                    <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                      <input type="date" disabled={bloqueada}
+                        value={lineaTiempoPersonaCsp[etapa.fecha] || ""}
+                        onChange={e => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [etapa.fecha]: e.target.value }))}
+                        style={{ width: "100%", boxSizing: "border-box", border: "1px solid #CBD5E1", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "#1e3a5f", background: bloqueada ? "#F3F4F6" : "#fff" }} />
+                      <textarea disabled={bloqueada}
+                        value={lineaTiempoPersonaCsp[etapa.observacion] || ""}
+                        onChange={e => setLineaTiempoPersonaCsp(prev => ({ ...prev, [etapa.id]: true, [etapa.observacion]: e.target.value }))}
+                        placeholder="Observaciones"
+                        rows={2}
+                        style={{ width: "100%", boxSizing: "border-box", resize: "vertical", border: "1px solid #CBD5E1", borderRadius: 6, padding: "5px 6px", fontSize: 11, color: "#1e3a5f", background: bloqueada ? "#F3F4F6" : "#fff" }} />
+                    </div>
+                  )}
+                  {etapa.reuniones && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, marginTop: 8 }}>
+                      {[1, 2, 3, 4, 5].map(n => {
+                        const key = `${etapa.id}_reunion_${n}`;
+                        const vb = !!lineaTiempoPersonaCsp[key];
+                        return (
+                          <button key={key} type="button" disabled={bloqueada}
+                            onClick={() => setLineaTiempoPersonaCsp(prev => ({ ...prev, [key]: !prev[key] }))}
+                            title={`Reunión ${n} - VB`}
+                            style={{ border: 0, borderRadius: 6, padding: "5px 2px", background: vb ? "#059669" : "#E5E7EB", color: vb ? "#fff" : "#475569", fontSize: 10, fontWeight: 900, cursor: bloqueada ? "not-allowed" : "pointer" }}>
+                            R{n}
+                          </button>
+                        );
+                      })}
+                      <div style={{ gridColumn: "1 / -1", fontSize: 10, color: "#64748b", marginTop: 2 }}>{reunionesMarcadas}/5 VB</div>
+                    </div>
+                  )}
+                  {bloqueadaPorCorte && <div style={{ fontSize: 10, marginTop: 6, color: "#9CA3AF", fontWeight: 800 }}>Avance cortado por No califica</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal asignar comité */}
+      {showAsignarComite && (
+        <Modal title="Asignar comité al solicitante" onClose={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: "#555", marginBottom: 12 }}>
+              Selecciona el comité para <strong>{persona.nombre}</strong>:
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {(() => {
+                const normN = s => (s||"").toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ");
+                const lista = [
+                  ...COMITES_HABITABILIDAD,
+                  ...COMITES_FIJOS.map(c => ({ id: c.codigo, nombre: c.nombre, tipo: c.tipo, codigo: c.codigo })),
+                  ...(comites||[]).filter(sc => sc.nombre && ![...COMITES_FIJOS, ...COMITES_HABITABILIDAD].some(f => normN(f.nombre) === normN(sc.nombre)))
+                    .map(sc => ({ id: sc.id, nombre: sc.nombre, tipo: sc.programaId === "csp_urbano" ? "URBANO" : "RURAL", codigo: null }))
+                ];
+                return lista.map(c => (
+                  <div key={c.id} onClick={() => setComiteParaAsignar(c.id)}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 9, border: "2px solid " + (comiteParaAsignar === c.id ? "#7C3AED" : "#e5e7eb"), background: comiteParaAsignar === c.id ? "#f5f3ff" : "#fff", cursor: "pointer" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: comiteParaAsignar === c.id ? "#7C3AED" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: c.codigo ? 11 : 14, fontWeight: 800, color: comiteParaAsignar === c.id ? "#fff" : "#6b7280", fontFamily: "monospace", flexShrink: 0 }}>
+                      {c.codigo || (c.tipo === "URBANO" ? "🏙️" : "🌾")}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: comiteParaAsignar === c.id ? "#4C1D95" : "#111827" }}>{c.nombre}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{c.tipo === "RURAL" ? "🌾 Rural" : "🏙️ Urbano"}</div>
+                    </div>
+                    {comiteParaAsignar === c.id && <span style={{ color: "#7C3AED", fontWeight: 700, fontSize: 16 }}>✓</span>}
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 16, borderTop: "1px solid #f0ede8" }}>
+            <button onClick={() => { setShowAsignarComite(false); setComiteParaAsignar(""); }}
+              style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={asignarComite} disabled={!comiteParaAsignar}
+              style={{ padding: "9px 22px", borderRadius: 8, background: comiteParaAsignar ? "#7C3AED" : "#d1d5db", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: comiteParaAsignar ? "pointer" : "not-allowed" }}>
+              Confirmar asignación
+            </button>
+          </div>
+        </Modal>
+      )}
+
 
       <div style={{ background: "#fff", borderRadius: 14, padding: "14px 20px", marginBottom: 20, border: "1px solid #e8e3de", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
