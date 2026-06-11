@@ -4774,11 +4774,11 @@ const datosSolicitud = {
         </div>
       </div>
       {/* ── REGISTRO DE VISITAS A OFICINA ─────────────────────────────────── */}
-      <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ background: "#f8f7ff", borderBottom: "2px solid #7C3AED", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#4C1D95" }}>📋 Registro de Visitas a Oficina</div>
+      <div style={{ background: "#FFFBEB", borderRadius: 14, border: "3px solid #F59E0B", marginBottom: 20, overflow: "hidden", boxShadow: "0 10px 24px rgba(245, 158, 11, 0.24)" }}>
+        <div style={{ background: "linear-gradient(90deg, #C2410C 0%, #EA580C 55%, #F59E0B 100%)", borderBottom: "3px solid #92400E", padding: "16px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: "#fff", letterSpacing: 0 }}>📋 Registro de Visitas a Oficina</div>
           <button onClick={() => { setShowFormVisita(v => !v); setFormVisita({ fecha: todayISO(), profesional: currentUser?.nombre || "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: currentUser?.nombre || "", siguientePaso: "", fechaCompromiso: "" }); }}
-            style={{ background: "#7C3AED", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            style={{ background: "#1e3a5f", color: "#fff", border: "2px solid rgba(255,255,255,0.72)", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 12px rgba(30, 58, 95, 0.28)" }}>
             {showFormVisita ? "✕ Cancelar" : "+ Agregar visita"}
           </button>
         </div>
