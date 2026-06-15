@@ -4,6 +4,7 @@ import ComitesVivienda from "./components/ComitesVivienda";
 import InformesView from "./components/InformesView";
 import SiguientePaso from "./components/SiguientePaso";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import JSZip from "jszip";
 import {
   COMITE_DESMARQUE,
   esDesmarcado,
@@ -4138,21 +4139,63 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (zipSeleccionados.length === 0) return;
     setGenerandoZip(true);
     try {
-      const res = await fetch(`${API}/api/zip-documentos`, {
-        method: "POST",
-        headers: jsonHeaders(),
-        body: JSON.stringify({
-          personas: zipSeleccionados.map(p => ({ id: p.id, nombre: p.nombre, rut: p.rut }))
-        })
-      });
-      const contentType = res.headers.get("content-type") || "";
-      if (!res.ok) {
-        const err = contentType.includes("application/json")
-          ? await res.json().catch(() => ({}))
-          : {};
-        throw new Error(err.error || "No se pudo generar el ZIP.");
+      const nombreCarpetaZip = (p) => String(p?.nombre || "SIN NOMBRE")
+        .toUpperCase()
+        .replace(/[\\/:*?"<>|]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim() || "SIN NOMBRE";
+      const nombreArchivoZip = (nombre, idx) => {
+        const limpio = String(nombre || "").replace(/\\/g, "/").split("/").pop().trim();
+        return limpio || `documento_${idx + 1}.pdf`;
+      };
+      const dataUrlBlob = async (dataUrl) => {
+        if (!String(dataUrl || "").startsWith("data:")) return null;
+        const r = await fetch(dataUrl);
+        const b = await r.blob();
+        return b.size ? b : null;
+      };
+      const generarZipCliente = async () => {
+        const zip = new JSZip();
+        let agregados = 0;
+        for (const p of zipSeleccionados) {
+          const folder = zip.folder(nombreCarpetaZip(p));
+          const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(p.id)}&select=nombre,carpeta,mime_type,data_url&soloDisponibles=true`;
+          const r = await fetch(urlPG, { cache: "no-store" });
+          const json = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(json.error || "No se pudieron leer documentos desde la base.");
+          const filas = json.data || json || [];
+          for (let i = 0; i < filas.length; i++) {
+            const row = filas[i];
+            const blobDoc = await dataUrlBlob(row.data_url);
+            if (!blobDoc) continue;
+            folder.file(nombreArchivoZip(row.nombre, i), blobDoc);
+            agregados++;
+          }
+        }
+        if (!agregados) throw new Error("No se encontraron documentos disponibles para agregar al ZIP.");
+        return zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      };
+
+      let blob = null;
+      try {
+        const res = await fetch(`${API}/api/zip-documentos`, {
+          method: "POST",
+          headers: jsonHeaders(),
+          body: JSON.stringify({
+            personas: zipSeleccionados.map(p => ({ id: p.id, nombre: p.nombre, rut: p.rut }))
+          })
+        });
+        const contentType = res.headers.get("content-type") || "";
+        if (res.ok && contentType.includes("application/zip")) {
+          const serverBlob = await res.blob();
+          if (serverBlob.size > 0) blob = serverBlob;
+        } else {
+          console.warn("[ZIP servidor no disponible]", res.status, contentType);
+        }
+      } catch (err) {
+        console.warn("[ZIP servidor error]", err?.message || err);
       }
-      const blob = await res.blob();
+      if (!blob) blob = await generarZipCliente();
       if (!blob.size) throw new Error("El ZIP generado no contiene documentos.");
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

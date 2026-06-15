@@ -804,14 +804,11 @@ const nombreSeguroZip = (nombre = '', fallback = 'archivo') => {
   return limpio || fallback;
 };
 const carpetaSeguraZip = (persona = {}) => {
-  const rut = String(persona.rut || '').replace(/[^0-9kK]/g, '');
-  const nombre = String(persona.nombre || 'SIN_NOMBRE')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '_')
-    .replace(/[^a-zA-Z0-9_]/g, '')
-    .slice(0, 90) || 'SIN_NOMBRE';
-  return `${nombre}${rut ? '_' + rut : ''}`;
+  return String(persona.nombre || 'SIN NOMBRE')
+    .toUpperCase()
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'SIN NOMBRE';
 };
 const bufferDesdeDataUrl = (dataUrl = '') => {
   const texto = String(dataUrl || '');
