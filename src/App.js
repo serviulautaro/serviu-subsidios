@@ -3975,6 +3975,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     };
 
     // 1. RENDER: /files/ (ruta principal de archivos estáticos)
+    const esHtmlGenerado = nombre.toLowerCase().endsWith(".html");
+    if (esHtmlGenerado && persona?.id) {
+      const urlBD = `${API}/archivo-generado/${encodeURIComponent(persona.id)}/${encodeURIComponent(nombre)}`;
+      if (await urlSirveDocumento(urlBD)) return urlBD;
+    }
     const rutasLocales = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
     for (const ruta of rutasLocales) {
       const url = apiPath("/files/", ruta, nombre);
@@ -3988,7 +3993,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     }
 
     // 3. BD: documento generado guardado como data_url en archivos_solicitante
-    if (persona?.id) {
+    if (!esHtmlGenerado && persona?.id) {
       const urlBD = `${API}/archivo-generado/${encodeURIComponent(persona.id)}/${encodeURIComponent(nombre)}`;
       if (await urlSirveDocumento(urlBD)) return urlBD;
     }

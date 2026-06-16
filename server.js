@@ -821,6 +821,17 @@ const bufferDesdeDataUrl = (dataUrl = '') => {
     ? Buffer.from(data, 'base64')
     : Buffer.from(decodeURIComponent(data), 'utf8');
 };
+const dataUrlABuffer = (dataUrl = '') => {
+  const texto = String(dataUrl || '');
+  if (!texto.startsWith('data:')) return Buffer.from(texto, 'utf8');
+  const coma = texto.indexOf(',');
+  if (coma === -1) return Buffer.alloc(0);
+  const header = texto.slice(0, coma).toLowerCase();
+  const data = texto.slice(coma + 1);
+  return header.includes(';base64')
+    ? Buffer.from(data, 'base64')
+    : Buffer.from(decodeURIComponent(data), 'utf8');
+};
 
 app.post('/api/zip-documentos', async (req, res) => {
   try {
@@ -1199,7 +1210,7 @@ async function servirDesdeDB(res, nombre, carpeta) {
     const dataUrl = rows[0].data_url;
     const mime = rows[0].mime_type || 'application/octet-stream';
     if (dataUrl.startsWith('data:')) {
-      const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
+      const buf = dataUrlABuffer(dataUrl);
       res.setHeader('Content-Type', mime);
       res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(nombre) + '"');
       res.send(buf);
@@ -1225,9 +1236,9 @@ app.get('/archivo-generado/:personaId/:nombre', async (req, res) => {
     const mimeType = rows[0].mime_type || 'application/octet-stream';
     // Puede ser dataUrl (data:...;base64,...) o HTML plano
     if (dataUrl.startsWith('data:')) {
-      const [header, base64] = dataUrl.split(',');
-      const mime = header.replace('data:', '').replace(';base64', '');
-      const buf = Buffer.from(base64, 'base64');
+      const header = dataUrl.slice(0, dataUrl.indexOf(','));
+      const mime = header.replace('data:', '').replace(';base64', '').split(';')[0] || mimeType;
+      const buf = dataUrlABuffer(dataUrl);
       res.setHeader('Content-Type', mime);
       res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(decodeURIComponent(nombre))}"`);
       return res.send(buf);
@@ -1287,6 +1298,9 @@ app.use('/files', async (req, res) => {
     const nombre = decodeURIComponent(partes.pop() || '');
     const carpeta = partes.join('/');
     if (!nombre) return res.status(404).json({ error: 'Nombre vacío.' });
+    // Los documentos generados (.html) tienen respaldo en PostgreSQL. Priorizar BD
+    // evita abrir copias físicas antiguas o dañadas como texto ilegible.
+    if (nombre.toLowerCase().endsWith('.html') && await servirDesdeDB(res, nombre, carpeta)) return;
     // 1. Buscar en disco con búsqueda fuzzy
     const encontrado = buscarArchivoLocal(carpeta, nombre);
     if (encontrado) return res.sendFile(encontrado);
