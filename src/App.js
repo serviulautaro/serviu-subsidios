@@ -224,6 +224,14 @@ const usuarioAuditoriaHeaders = () => {
   }
 };
 const jsonHeaders = () => ({ "Content-Type": "application/json", ...usuarioAuditoriaHeaders() });
+const MARCA_DESMARQUE_TRAMITE_LIBERADO = "[ADMIN_DESMARQUE_TRAMITE_LIBERADO]";
+const desmarqueTramiteLiberado = (persona = {}) =>
+  String(persona.observaciones || "").includes(MARCA_DESMARQUE_TRAMITE_LIBERADO);
+const agregarMarcaDesmarqueTramiteLiberado = (observaciones = "", usuario = "") => {
+  const usuarioTxt = usuario ? ` Usuario: ${usuario}` : "";
+  const linea = `${MARCA_DESMARQUE_TRAMITE_LIBERADO} ${today()} - Marca Desmarque en tramite quitada por administrador.${usuarioTxt}`;
+  return [observaciones, linea].filter(Boolean).join("\n");
+};
 const STORAGE_BUCKET = "documentos-solicitantes";
 const safeStorageSegment = (value = "") => {
   const base = String(value || "")
@@ -1964,7 +1972,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
               d.valor && (d.valor.toLowerCase().includes("aprobado") || d.valor.toLowerCase().includes("desmarcado"))
             )
           );
-          const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
+          const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada && !desmarqueTramiteLiberado(p);
 
           return (
             <div key={p.id} onClick={() => onDetail(p.id)} style={{
@@ -9145,10 +9153,35 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     }
   };
 
-  const confirmarEliminarPersona = () => {
-    setPendingDeleteId(null);
-    setClaveInput("");
-    setClaveError(false);
+  const confirmarEliminarPersona = async () => {
+    if (claveInput !== ADMIN_KEY) {
+      setClaveError(true);
+      return;
+    }
+    const personaEliminar = personas.find(p => p.id === pendingDeleteId);
+    try {
+      const res = await fetch(`${API}/api/db/personas/delete`, {
+        method: "DELETE",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ filters: [{ op: "eq", col: "id", value: pendingDeleteId }] })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.error || "No se pudo eliminar en el servidor.");
+      }
+      onSavePersonas(personas.filter(p => p.id !== pendingDeleteId));
+      await registrarAuditoria?.("eliminar_solicitante_admin", "personas", pendingDeleteId, {
+        solicitante: personaEliminar?.nombre || "",
+        rut: personaEliminar?.rut || "",
+        comite: comite?.nombre || "",
+        detalle: "Eliminado desde detalle de comite con clave de administrador. Documentos y respaldos no se borran.",
+      });
+      setPendingDeleteId(null);
+      setClaveInput("");
+      setClaveError(false);
+    } catch (err) {
+      alert("No se pudo eliminar el solicitante en la base principal. No se quitara de pantalla para evitar que vuelva a aparecer. Detalle: " + (err?.message || err));
+    }
   };
 
   const abrirMover = (e, persona) => {
@@ -9159,6 +9192,49 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     setMotivoMovimiento("");
     setClaveMoverAdmin("");
     setClaveMoverError(false);
+  };
+
+  const abrirEliminarAdmin = (e, persona) => {
+    e.stopPropagation();
+    setPendingDeleteId(persona.id);
+    setClaveInput("");
+    setClaveError(false);
+  };
+
+  const quitarDesmarqueEnTramite = async (e, persona) => {
+    e.stopPropagation();
+    const clave = window.prompt("Ingrese clave de administrador para quitar la marca Desmarque en tramite:");
+    if (clave === null) return;
+    if (clave !== ADMIN_KEY) {
+      alert("Clave de administrador incorrecta.");
+      return;
+    }
+    const usuario = currentUser?.nombre || currentUser?.username || currentUser?.usuario || "Usuario no identificado";
+    const observaciones = agregarMarcaDesmarqueTramiteLiberado(persona.observaciones || "", usuario);
+    try {
+      const res = await fetch(`${API}/api/db/personas/update`, {
+        method: "PATCH",
+        headers: jsonHeaders(),
+        body: JSON.stringify({
+          filters: [{ op: "eq", col: "id", value: persona.id }],
+          values: { observaciones }
+        })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.error || "No se pudo guardar en el servidor.");
+      }
+      onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, observaciones } : p));
+      await registrarAuditoria?.("quitar_desmarque_en_tramite", "personas", persona.id, {
+        solicitante: persona.nombre || "",
+        rut: persona.rut || "",
+        comite: comite?.nombre || "",
+        detalle: "Marca Desmarque en tramite quitada manualmente con clave de administrador.",
+      });
+      alert("Marca Desmarque en tramite quitada correctamente.");
+    } catch (err) {
+      alert("No se pudo quitar la marca. Detalle: " + (err?.message || err));
+    }
   };
 
   const togglePendienteCalificar = async (e, persona) => {
@@ -9507,7 +9583,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
               d.valor && (d.valor.toLowerCase().includes("aprobado") || d.valor.toLowerCase().includes("desmarcado"))
             )
           );
-          const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada;
+          const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada && !desmarqueTramiteLiberado(p);
           const condicional = estaCondicional(p);
           const noCalificaCsp = estadoNoCalificaCspPersona(p);
           const grupoDesmarqueActual = tieneHabitabilidad && esDesmarcado(p) ? grupoDesmarcado(p, tieneSolicitudDesmarquePersona) : "";
@@ -9568,9 +9644,19 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                     {p.pendiente_calificar ? "Quitar pendiente" : "Pendiente"}
                   </button>
                 )}
+                {desmarqueEnTramite && (
+                  <button onClick={(e) => quitarDesmarqueEnTramite(e, p)}
+                    style={{ background: "#FFF7ED", color: "#C2410C", border: "1px solid #FDBA74", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>
+                    Quitar tramite (admin)
+                  </button>
+                )}
                 <button onClick={(e) => abrirMover(e, p)}
                   style={{ background: desmarcadoBloqueado ? "#FFF7ED" : "#EFF6FF", color: desmarcadoBloqueado ? "#C2410C" : "#1D4ED8", border: "1px solid " + (desmarcadoBloqueado ? "#FDBA74" : "#BFDBFE"), borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                   {desmarcadoBloqueado ? "Mover (admin)" : "Mover"}
+                </button>
+                <button onClick={(e) => abrirEliminarAdmin(e, p)}
+                  style={{ background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>
+                  Borrar (admin)
                 </button>
               </div>
             </div>
