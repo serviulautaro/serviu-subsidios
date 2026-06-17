@@ -857,31 +857,21 @@ const constructoraDeComite = (persona = {}, comites = []) => {
     "";
 };
 
-const DOCS_SOLICITUD = {
-  habitabilidad: [
-    { id: "dominio",  label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
-    { id: "rut",      label: "Cédula de identidad colores" },
-    { id: "avaluo",   label: "Avalúo fiscal detallado" },
-  ],
-  csp_urbano: [
-    { id: "dominio",      label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
-    { id: "avaluo",       label: "Avalúo fiscal detallado" },
-    { id: "infoprevias",  label: "Informaciones previas" },
-    { id: "cuenta",       label: "Cuenta de ahorro para la vivienda" },
-    { id: "rut",          label: "Cédula de identidad colores" },
-    { id: "agua",         label: "Boleta de agua o factibilidad" },
-    { id: "luz",          label: "Boleta de luz o factibilidad" },
-  ],
-  csp_rural: [
-    { id: "rut",          label: "Cédula de identidad colores" },
-    { id: "agua",         label: "Boleta de agua (si corresponde)" },
-    { id: "luz",          label: "Boleta de luz (si corresponde)" },
-    { id: "dominio",      label: "Dominio de la propiedad", subopciones: ["D.V.","DRU","Goce","Usufructo","Otro"] },
-    { id: "avaluo",       label: "Certificado de avalúo detallado" },
-    { id: "ruralidad",    label: "Certificado de ruralidad" },
-    { id: "cuenta",       label: "Cuenta de ahorro para la vivienda" },
-  ],
-};
+const idDocumentoVisita = (doc = {}, idx = 0) =>
+  String(doc.id || doc.nombre || doc.label || `doc_${idx}`)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase() || `doc_${idx}`;
+const normalizarDocumentosParaVisita = (documentos = [], programaId = "") =>
+  docsParaConteoSolicitud(documentos || [], programaId)
+    .map((doc, idx) => ({
+      id: idDocumentoVisita(doc, idx),
+      label: doc.label || doc.nombre || `Documento ${idx + 1}`,
+      subopciones: doc.subopciones || doc.opciones || doc.options || null,
+    }))
+    .filter(doc => doc.label);
 
 const DB = {
   get: (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
@@ -4801,12 +4791,15 @@ const datosSolicitud = {
             : misSols.find(s => s.programaId === "habitabilidad") ? "habitabilidad"
             : persona.comiteId === "comite_desmarque" ? "habitabilidad"
             : null);
-          console.log("[Visitas] programaId detectado:", progId, "| misSols programas:", misSols.map(s => s.programaId));
-          const progDocs = progId ? (DOCS_SOLICITUD[progId] || []) : [];
-          const progLabel = progId === "csp_urbano" ? "Construcción Sitio Propio Urbano"
-            : progId === "csp_rural" ? "Construcción Sitio Propio Rural"
-            : progId === "habitabilidad" ? "Desmarque de Vivienda"
-            : null;
+          const solVisita = progId
+            ? (solsTrabajo.find(s => (s.programaId || s.programa_id) === progId) || misSols.find(s => (s.programaId || s.programa_id) === progId))
+            : misSols[0];
+          const programaVisita = todosProgramas.find(p => p.id === (progId || solVisita?.programaId || solVisita?.programa_id));
+          const docsSolicitudVisita = Array.isArray(solVisita?.documentos) && solVisita.documentos.length
+            ? solVisita.documentos
+            : (programaVisita?.documentos || []);
+          const progDocs = normalizarDocumentosParaVisita(docsSolicitudVisita, progId || solVisita?.programaId || solVisita?.programa_id || "");
+          const progLabel = programaVisita?.nombre || solVisita?.programaNombre || solVisita?.programa_id || solVisita?.programaId || null;
           const profesionalesBase = ["Priscilla Curín Castro","Jacqueline Ortega","Marcelo Cifuentes Vásquez","Onoria Retamal","Jorge Campos Campos","Jonathan Rodríguez"];
           const profesionales = currentUser?.nombre && !profesionalesBase.includes(currentUser.nombre)
             ? [currentUser.nombre, ...profesionalesBase]
@@ -4814,6 +4807,19 @@ const datosSolicitud = {
           const canSave = formVisita.fecha && (formVisita.profesional || currentUser?.nombre);
           return (
           <div style={{ padding: "18px 22px", background: "#faf9ff", borderBottom: "1px solid #e8e3de" }}>
+            {misSols.length > 1 && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "#1e3a5f", display: "block", marginBottom: 5, textTransform: "uppercase" }}>Programa para esta visita</label>
+                <select value={progId || ""} onChange={e => setProgramaTrabajoId(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #1e3a5f", fontSize: 13, background: "#fff", boxSizing: "border-box", fontWeight: 700, color: "#1e3a5f" }}>
+                  {misSols.map(sol => {
+                    const idProg = sol.programaId || sol.programa_id || "";
+                    const prog = todosProgramas.find(p => p.id === idProg);
+                    return <option key={sol.id} value={idProg}>{prog?.nombre || idProg || "Programa sin nombre"}</option>;
+                  })}
+                </select>
+              </div>
+            )}
             {/* Fila 1: fecha + profesional */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
               <div>
@@ -4836,11 +4842,11 @@ const datosSolicitud = {
             {/* Checklist de documentos */}
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 6, textTransform: "uppercase" }}>
-                Documentos solicitados
+                Documentos requeridos ({progDocs.length}) - marcar documentos solicitados
                 {progLabel && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: "#7C3AED", background: "#f5f3ff", borderRadius: 10, padding: "2px 8px" }}>{progLabel}</span>}
               </label>
               {progDocs.length === 0 ? (
-                <div style={{ fontSize: 12, color: "#aaa" }}>Sin programa CSP detectado — use el campo "Otros"</div>
+                <div style={{ fontSize: 12, color: "#aaa" }}>Sin documentos requeridos detectados para este programa; use el campo "Otros".</div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                   {progDocs.map(doc => {
@@ -4906,11 +4912,11 @@ const datosSolicitud = {
             {/* Documentos recibidos */}
             <div style={{ marginTop: 4, marginBottom: 14, borderTop: "1.5px dashed #e5e7eb", paddingTop: 14 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#059669", display: "block", marginBottom: 6, textTransform: "uppercase" }}>
-                Documentos recibidos en esta visita
+                Documentos recibidos en esta visita ({progDocs.length})
                 {progLabel && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: "#059669", background: "#ecfdf5", borderRadius: 10, padding: "2px 8px" }}>{progLabel}</span>}
               </label>
               {progDocs.length === 0 ? (
-                <div style={{ fontSize: 12, color: "#aaa" }}>Sin programa detectado</div>
+                <div style={{ fontSize: 12, color: "#aaa" }}>Sin documentos requeridos detectados para este programa.</div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 10 }}>
                   {progDocs.map(doc => {
