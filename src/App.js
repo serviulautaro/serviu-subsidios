@@ -355,8 +355,13 @@ const detalleResultadoDoc = (doc) => {
   const partes = raw.split(" - ");
   return partes.length > 1 ? partes.slice(1).join(" - ").trim() : "";
 };
+const docEsMemoDom = (doc = {}) => {
+  const n = docNombreNorm(doc);
+  return n.includes("memo") && (n.includes("dom") || n.includes("comprobante"));
+};
 const estadoLineaDesmarque = (sol = {}) => {
   const docs = sol.documentos || [];
+  const avanceManual = leerAvanceManualDesmarque(docs);
   const cedula = buscarDocDesmarque(docs, ["cedula"]);
   const tituloDominio = docs.find(d => {
     const n = docNombreNorm(d);
@@ -365,8 +370,8 @@ const estadoLineaDesmarque = (sol = {}) => {
   const docsCompletos = docConVb(cedula) && docConVb(tituloDominio);
   const calificacion = leerCalificacionDesmarque(sol);
   const visitado = !!fechaVisitaSolicitud(sol);
-  const memoDom = buscarDocDesmarque(docs, ["memo", "dom"]);
-  const solicitudDom = docConVb(memoDom);
+  const memoDom = docs.find(docEsMemoDom);
+  const solicitudDom = docConVb(memoDom) || avanceManual[6] === true;
   const informeDom = buscarDocDesmarque(docs, ["informe", "dom"]);
   const informeTexto = valorDocTexto(informeDom);
   const informeDetalle = detalleResultadoDoc(informeDom);
