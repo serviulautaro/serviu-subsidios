@@ -903,6 +903,39 @@ const normalizarDocumentosParaVisita = (documentos = [], programaId = "") =>
     }))
     .filter(doc => doc.label);
 
+const claveNombreDocumento = (nombre = "") =>
+  String(nombre || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+
+const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
+  if (!programa || !Array.isArray(programa.documentos) || !programa.documentos.length) return documentos || [];
+  const base = Array.isArray(documentos) ? documentos : [];
+  const existentes = new Set(base.map(d => claveNombreDocumento(d?.nombre)).filter(Boolean));
+  const faltantes = programa.documentos.filter(d => d?.nombre && !existentes.has(claveNombreDocumento(d.nombre)));
+  if (!faltantes.length) return base;
+  return [
+    ...base,
+    ...faltantes.map(d => ({
+      nombre: d.nombre,
+      obligatorio: !!d.obligatorio,
+      entregado: false,
+      tipo: d.tipo || null,
+      opciones: d.opciones || null,
+      opcionSeleccionada: d.opcionSeleccionada || null,
+      etiqueta: d.etiqueta || null,
+      valor: d.valor || "",
+      requiereArchivo: d.requiereArchivo || false,
+      requiereTexto: d.requiereTexto || false,
+      etiquetaTexto: d.etiquetaTexto || "",
+      subopciones: d.subopciones || null,
+    }))
+  ];
+};
+
 const DB = {
   get: (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
@@ -11071,19 +11104,10 @@ export default function App() {
     if (!fechaBD && !fechaDocs && fechaLS) {
       mapped.documentos = documentosConFechaVisita(mapped.documentos || [], fechaLS);
     }
-    // Migrar solicitudes CSP antiguas solo cuando sus documentos completos ya fueron cargados.
-    if ((mapped.programaId === "csp_rural" || mapped.programaId === "csp_urbano") && documentosCargados) {
+    // Completar solicitudes antiguas o incompletas sin borrar documentos existentes.
+    if (documentosCargados) {
       const prog = programasCarga.find(p => p.id === mapped.programaId);
-      if (prog && mapped.documentos) {
-        const nombresExistentes = new Set(mapped.documentos.map(d => d.nombre));
-        const faltantes = prog.documentos.filter(d => !nombresExistentes.has(d.nombre));
-        if (faltantes.length > 0) {
-          mapped.documentos = [
-            ...mapped.documentos,
-            ...faltantes.map(d => ({ nombre: d.nombre, obligatorio: d.obligatorio, entregado: false, tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null }))
-          ];
-        }
-      }
+      mapped.documentos = completarDocumentosDesdePrograma(mapped.documentos || [], prog);
     }
     return mapped;
   };
