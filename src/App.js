@@ -8914,22 +8914,6 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     return /\[CONDICIONAL ACTIVA\]/i.test(ultima) ? "condicional" : "aprobado";
   };
   const estaCondicional = (persona = {}) => estadoCondicionalidad(persona) === "condicional";
-  const esListoParaVisita = (p) => {
-    const sol = solicitudHabitabilidadPersona(p.id);
-    if (!sol) return false;
-    const st = estadoLineaDesmarque(sol);
-    return st.calificacion.estado === "CALIFICA" &&
-      !st.visitado &&
-      !st.solicitudDom &&
-      !st.informeIngresado &&
-      !st.ingresadoServiu &&
-      !st.respuestaIngresada &&
-      !st.informeRechazadoApelable &&
-      !st.informeRechazado &&
-      !st.serviuRechazadoApelable &&
-      !st.serviuRechazado &&
-      !st.desmarcado;
-  };
   const miembros = ordenarSolicitantes(personas.filter(perteneceAlComiteActual));
   // El comité ya fue validado arriba; este efecto completa documentos livianos del listado.
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -8977,28 +8961,34 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     return () => { cancelado = true; };
   }, [comiteId, miembros.map(p => p.id).join("|"), solicitudes.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const noVisitadosDesmarque = miembros.filter(p => {
-    const estado = estadoDesmarquePersona(p);
-    return estado.key === "NO VISITADO" || estado.label === "No Visitado";
+    const sol = solicitudHabitabilidadPersona(p.id);
+    return !!sol && !fechaVisitaSolicitud(sol);
   });
-  const listosParaVisita = miembros.filter(esListoParaVisita);
+  const listosParaVisita = miembros.filter(p => {
+    const sol = solicitudHabitabilidadPersona(p.id);
+    if (!sol) return false;
+    return estadoLineaDesmarque(sol).calificacion.estado === "CALIFICA";
+  });
   const condicionalesDesmarque = miembros.filter(estaCondicional);
   const desmarcadosTodos = personas.filter(esDesmarcadoActual);
   const desmarcadosConPrograma = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "con_programa");
   const desmarcadosPendientes = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "pendiente_calificar");
   const desmarcadosSinPrograma = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "sin_programa");
+  const tabsDesmarcados = ["desmarcados", "des_con_programa", "des_pendiente", "des_sin_programa"];
+  const esTabDesmarcados = tabsDesmarcados.includes(tabDesmarque);
   const lugaresRuralesListos = [...new Set(
     listosParaVisita
       .filter(p => normFiltro(p.tipo_comite || p.tipoComite || p.tipo) === "rural")
       .map(p => (p.sector || "").toString().trim())
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b, "es"));
-  const baseMiembros = esComiteDesmarque && filtroEstado === "DESMARCADO" && tabDesmarque === "des_con_programa"
+  const baseMiembros = esComiteDesmarque && tabDesmarque === "des_con_programa"
     ? desmarcadosConPrograma
-    : esComiteDesmarque && filtroEstado === "DESMARCADO" && tabDesmarque === "des_pendiente"
+    : esComiteDesmarque && tabDesmarque === "des_pendiente"
       ? desmarcadosPendientes
-      : esComiteDesmarque && filtroEstado === "DESMARCADO" && tabDesmarque === "des_sin_programa"
+      : esComiteDesmarque && tabDesmarque === "des_sin_programa"
         ? desmarcadosSinPrograma
-        : esComiteDesmarque && filtroEstado === "DESMARCADO"
+        : esComiteDesmarque && tabDesmarque === "desmarcados"
           ? desmarcadosTodos
           : esComiteDesmarque && tabDesmarque === "no_visitados"
     ? noVisitadosDesmarque
@@ -9012,7 +9002,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       (p.rut || "").includes(search) ||
       (p.comuna || "").toLowerCase().includes(search.toLowerCase());
     const estado = estadoDesmarquePersona(p);
-    const matchEstado = !esComiteDesmarque || filtroEstado === "todos" || estado.key === filtroEstado;
+    const matchEstado = !esComiteDesmarque || esTabDesmarcados || filtroEstado === "todos" || estado.key === filtroEstado;
     const tipo = normFiltro(p.tipo_comite || p.tipoComite || p.tipo);
     const matchTipoListos = !esComiteDesmarque || tabDesmarque !== "listos" || !filtroTipoListos || tipo === normFiltro(filtroTipoListos);
     const matchLugarRural = !esComiteDesmarque || tabDesmarque !== "listos" || filtroTipoListos !== "RURAL" || !filtroLugarRuralListos || normFiltro(p.sector) === normFiltro(filtroLugarRuralListos);
@@ -9086,6 +9076,57 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       <div class="sub">Total: ${filas.length}</div>
       <table><thead><tr><th class="n">N°</th><th>Solicitante</th><th>Cédula de identidad</th><th>Teléfono</th><th>Estado actual</th><th>Última constancia</th></tr></thead><tbody>
       ${filas.map((f, idx) => `<tr><td class="n">${idx + 1}</td><td><b>${esc(f.nombre)}</b></td><td>${esc(f.rut)}</td><td>${esc(f.telefono)}</td><td>${esc(f.estado)}</td><td>${esc(f.constancia)}</td></tr>`).join("")}
+      </tbody></table></body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 300);
+  };
+  const etiquetaGrupoDesmarcado = (persona) => {
+    const grupo = grupoDesmarcado(persona, tieneSolicitudDesmarquePersona);
+    if (grupo === "con_programa") return "Con programa - bloqueado";
+    if (grupo === "sin_programa") return "Sin programa - bloqueado";
+    if (grupo === "pendiente_calificar") return "Pendiente para calificar";
+    return "Desmarcado";
+  };
+  const etiquetaFiltroDesmarcado = () => {
+    if (tabDesmarque === "des_con_programa") return "Desmarcados con programa - bloqueado";
+    if (tabDesmarque === "des_sin_programa") return "Desmarcados sin programa - bloqueado";
+    if (tabDesmarque === "des_pendiente") return "Desmarcados pendientes para calificar";
+    return "Todos los desmarcados";
+  };
+  const imprimirDesmarcados = () => {
+    const lista = esTabDesmarcados ? filtered : ordenarSolicitantes(desmarcadosTodos);
+    if (!lista.length) {
+      alert("No hay solicitantes desmarcados para imprimir con los filtros seleccionados.");
+      return;
+    }
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    const filas = lista.map(p => {
+      const comitePersona = buscarComitePersona(comites, p);
+      return {
+        nombre: p.nombre || "",
+        rut: formatRut(p.rut),
+        telefono: p.telefono || "",
+        comite: comitePersona?.nombre || p.comite || "",
+        grupo: etiquetaGrupoDesmarcado(p),
+      };
+    });
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Desmarcados</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#111827;margin:28px}
+        h1{font-size:20px;color:#0e7490;margin:0 0 4px}
+        .sub{font-size:12px;color:#6b7280;margin-bottom:16px}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        th,td{border:1px solid #d1d5db;padding:7px;text-align:left;vertical-align:top}
+        th{background:#e0f7fa;color:#0e7490}
+        .n{width:32px;text-align:center}
+      </style></head><body>
+      <h1>Solicitantes desmarcados - DESMARQUE DE VIVIENDA</h1>
+      <div class="sub">Filtro: ${esc(etiquetaFiltroDesmarcado())} | Total: ${filas.length}</div>
+      <table><thead><tr><th class="n">Nro.</th><th>Solicitante</th><th>Cedula de identidad</th><th>Telefono</th><th>Comite actual</th><th>Condicion</th></tr></thead><tbody>
+      ${filas.map((f, idx) => `<tr><td class="n">${idx + 1}</td><td><b>${esc(f.nombre)}</b></td><td>${esc(f.rut)}</td><td>${esc(f.telefono)}</td><td>${esc(f.comite)}</td><td>${esc(f.grupo)}</td></tr>`).join("")}
       </tbody></table></body></html>`;
     const win = window.open("", "_blank");
     if (!win) return;
@@ -9488,6 +9529,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
               ["no_visitados", "No visitados", noVisitadosDesmarque.length],
               ["listos", "Listo para visitas", listosParaVisita.length],
               ["condicionales", "Condicionales", condicionalesDesmarque.length],
+              ["desmarcados", "Desmarcado", desmarcadosTodos.length],
             ].map(([key, label, count]) => (
               <button key={key} onClick={() => { setTabDesmarque(key); setFiltroEstado("todos"); setFiltroTipoListos(""); setFiltroLugarRuralListos(""); }}
                 style={{ padding: "8px 13px", borderRadius: 9, border: "1.5px solid " + (tabDesmarque === key ? "#059669" : "#d1d5db"), background: tabDesmarque === key ? "#ECFDF5" : "#fff", color: tabDesmarque === key ? "#047857" : "#374151", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>
@@ -9524,13 +9566,32 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
               </button>
             </div>
           )}
+          {esTabDesmarcados && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+              {[
+                ["desmarcados", "Todos los desmarcados", desmarcadosTodos.length, "#0E7490"],
+                ["des_con_programa", "Con programa - bloqueado", desmarcadosConPrograma.length, "#64748B"],
+                ["des_sin_programa", "Sin programa - bloqueado", desmarcadosSinPrograma.length, "#1D4ED8"],
+                ["des_pendiente", "Pendiente para calificar", desmarcadosPendientes.length, "#B45309"],
+              ].map(([key, label, count, color]) => (
+                <button key={key} onClick={() => { setTabDesmarque(key); setFiltroEstado("todos"); setFiltroTipoListos(""); setFiltroLugarRuralListos(""); }}
+                  style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + (tabDesmarque === key ? color : "#d1d5db"), background: tabDesmarque === key ? color : "#fff", color: tabDesmarque === key ? "#fff" : "#334155", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                  {label} ({count})
+                </button>
+              ))}
+              <button onClick={imprimirDesmarcados}
+                style={{ background: "#0E7490", color: "#fff", border: "none", borderRadius: 8, padding: "8px 13px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+                Imprimir desmarcados
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Filtros por estado si es comité desmarque */}
       {esComiteDesmarque && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-          {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).filter(([k]) => k !== "NO VISITADO").map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
+          {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).filter(([k]) => !["NO VISITADO", "DESMARCADO"].includes(k)).map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
             <button key={k} onClick={() => { setFiltroEstado(k); setTabDesmarque("todos"); setFiltroTipoListos(""); setFiltroLugarRuralListos(""); }}
               style={{ padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
                 border:"2px solid "+(filtroEstado===k?c:"#ddd"),
@@ -9540,22 +9601,6 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 const estado = estadoDesmarquePersona(p);
                 return estado.key === k;
               }).length+")" : "("+miembros.length+")"}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {esComiteDesmarque && filtroEstado === "DESMARCADO" && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-          {[
-            ["todos", "Todos desmarcados", desmarcadosTodos.length, "#0E7490"],
-            ["des_sin_programa", "Sin programa", desmarcadosSinPrograma.length, "#1D4ED8"],
-            ["des_pendiente", "Pendiente para calificar", desmarcadosPendientes.length, "#B45309"],
-            ["des_con_programa", "Con programa", desmarcadosConPrograma.length, "#64748B"],
-          ].map(([key, label, count, color]) => (
-            <button key={key} onClick={() => setTabDesmarque(key)}
-              style={{ padding: "7px 12px", borderRadius: 8, border: "1.5px solid " + (tabDesmarque === key ? color : "#d1d5db"), background: tabDesmarque === key ? color : "#fff", color: tabDesmarque === key ? "#fff" : "#334155", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
-              {label} ({count})
             </button>
           ))}
         </div>
