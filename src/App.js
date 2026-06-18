@@ -8976,6 +8976,54 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const desmarcadosSinPrograma = desmarcadosTodos.filter(p => grupoDesmarcado(p, tieneSolicitudDesmarquePersona) === "sin_programa");
   const tabsDesmarcados = ["desmarcados", "des_con_programa", "des_pendiente", "des_sin_programa"];
   const esTabDesmarcados = tabsDesmarcados.includes(tabDesmarque);
+  const normalizarEstadoFiltro = (valor = "") => String(valor || "")
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  const estadoDesmarqueTexto = (persona = {}) => {
+    const estado = estadoDesmarquePersona(persona);
+    return normalizarEstadoFiltro([estado.key, estado.label, persona.estado_desmarque, persona.estadoDesmarque]
+      .filter(Boolean)
+      .join(" | "));
+  };
+  const estadoDesmarqueClaveGuardada = (persona = {}) => {
+    const estado = estadoDesmarquePersona(persona);
+    return normalizarEstadoFiltro([estado.key, persona.estado_desmarque, persona.estadoDesmarque]
+      .filter(Boolean)
+      .join(" | "));
+  };
+  const coincideFiltroEstadoDesmarque = (persona, filtro) => {
+    if (!filtro || filtro === "todos") return true;
+    const texto = estadoDesmarqueTexto(persona);
+    const claveGuardada = estadoDesmarqueClaveGuardada(persona);
+    if (filtro === "solicitud_dom") return texto.includes("SOLICITUD_EN_DOM") || texto.includes("SOLICITUD EN DOM") || texto.includes("INFORME EN DOM");
+    if (filtro === "no_califica") return texto.includes("NO CALIFICA");
+    if (filtro === "dom_aprobado") return texto.includes("INFORME_DOM_APROBADO") || texto.includes("INFORME DOM APROBADO");
+    if (filtro === "dom_rechazado") {
+      return texto.includes("RECHAZADO DOM") ||
+        texto.includes("INFORME_DOM_RECHAZADO_APELABLE") ||
+        texto.includes("INFORME DOM RECHAZADO APELABLE") ||
+        texto.includes("INFORME DOM RECHAZADO") ||
+        texto.includes("INFORME DOM RECHAZA");
+    }
+    if (filtro === "serviu_ingresado") return texto.includes("INFORME EN SERVIU");
+    if (filtro === "visitado_falta_informe") return texto.includes("SOLICITANTE_VISITADO") || texto.includes("SOLICITANTE VISITADO") || texto.includes("VISITA HECHA FALTA INFORME");
+    if (filtro === "rechazado_serviu") {
+      return claveGuardada.includes("DESMARQUE RECHAZADO") ||
+        claveGuardada.includes("RECHAZADO APELABLE") ||
+        claveGuardada.includes("APELAR SERVIU");
+    }
+    return false;
+  };
+  const tabsEstadoDesmarque = [
+    ["solicitud_dom", "Informe DOM", "#7C3AED"],
+    ["no_califica", "No califica", "#DC2626"],
+    ["dom_aprobado", "Informe DOM aprobado", "#047857"],
+    ["dom_rechazado", "Informe DOM rechazado", "#B91C1C"],
+    ["serviu_ingresado", "Solicitud ingresada SERVIU", "#3D5A23"],
+    ["visitado_falta_informe", "Visita hecha falta informe", "#C2693A"],
+    ["rechazado_serviu", "Rechazado SERVIU", "#B45309"],
+  ];
   const lugaresRuralesListos = [...new Set(
     listosParaVisita
       .filter(p => normFiltro(p.tipo_comite || p.tipoComite || p.tipo) === "rural")
@@ -9001,8 +9049,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const matchSearch = (p.nombre || "").toLowerCase().includes(search.toLowerCase()) ||
       (p.rut || "").includes(search) ||
       (p.comuna || "").toLowerCase().includes(search.toLowerCase());
-    const estado = estadoDesmarquePersona(p);
-    const matchEstado = !esComiteDesmarque || esTabDesmarcados || filtroEstado === "todos" || estado.key === filtroEstado;
+    const matchEstado = !esComiteDesmarque || esTabDesmarcados || coincideFiltroEstadoDesmarque(p, filtroEstado);
     const tipo = normFiltro(p.tipo_comite || p.tipoComite || p.tipo);
     const matchTipoListos = !esComiteDesmarque || tabDesmarque !== "listos" || !filtroTipoListos || tipo === normFiltro(filtroTipoListos);
     const matchLugarRural = !esComiteDesmarque || tabDesmarque !== "listos" || filtroTipoListos !== "RURAL" || !filtroLugarRuralListos || normFiltro(p.sector) === normFiltro(filtroLugarRuralListos);
@@ -9591,16 +9638,13 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       {/* Filtros por estado si es comité desmarque */}
       {esComiteDesmarque && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-          {[["todos","Todos","#1e3a5f"],...Object.entries(ESTADO_DESMARQUE).filter(([k]) => !["NO VISITADO", "DESMARCADO"].includes(k)).map(([k,v])=>[k,v.label,v.color])].map(([k,l,c]) => (
+          {tabsEstadoDesmarque.map(([k,l,c]) => (
             <button key={k} onClick={() => { setFiltroEstado(k); setTabDesmarque("todos"); setFiltroTipoListos(""); setFiltroLugarRuralListos(""); }}
               style={{ padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
                 border:"2px solid "+(filtroEstado===k?c:"#ddd"),
                 background:filtroEstado===k?c:"#fff",
                 color:filtroEstado===k?"#fff":"#555" }}>
-              {l} {k==="DESMARCADO" ? "("+desmarcadosTodos.length+")" : k!=="todos" ? "("+miembros.filter(p => {
-                const estado = estadoDesmarquePersona(p);
-                return estado.key === k;
-              }).length+")" : "("+miembros.length+")"}
+              {l} ({miembros.filter(p => coincideFiltroEstadoDesmarque(p, k)).length})
             </button>
           ))}
         </div>
