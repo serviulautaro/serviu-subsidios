@@ -2990,6 +2990,10 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   }, [personaId, misSols.length, programaTrabajoId]); // eslint-disable-line react-hooks/exhaustive-deps
   const programaSeleccionadoId = programaTrabajoId || misSols[0]?.programaId || misSols[0]?.programa_id || "";
   const solsTrabajo = programaSeleccionadoId ? misSols.filter(s => (s.programaId || s.programa_id) === programaSeleccionadoId) : misSols;
+  const solicitudesActivasVista = [
+    ...solsTrabajo.map(s => s),
+    ...misSols.filter(s => !solsTrabajo.some(sel => sel.id === s.id)),
+  ];
   const tieneSolicitudCsp = solsTrabajo.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
   const [lineaTiempoPersonaCsp, setLineaTiempoPersonaCsp] = useState(() => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
   const [editandoLineaTiempoPersona, setEditandoLineaTiempoPersona] = useState(false);
@@ -5502,7 +5506,7 @@ const datosSolicitud = {
 
       {misSols.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 40, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>No tiene programas asignados aun.</div>}
 
-      {solsTrabajo.map(sol => {
+      {solicitudesActivasVista.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
         const p = pct(sol.documentos, sol.programaId);
         const conteoSol = conteoDocumentosSolicitud(sol.documentos, sol.programaId);
