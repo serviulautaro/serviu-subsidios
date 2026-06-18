@@ -423,6 +423,31 @@ const estadoActualLineaDesmarque = (sol = {}, fallback = "") => {
   return actual;
 };
 
+const ORDEN_ESTADO_DESMARQUE_LINEA = {
+  "NO VISITADO": 0,
+  INGRESO_SOLICITANTE: 1,
+  DOCUMENTOS_OBLIGATORIOS: 2,
+  CALIFICA_PARA_VISITA: 3,
+  LISTO_PARA_VISITA: 4,
+  SOLICITANTE_VISITADO: 5,
+  SOLICITUD_EN_DOM: 6,
+  "INFORME EN DOM": 6,
+  INFORME_DOM: 7,
+  INFORME_DOM_APROBADO: 8,
+  "INFORME EN SERVIU": 9,
+  RESPUESTA_SERVIU: 10,
+};
+
+const estadoActualLineaDesmarqueConManual = (sol = {}, fallback = "") => {
+  const actual = estadoActualLineaDesmarque(sol, fallback);
+  const avanceManual = leerAvanceManualDesmarque(sol?.documentos || []);
+  const actualOrden = ORDEN_ESTADO_DESMARQUE_LINEA[actual.key] ?? 0;
+  if (avanceManual[6] === true && actualOrden < ORDEN_ESTADO_DESMARQUE_LINEA.SOLICITUD_EN_DOM) {
+    return { key: "SOLICITUD_EN_DOM", label: "Memo recibido DOM", bg: "#F5F3FF", color: "#7C3AED" };
+  }
+  return actual;
+};
+
 const DOCUMENTOS_MAVE = [
   { nombre: "Cedula de identidad vigente del postulante", obligatorio: true },
   { nombre: "Cuenta de ahorro de vivienda", obligatorio: true },
@@ -1308,7 +1333,7 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
         bg: stylesForEstado(pasoActual.estado).bg,
         color: stylesForEstado(pasoActual.estado).color,
       }
-    : estadoActualLineaDesmarque(sol);
+    : estadoActualLineaDesmarqueConManual(sol);
 
   return <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: "1px solid #dbeafe", background: "#f8fbff" }}>
     <div style={{ fontSize: 12, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Línea de avance Desmarque de Vivienda</div>
@@ -4368,9 +4393,31 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
     const solDb = (solsDb && solsDb[0]) || misSols[0];
     if (!solDb) return;
-    const docs = (solDb.documentos || []).map(d => d.nombre && d.nombre.includes(nombreDoc) ? { ...d, entregado: true } : d);
-    await supabase.from("solicitudes").update({ documentos: docs }).eq("id", solDb.id);
-    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docs, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docs }) || s.fecha_visita || "" } : s));
+    const esMemo = String(nombreDoc || "").toLowerCase().includes("memo");
+    const esCarta = String(nombreDoc || "").toLowerCase().includes("carta");
+    const coincide = (d = {}) => {
+      if (esMemo) return docEsMemoDom(d);
+      const n = docNombreNorm(d);
+      return n.includes(docNombreNorm({ nombre: nombreDoc }));
+    };
+    const existe = (solDb.documentos || []).some(coincide);
+    const docsBase = existe
+      ? (solDb.documentos || []).map(d => coincide(d) ? { ...d, entregado: true } : d)
+      : [
+          ...(solDb.documentos || []),
+          {
+            nombre: esMemo ? "Memo recibido DOM" : esCarta ? "Carta SERVIU" : nombreDoc,
+            obligatorio: false,
+            entregado: true,
+            valor: "",
+          }
+        ];
+    await supabase.from("solicitudes").update({ documentos: docsBase }).eq("id", solDb.id);
+    onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsBase, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docsBase }) || s.fecha_visita || "" } : s));
+    if (esMemo && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
+      await supabase.from("personas").update({ estado_desmarque: "INFORME EN DOM" }).eq("id", persona.id);
+      onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: "INFORME EN DOM" } : p));
+    }
   };
 
   const guardarAvanceManualDesmarque = async (sol, numeroPaso, marcado) => {
@@ -4403,6 +4450,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       paso: numeroPaso,
       marcado: !!marcado,
     });
+    if (numeroPaso === 6 && marcado && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
+      await supabase.from("personas").update({ estado_desmarque: "INFORME EN DOM" }).eq("id", persona.id);
+      onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: "INFORME EN DOM" } : p));
+    }
   };
 
   const guardarCalificacionDesmarque = async (sol, estado) => {
@@ -4767,8 +4818,8 @@ const datosSolicitud = {
               </>
             )}
             {persona.comiteId === "comite_desmarque" && (() => {
-              const solDesmarque = misSols.find(s => s.programaId === "habitabilidad");
-              const est = estadoActualLineaDesmarque(solDesmarque, persona.estado_desmarque);
+              const solDesmarque = misSols.find(s => (s.programaId || s.programa_id) === "habitabilidad");
+              const est = estadoActualLineaDesmarqueConManual(solDesmarque, persona.estado_desmarque);
               return <span style={{ display:"inline-block", marginTop:6, background:est.bg, color:est.color, borderRadius:10, padding:"4px 14px", fontSize:13, fontWeight:800 }}>{est.label}</span>;
             })()}
             {esPrioritario && (
@@ -5725,6 +5776,46 @@ const datosSolicitud = {
                   : <span style={{ fontSize: 11, color: "#B45309" }}>⚠ Sin fecha de visita — estado: No Visitado</span>}
               </div>
             )}
+            {(() => {
+              const archivosVisibles = (archivos || []).filter(nombre => {
+                const n = String(nombre || "").trim();
+                return n && !n.toLowerCase().includes("credencial de discapacidad");
+              });
+              if (!archivosVisibles.length) return null;
+              return (
+                <div style={{ marginBottom: 14, border: "1.5px solid #BFDBFE", borderRadius: 9, background: "#EFF6FF", padding: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 8 }}>Documentos subidos en carpeta del solicitante</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                    {archivosVisibles.map((nombre, i) => (
+                      <div key={nombre + i} style={{ borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", padding: "8px 10px", display: "flex", alignItems: "center", gap: 8, color: "#1e3a5f", fontSize: 12, fontWeight: 800 }}>
+                        <span style={{ color: "#64748B" }}>ðŸ“„</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombre}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            {!solsEditando[sol.id] && (() => {
+              const visibles = indicesDocumentosVisibles(sol.documentos || []);
+              const docsVisibles = (sol.documentos || []).filter((doc, i) =>
+                visibles.has(i) && !doc.interno && !(doc.nombre || "").toLowerCase().includes("credencial de discapacidad")
+              );
+              if (!docsVisibles.length) return null;
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8, marginBottom: 14 }}>
+                  {docsVisibles.map((doc, i) => (
+                    <div key={(doc.nombre || "doc") + i} style={{ borderRadius: 9, border: "1.5px solid " + (doc.entregado ? "#86EFAC" : "#E5E7EB"), background: doc.entregado ? "#ECFDF5" : "#F9FAFB", padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 20, height: 20, borderRadius: 6, border: "2px solid " + (doc.entregado ? "#059669" : "#CBD5E1"), background: doc.entregado ? "#059669" : "#fff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900 }}>{doc.entregado ? "✓" : ""}</div>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: doc.entregado ? "#065F46" : "#334155" }}>{doc.nombre}</div>
+                        <div style={{ fontSize: 10, color: doc.entregado ? "#047857" : "#94A3B8", fontWeight: 700 }}>{doc.entregado ? "VB marcado" : "Pendiente"}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             {solsEditando[sol.id] && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {(() => {
                 const visibles = indicesDocumentosVisibles(sol.documentos || []);
@@ -8256,7 +8347,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   const solicitudDesmarquePersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
-    const estado = estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
+    const estado = estadoActualLineaDesmarqueConManual(sol, p.estado_desmarque || p.estadoDesmarque || "");
     return estado;
   };
   const estadoSeguimiento = (p) => {
@@ -8472,7 +8563,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
           const sel = seleccionados.includes(p.id);
           const misSols = solicitudes.filter(s => s.personaId === p.id);
           const solHabitabilidad = solicitudDesmarquePersona(p.id);
-          const estadoDesmarqueVisible = solHabitabilidad ? estadoActualLineaDesmarque(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "") : null;
+          const estadoDesmarqueVisible = solHabitabilidad ? estadoActualLineaDesmarqueConManual(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "") : null;
           return (
             <div key={p.id} style={{
               background: sel ? "#EFF6FF" : "#fff", borderRadius: 12, padding: "14px 18px",
@@ -8909,7 +9000,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   };
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudHabitabilidadPersona(p.id);
-    return estadoActualLineaDesmarque(sol, p.estado_desmarque || p.estadoDesmarque || "");
+    return estadoActualLineaDesmarqueConManual(sol, p.estado_desmarque || p.estadoDesmarque || "");
   };
   const estadoClaveDesmarquePersona = (p) => estadoDesmarquePersona(p)?.key || "";
   const esDesmarcadoActual = (p) =>
@@ -9663,7 +9754,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           const sols = solsAll.length;
           const solHabitabilidad = solsAll.find(s => s.programaId === "habitabilidad");
           const estadoDesmarqueVisible = solHabitabilidad
-            ? estadoActualLineaDesmarque(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "")
+            ? estadoActualLineaDesmarqueConManual(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "")
             : null;
           const tieneHabitabilidad = solsAll.some(s => s.programaId === "habitabilidad");
           const tieneOtroPrograma = solsAll.some(s => s.programaId !== "habitabilidad");
