@@ -4372,6 +4372,22 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     }
   };
 
+  const abrirResultadoRespuestaServiuConClave = () => {
+    setPendingVbDesmarque({ tipo: "respuesta_serviu" });
+    setShowClaveVbDesmarque(true);
+  };
+
+  const confirmarClaveVbDesmarque = () => {
+    const pendiente = pendingVbDesmarque;
+    setShowClaveVbDesmarque(false);
+    setPendingVbDesmarque(null);
+    if (pendiente?.tipo === "respuesta_serviu") {
+      setResultadoRespuestaServiu("");
+      setNotaResultado("");
+      setShowModalRespuestaServiu(true);
+    }
+  };
+
   const guardarFichaDesmarque = async () => {
     const nombreNormalizado = normalizarNombreSolicitante(fichaForm.nombre || persona.nombre || "");
     const campos = {
@@ -6722,6 +6738,10 @@ const datosSolicitud = {
                             <div style={{ fontSize: 11, color: "#B45309", fontWeight: 600, marginTop: 2 }}>
                               ⚠ Use el botón "Subir Respuesta SERVIU" para registrar el resultado
                             </div>
+                            <button type="button" onClick={abrirResultadoRespuestaServiuConClave}
+                              style={{ marginTop: 4, justifySelf: "start", background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              Marcar VB Respuesta SERVIU
+                            </button>
                           </div>
                         )}
                         {doc.entregado && (
@@ -7682,6 +7702,13 @@ const datosSolicitud = {
               style={{ padding: "9px 20px", borderRadius: 8, background: resultadoInformeDom ? "#1e3a5f" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: resultadoInformeDom ? "pointer" : "not-allowed" }}>Guardar</button>
           </div>
         </Modal>
+      )}
+
+      {showClaveVbDesmarque && (
+        <ModalClaveAcceso
+          onConfirmar={confirmarClaveVbDesmarque}
+          onCancelar={() => { setShowClaveVbDesmarque(false); setPendingVbDesmarque(null); }}
+        />
       )}
 
       {showModalRespuestaServiu && (

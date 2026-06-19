@@ -81,6 +81,7 @@ function main() {
   ok("Editar ficha desmarque actualiza nombre en solicitudes activas", contains(app, "solicitudesRenombradas") && contains(app, "persona_nombre: nombreNormalizado"));
   ok("Comite desmarque incluye solicitudes habitabilidad aunque falte comite_id", contains(app, "esComiteDesmarqueRef") && contains(app, "(s.programaId || s.programa_id) === \"habitabilidad\""));
   ok("Nuevo solicitante con comite crea solicitud desde flujo unico", contains(app, "crear_solicitud_automatica") && !contains(app, "programaComite && [\"csp_rural\", \"csp_urbano\"].includes(programaComite.id)"));
+  ok("VB Respuesta SERVIU exige clave y resultado paso 9", contains(app, "Marcar VB Respuesta SERVIU") && contains(app, "abrirResultadoRespuestaServiuConClave") && contains(app, "confirmarClaveVbDesmarque"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);
