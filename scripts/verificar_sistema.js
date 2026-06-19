@@ -78,6 +78,9 @@ function main() {
   ok("Linea de tiempo CSP corta avance por no califica", contains(app, "lineaTiempoCspCortada") && contains(app, "Avance cortado por No califica"));
   ok("Linea de tiempo CSP exige modificar antes de guardar", contains(app, "Modificar línea de tiempo") && contains(app, "¿Está seguro de guardar los cambios de la línea de tiempo"));
   ok("Nombre de solicitante se normaliza en mayusculas", contains(app, "normalizarNombreSolicitante") && contains(app, "APELLIDOS PRIMERO, LUEGO NOMBRES"));
+  ok("Editar ficha desmarque actualiza nombre en solicitudes activas", contains(app, "solicitudesRenombradas") && contains(app, "persona_nombre: nombreNormalizado"));
+  ok("Comite desmarque incluye solicitudes habitabilidad aunque falte comite_id", contains(app, "esComiteDesmarqueRef") && contains(app, "(s.programaId || s.programa_id) === \"habitabilidad\""));
+  ok("Nuevo solicitante con comite crea solicitud desde flujo unico", contains(app, "crear_solicitud_automatica") && !contains(app, "programaComite && [\"csp_rural\", \"csp_urbano\"].includes(programaComite.id)"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);

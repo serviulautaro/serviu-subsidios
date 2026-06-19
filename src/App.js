@@ -9348,34 +9348,6 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     const carpeta = carpetaNombre(nombreNormalizado, rutFormateado);
     try { await fetch(apiPath("/carpeta/", carpeta), { method: "POST" }); } catch (e) { }
     await onSavePersonas([...personas, nueva]);
-    const programaIdComite = comite.programaId || comite.programa_id || (String(comite.tipo || "").toUpperCase() === "URBANO" ? "csp_urbano" : "csp_rural");
-    const programaComite = todosProgramas.find(p => p.id === programaIdComite);
-    if (programaComite && ["csp_rural", "csp_urbano"].includes(programaComite.id)) {
-      const nuevaSol = {
-        id: uid(),
-        personaId: nueva.id,
-        personaNombre: nueva.nombre,
-        programaId: programaComite.id,
-        fecha: today(),
-        comite: comite.nombre,
-        codigoComite: comite.id || comite.codigo || comiteId,
-        tipoComite: programaComite.id === "csp_urbano" ? "URBANO" : "RURAL",
-        documentos: (programaComite.documentos || []).map(d => ({
-          nombre: d.nombre,
-          obligatorio: d.obligatorio,
-          entregado: false,
-          tipo: d.tipo || null,
-          opciones: d.opciones || null,
-          opcionSeleccionada: null,
-          etiqueta: null,
-          valor: d.valor || "",
-          requiereArchivo: !!d.requiereArchivo,
-          requiereTexto: !!d.requiereTexto,
-          etiquetaTexto: d.etiquetaTexto || "",
-        })),
-      };
-      await onSaveSolicitudes([...solicitudes, nuevaSol]);
-    }
     setForm({ ...EMPTY });
     setShowModalPersona(false);
   };
