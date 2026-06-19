@@ -1657,11 +1657,11 @@ function FormPersona({ form, setForm, onGuardar, onCancelar, comites, comiteIdFi
     }
   };
 
-  const handleGuardar = () => {
+  const handleGuardar = async () => {
     if (tipoSolicitud === "sincomite" && !motivoSinComite.trim()) {
       alert("El motivo es obligatorio cuando no se asigna comité."); return;
     }
-    onGuardar();
+    await onGuardar();
   };
 
   return (
@@ -1962,7 +1962,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
         await fetch(API + "/renombrar-carpeta", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ origen: carpetaTmp, destino: carpeta }) });
       }
     } catch (e) { }
-    onSave([...personas, nueva]);
+    await onSave([...personas, nueva]);
     setForm(EMPTY);
     setShowModal(false);
   };
@@ -2182,6 +2182,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   const guardar = () => {
     setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Rural?", fn: async () => {
       const formFinal = protegerDatosFicha(form, persona, {
+        nombre: normalizarNombreSolicitante(form.nombre || persona.nombre),
         adultoMayor: textoAdultoMayor(form.fechaNacimiento) || form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
@@ -2524,6 +2525,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   const guardar = () => {
     setConfirmModal({ msg: "¿Guardar los cambios de la Ficha Urbana?", fn: async () => {
       const formFinal = protegerDatosFicha(form, persona, {
+        nombre: normalizarNombreSolicitante(form.nombre || persona.nombre),
         adultoMayor: textoAdultoMayor(form.fechaNacimiento) || form.adultoMayor,
         cargo_comite: inferirCargo(form.nombre, persona.comiteId, comites),
         constructoraSeleccionada: constructoraDeComite({ ...persona, ...form }, comites)
@@ -11366,6 +11368,66 @@ export default function App() {
           }
           await registrarAuditoria("crear_solicitud_automatica", "solicitudes", nuevaSol.id, { persona: nuevaSol.personaNombre, programa: "habitabilidad" });
           setSolicitudes(prev => [...prev, nuevaSol]);
+        }
+      }
+      if (ultima.comiteId && ultima.comiteId !== "comite_desmarque") {
+        const comitePersona = buscarComitePersona(comites, ultima);
+        const programaAsignadoId = comitePersona?.programaId || comitePersona?.programa_id || "";
+        const programaAsignado = combinarProgramas(programasCustom).find(p => p.id === programaAsignadoId);
+        const solExistente = solicitudes.find(s => (s.personaId || s.persona_id) === ultima.id && (s.programaId || s.programa_id) === programaAsignadoId);
+        if (programaAsignado && programaAsignadoId && !solExistente) {
+          const nuevaSol = {
+            id: uid(),
+            personaId: ultima.id,
+            personaNombre: ultima.nombre,
+            programaId: programaAsignado.id,
+            fecha: today(),
+            comite: comitePersona?.nombre || ultima.comite || null,
+            codigoComite: comitePersona?.id || comitePersona?.codigo || ultima.comiteId || null,
+            tipoComite: comitePersona?.tipo || ultima.tipo_comite || null,
+            documentos: (programaAsignado.documentos || []).map(d => ({
+              nombre: d.nombre,
+              obligatorio: !!d.obligatorio,
+              entregado: false,
+              tipo: d.tipo || null,
+              opciones: d.opciones || null,
+              opcionSeleccionada: null,
+              etiqueta: d.etiqueta || null,
+              valor: d.valor || "",
+              requiereArchivo: !!d.requiereArchivo,
+              requiereTexto: !!d.requiereTexto,
+              etiquetaTexto: d.etiquetaTexto || "",
+              subopciones: d.subopciones || null,
+            }))
+          };
+          let solOk = false;
+          const solPayload = [{
+            id: nuevaSol.id,
+            persona_id: nuevaSol.personaId,
+            persona_nombre: nuevaSol.personaNombre,
+            programa_id: nuevaSol.programaId,
+            fecha: nuevaSol.fecha,
+            comite: nuevaSol.comite,
+            codigo_comite: nuevaSol.codigoComite,
+            tipo_comite: nuevaSol.tipoComite,
+            documentos: nuevaSol.documentos
+          }];
+          for (let i = 0; i < 3; i++) {
+            if (i > 0) await new Promise(r => setTimeout(r, 1500));
+            try {
+              const res = await fetch(`${API}/api/db/solicitudes/insert`, {
+                method: "POST", headers: jsonHeaders(),
+                body: JSON.stringify(solPayload)
+              });
+              const json = await res.json().catch(() => ({}));
+              if (res.ok && json.ok !== false) { solOk = true; break; }
+            } catch {}
+          }
+          if (!solOk) {
+            await supabase.from("solicitudes").insert(solPayload).catch(() => {});
+          }
+          await registrarAuditoria("crear_solicitud_automatica", "solicitudes", nuevaSol.id, { persona: nuevaSol.personaNombre, programa: nuevaSol.programaId, comite: nuevaSol.comite || "" });
+          setSolicitudes(prev => prev.some(s => s.id === nuevaSol.id) ? prev : [...prev, nuevaSol]);
         }
       }
     } else {
