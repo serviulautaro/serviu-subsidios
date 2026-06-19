@@ -4373,7 +4373,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   const guardarFichaDesmarque = async () => {
+    const nombreNormalizado = normalizarNombreSolicitante(fichaForm.nombre || persona.nombre || "");
     const campos = {
+      nombre: nombreNormalizado,
       rut: fichaForm.rut || persona.rut || "",
       direccion: fichaForm.direccion || persona.direccion || "",
       telefono: fichaForm.telefono || persona.telefono || "",
@@ -4389,6 +4391,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     await supabase.from("personas").update(campos).eq("id", persona.id);
     const p2 = { ...persona, ...campos, puntajeRSH: campos.puntaje_rsh };
     onSavePersonas(personas.map(p => p.id === persona.id ? p2 : p));
+    let solicitudesBaseActualizadas = solicitudes;
+    if (nombreNormalizado && nombreNormalizado !== persona.nombre) {
+      const solicitudesRenombradas = solicitudes.map(s => (s.personaId || s.persona_id) === persona.id ? { ...s, personaNombre: nombreNormalizado, persona_nombre: nombreNormalizado } : s);
+      solicitudesBaseActualizadas = solicitudesRenombradas;
+      onSaveSolicitudes(solicitudesRenombradas);
+    }
 
     // Actualizar documentos de la solicitud si se ingresaron valores
     const sol = misSols[0];
@@ -4402,9 +4410,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           return { ...d, valor: fichaForm.numero_informe_dom, entregado: true };
         return d;
       });
-      const solActualizada = { ...sol, documentos: docsActualizados, fecha_visita: sol.fecha_visita };
-      onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? solActualizada : s));
-      await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", sol.id);
+      const solActualizada = { ...sol, personaNombre: nombreNormalizado, persona_nombre: nombreNormalizado, documentos: docsActualizados, fecha_visita: sol.fecha_visita };
+      onSaveSolicitudes(solicitudesBaseActualizadas.map(s => s.id === sol.id ? solActualizada : s));
+      await supabase.from("solicitudes").update({ persona_nombre: nombreNormalizado, documentos: docsActualizados }).eq("id", sol.id);
       // Auto-cambiar estado según datos ingresados
       if (!["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
         const nuevoEstado = calcularEstadoDesmarque(solActualizada, persona.estado_desmarque);
@@ -5376,6 +5384,7 @@ const datosSolicitud = {
               const carta = docs.find(d => d.nombre && d.nombre.includes("Carta SERVIU"));
               const informe = docs.find(d => d.nombre && d.nombre.includes("Informe DOM"));
               setFichaForm({
+                nombre: persona.nombre||"",
                 rut: persona.rut||"",
                 direccion: persona.direccion||"",
                 telefono: persona.telefono||"",
@@ -7227,6 +7236,13 @@ const datosSolicitud = {
       {showFichaEdit && (
         <Modal title="Editar Ficha Desmarque" onClose={() => setShowFichaEdit(false)}>
           <div style={{ display: "grid", gap: 10, maxHeight: "70vh", overflowY: "auto", paddingRight: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#1e3a5f", marginBottom: 3 }}>Nombre del solicitante *</div>
+              <input value={fichaForm.nombre || ""} onChange={e => setFichaForm({...fichaForm, nombre: e.target.value.toLocaleUpperCase("es-CL")})}
+                placeholder="APELLIDO PATERNO APELLIDO MATERNO NOMBRES"
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "2px solid #1e3a5f", fontSize: 13, background: "#fff", fontWeight: 700 }} />
+              <div style={{ fontSize: 10, color: "#2563EB", marginTop: 3 }}>Se guardara en MAYUSCULAS y con apellidos primero.</div>
+            </div>
             {[
               ["rut","Cédula de identidad","Ej: 10398338-K"],
               ["direccion","Comunidad/Dirección",""],
