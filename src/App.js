@@ -852,8 +852,12 @@ const personaPerteneceAComite = (persona = {}, comiteRef = {}, solicitudes = [])
   const nombreComite = normComiteComparar(comiteRef.nombre);
   const nombrePersona = normComiteComparar(persona.comite);
   if (nombreComite && nombrePersona && nombreComite === nombrePersona) return true;
+  const esComiteDesmarqueRef = refs.includes("comite_desmarque") ||
+    (comiteRef.programaId || comiteRef.programa_id) === "habitabilidad" ||
+    nombreComite === normComiteComparar("DESMARQUE DE VIVIENDA");
   return (solicitudes || []).some(s => {
     if ((s.personaId || s.persona_id) !== persona.id) return false;
+    if (esComiteDesmarqueRef && (s.programaId || s.programa_id) === "habitabilidad") return true;
     const codigo = String(s.codigoComite || s.codigo_comite || "");
     if (codigo && refs.includes(codigo)) return true;
     const nombreSol = normComiteComparar(s.comite);
@@ -9018,11 +9022,11 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   const ordenarSolicitantes = (lista = []) => [...lista].sort((a, b) =>
     String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" })
   );
-  const perteneceAlComiteActual = (p) => {
-    return personaPerteneceAComite(p, { ...comite, id: comite.id || comiteId }, solicitudes);
-  };
   const normFiltro = (v) => (v || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const solicitudesVista = solicitudes.map(s => solicitudesCompletasComite[s.id] ? { ...s, ...solicitudesCompletasComite[s.id] } : s);
+  const perteneceAlComiteActual = (p) => {
+    return personaPerteneceAComite(p, { ...comite, id: comite.id || comiteId }, solicitudesVista);
+  };
   const solicitudHabitabilidadPersona = (personaId) => solicitudesVista.find(s => (s.personaId || s.persona_id) === personaId && (s.programaId || s.programa_id) === "habitabilidad");
   const tieneSolicitudDesmarquePersona = (personaId) => !!solicitudHabitabilidadPersona(personaId);
   const movimientoRequiereAdmin = (persona = {}, destinoId = comiteDestinoMover) => {
