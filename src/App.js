@@ -983,6 +983,29 @@ const combinarDatosDocumentoSolicitud = (principal = {}, extra = {}) => ({
   observaciones: principal.observaciones || extra.observaciones || "",
 });
 
+const tipoDocumentoCanonico = (doc = {}) => {
+  const n = claveNombreDocumento(`${doc.nombre || ""} ${doc.nombreOriginal || ""} ${doc.tipo || ""}`);
+  if (n.includes("CUENTA") && n.includes("AHORRO")) return "cuenta_ahorro";
+  if (n.includes("DISCAPACIDAD") || n.includes("CREDENCIAL")) return "discapacidad";
+  if (n.includes("REGISTRO SOCIAL") || n.includes("RSH")) return "rsh";
+  if (n.includes("RURALIDAD")) return "ruralidad";
+  if (n.includes("AVALUO") || n.includes("AVALÚO")) return "avaluo";
+  if (n.includes("DOMINIO") || n.includes("TITULO") || n.includes("TÍTULO") || n.includes("ESCRITURA")) return "dominio";
+  if (n.includes("CEDULA") || n.includes("CÉDULA") || n.includes("IDENTIDAD")) return "cedula";
+  if (n.includes("BOLETA") && n.includes("LUZ")) return "luz";
+  if (n.includes("BOLETA") && n.includes("AGUA")) return "agua";
+  if (n.includes("CORREO")) return "correo";
+  if (n.includes("FECHA") && n.includes("NACIMIENTO")) return "fecha_nacimiento";
+  return "";
+};
+
+const documentosCompatibles = (a = {}, b = {}) => {
+  const ta = tipoDocumentoCanonico(a);
+  const tb = tipoDocumentoCanonico(b);
+  if (ta || tb) return !!ta && ta === tb;
+  return false;
+};
+
 const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
   if (!programa || !Array.isArray(programa.documentos) || !programa.documentos.length) return documentos || [];
   const base = Array.isArray(documentos) ? documentos.map(d => ({ ...d })) : [];
@@ -1000,15 +1023,15 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
     const agregarCandidato = (pos) => {
       if (pos >= 0 && !usados.has(pos) && !candidatos.includes(pos)) candidatos.push(pos);
     };
-    agregarCandidato(idx < base.length ? idx : -1);
     base.forEach((d, i) => {
       if (usados.has(i)) return;
       const dKey = d?.docKey ? claveDocumentoPrograma(d, i) : "";
       const dNombre = claveNombreDocumento(d?.nombre);
       const dOriginal = claveNombreDocumento(d?.nombreOriginal);
-      if ((dKey && dKey === docKey) ||
-          (nombreKey && dNombre === nombreKey) ||
-          (nombreOriginalKey && (dNombre === nombreOriginalKey || dOriginal === nombreOriginalKey))) {
+      const matchDirecto = (dKey && dKey === docKey) ||
+        (nombreKey && dNombre === nombreKey) ||
+        (nombreOriginalKey && (dNombre === nombreOriginalKey || dOriginal === nombreOriginalKey));
+      if (matchDirecto || documentosCompatibles(d, docProg)) {
         agregarCandidato(i);
       }
     });
@@ -6363,8 +6386,11 @@ const datosSolicitud = {
 
                 // Valores cuenta ahorro: "cuenta|banco|ok" en doc.valor (se conserva compatibilidad con registros antiguos)
                 const cuentaPartes = esCuentaAhorro ? (doc.valor || "").split("|") : [];
-                const cuentaNum = cuentaPartes[0] || "";
-                const cuentaBanco = cuentaPartes[1] || "";
+                const bancosCuentaAhorro = ["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","ItaÃº","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"];
+                const cuentaValorInvalido = /discapacidad|credencial|movilidad|^n\/a$/i.test(String(doc.valor || ""));
+                const cuentaNum = cuentaValorInvalido ? "" : (cuentaPartes[0] || "");
+                const cuentaBancoRaw = cuentaValorInvalido ? "" : (cuentaPartes[1] || "");
+                const cuentaBanco = bancosCuentaAhorro.includes(cuentaBancoRaw) ? cuentaBancoRaw : "";
                 const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || docTieneArchivo || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
 
                 // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio|credencialDiscapacidad|movilidadReducida|dormitorios|integrantesNucleo"
