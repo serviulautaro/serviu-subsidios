@@ -961,10 +961,33 @@ const fusionarDocumentoPrograma = (actual = {}, docPrograma = {}, idx = 0) => ({
   subopciones: docPrograma.subopciones || actual.subopciones || null,
 });
 
+const documentoTieneDatosUsuario = (doc = {}) =>
+  !!(doc.entregado || doc.vb || doc.valor || doc.archivo || doc.storagePath || doc.archivoData || doc.dataUrl || doc.num_ord || doc.fecha_resp || doc.opcionSeleccionada || doc.etiqueta);
+
+const combinarDatosDocumentoSolicitud = (principal = {}, extra = {}) => ({
+  ...principal,
+  entregado: principal.entregado || extra.entregado || false,
+  vb: principal.vb || extra.vb || false,
+  valor: principal.valor || extra.valor || "",
+  archivo: principal.archivo || extra.archivo || "",
+  storagePath: principal.storagePath || extra.storagePath || "",
+  archivoData: principal.archivoData || extra.archivoData || "",
+  dataUrl: principal.dataUrl || extra.dataUrl || "",
+  mime_type: principal.mime_type || extra.mime_type || "",
+  mimeType: principal.mimeType || extra.mimeType || "",
+  num_ord: principal.num_ord || extra.num_ord || "",
+  fecha_resp: principal.fecha_resp || extra.fecha_resp || "",
+  opcionSeleccionada: principal.opcionSeleccionada || extra.opcionSeleccionada || null,
+  etiqueta: principal.etiqueta || extra.etiqueta || null,
+  observacion: principal.observacion || extra.observacion || "",
+  observaciones: principal.observaciones || extra.observaciones || "",
+});
+
 const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
   if (!programa || !Array.isArray(programa.documentos) || !programa.documentos.length) return documentos || [];
   const base = Array.isArray(documentos) ? documentos.map(d => ({ ...d })) : [];
   const usados = new Set();
+  const retenidos = new Set();
   let cambio = false;
 
   (programa.documentos || []).forEach((docRaw, idx) => {
@@ -972,23 +995,45 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
     const docProg = documentoProgramaConClave(docRaw, idx);
     const docKey = claveDocumentoPrograma(docProg, idx);
     const nombreKey = claveNombreDocumento(docProg.nombre);
-    let pos = base.findIndex((d, i) => !usados.has(i) && d?.docKey && claveDocumentoPrograma(d, i) === docKey);
-    if (pos < 0) pos = base.findIndex((d, i) => !usados.has(i) && claveNombreDocumento(d?.nombre) === nombreKey);
-    if (pos < 0 && base[idx] && !usados.has(idx)) pos = idx;
+    const nombreOriginalKey = claveNombreDocumento(docProg.nombreOriginal);
+    const candidatos = [];
+    const agregarCandidato = (pos) => {
+      if (pos >= 0 && !usados.has(pos) && !candidatos.includes(pos)) candidatos.push(pos);
+    };
+    agregarCandidato(idx < base.length ? idx : -1);
+    base.forEach((d, i) => {
+      if (usados.has(i)) return;
+      const dKey = d?.docKey ? claveDocumentoPrograma(d, i) : "";
+      const dNombre = claveNombreDocumento(d?.nombre);
+      const dOriginal = claveNombreDocumento(d?.nombreOriginal);
+      if ((dKey && dKey === docKey) ||
+          (nombreKey && dNombre === nombreKey) ||
+          (nombreOriginalKey && (dNombre === nombreOriginalKey || dOriginal === nombreOriginalKey))) {
+        agregarCandidato(i);
+      }
+    });
 
-    if (pos >= 0) {
-      const fusionado = fusionarDocumentoPrograma(base[pos], docProg, idx);
-      if (JSON.stringify(fusionado) !== JSON.stringify(base[pos])) cambio = true;
-      base[pos] = fusionado;
-      usados.add(pos);
+    if (candidatos.length) {
+      const principalIdx = candidatos.find(i => documentoTieneDatosUsuario(base[i])) ?? candidatos[0];
+      let fusionado = fusionarDocumentoPrograma(base[principalIdx], docProg, idx);
+      candidatos
+        .filter(i => i !== principalIdx)
+        .forEach(i => { fusionado = combinarDatosDocumentoSolicitud(fusionado, base[i]); });
+      if (JSON.stringify(fusionado) !== JSON.stringify(base[principalIdx]) || candidatos.length > 1) cambio = true;
+      base[principalIdx] = fusionado;
+      candidatos.forEach(i => usados.add(i));
+      retenidos.add(principalIdx);
     } else {
       base.push(documentoSolicitudDesdePrograma(docProg, idx));
       usados.add(base.length - 1);
+      retenidos.add(base.length - 1);
       cambio = true;
     }
   });
 
-  return cambio ? base : documentos || [];
+  const extras = base.filter((_, i) => !usados.has(i));
+  const resultado = [...base.filter((_, i) => retenidos.has(i)), ...extras];
+  return cambio ? resultado : documentos || [];
 };
 
 const DB = {
@@ -9161,6 +9206,8 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           const json = await res.json().catch(() => ({}));
           const completa = res.ok && json.ok !== false ? json.data?.[0] : null;
           if (completa) {
+            const programaCompleta = todosProgramas.find(p => p.id === completa.programa_id);
+            const documentosCompletos = Array.isArray(completa.documentos) ? completa.documentos : [];
             nuevas[sol.id] = {
               ...completa,
               personaId: completa.persona_id,
@@ -9169,7 +9216,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
               codigoComite: completa.codigo_comite,
               tipoComite: completa.tipo_comite,
               profesionalComite: completa.profesional_comite,
-              documentos: Array.isArray(completa.documentos) ? completa.documentos : [],
+              documentos: completarDocumentosDesdePrograma(documentosCompletos, programaCompleta),
               documentosCargados: true,
             };
           }
