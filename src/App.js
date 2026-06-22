@@ -1006,6 +1006,35 @@ const documentosCompatibles = (a = {}, b = {}) => {
   return false;
 };
 
+const bancosCuentaAhorroPermitidos = ["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","ItaÃº","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"];
+
+const sanitizarDocumentoPorTipo = (doc = {}) => {
+  const tipo = tipoDocumentoCanonico(doc);
+  if (tipo === "cuenta_ahorro") {
+    const partes = String(doc.valor || "").split("|");
+    const valorInvalido = /discapacidad|credencial|movilidad|^n\/a$/i.test(String(doc.valor || ""));
+    const numero = valorInvalido ? "" : (partes[0] || "").trim();
+    const banco = valorInvalido ? "" : (partes[1] || "").trim();
+    const bancoValido = bancosCuentaAhorroPermitidos.includes(banco);
+    const valor = numero && bancoValido ? `${numero}|${banco}${partes[2] === "ok" ? "|ok" : ""}` : "";
+    return {
+      ...doc,
+      valor,
+      opcionSeleccionada: null,
+      etiqueta: null,
+      entregado: valor ? doc.entregado : false,
+      vb: valor ? doc.vb : false,
+    };
+  }
+  if (tipo !== "discapacidad" && tipo !== "agua" && tipo !== "luz") {
+    const opcion = String(doc.opcionSeleccionada || "");
+    if (/discapacidad|empalme|pozo|arranque/i.test(opcion)) {
+      return { ...doc, opcionSeleccionada: null, etiqueta: null };
+    }
+  }
+  return doc;
+};
+
 const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
   if (!programa || !Array.isArray(programa.documentos) || !programa.documentos.length) return documentos || [];
   const base = Array.isArray(documentos) ? documentos.map(d => ({ ...d })) : [];
@@ -1028,10 +1057,11 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
       const dKey = d?.docKey ? claveDocumentoPrograma(d, i) : "";
       const dNombre = claveNombreDocumento(d?.nombre);
       const dOriginal = claveNombreDocumento(d?.nombreOriginal);
+      const compatible = documentosCompatibles(d, docProg);
       const matchDirecto = (dKey && dKey === docKey) ||
         (nombreKey && dNombre === nombreKey) ||
         (nombreOriginalKey && (dNombre === nombreOriginalKey || dOriginal === nombreOriginalKey));
-      if (matchDirecto || documentosCompatibles(d, docProg)) {
+      if ((matchDirecto && compatible) || compatible) {
         agregarCandidato(i);
       }
     });
@@ -1042,12 +1072,13 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
       candidatos
         .filter(i => i !== principalIdx)
         .forEach(i => { fusionado = combinarDatosDocumentoSolicitud(fusionado, base[i]); });
+      fusionado = sanitizarDocumentoPorTipo(fusionado);
       if (JSON.stringify(fusionado) !== JSON.stringify(base[principalIdx]) || candidatos.length > 1) cambio = true;
       base[principalIdx] = fusionado;
       candidatos.forEach(i => usados.add(i));
       retenidos.add(principalIdx);
     } else {
-      base.push(documentoSolicitudDesdePrograma(docProg, idx));
+      base.push(sanitizarDocumentoPorTipo(documentoSolicitudDesdePrograma(docProg, idx)));
       usados.add(base.length - 1);
       retenidos.add(base.length - 1);
       cambio = true;
@@ -6386,11 +6417,10 @@ const datosSolicitud = {
 
                 // Valores cuenta ahorro: "cuenta|banco|ok" en doc.valor (se conserva compatibilidad con registros antiguos)
                 const cuentaPartes = esCuentaAhorro ? (doc.valor || "").split("|") : [];
-                const bancosCuentaAhorro = ["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","ItaÃº","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"];
                 const cuentaValorInvalido = /discapacidad|credencial|movilidad|^n\/a$/i.test(String(doc.valor || ""));
                 const cuentaNum = cuentaValorInvalido ? "" : (cuentaPartes[0] || "");
                 const cuentaBancoRaw = cuentaValorInvalido ? "" : (cuentaPartes[1] || "");
-                const cuentaBanco = bancosCuentaAhorro.includes(cuentaBancoRaw) ? cuentaBancoRaw : "";
+                const cuentaBanco = bancosCuentaAhorroPermitidos.includes(cuentaBancoRaw) ? cuentaBancoRaw : "";
                 const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || docTieneArchivo || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
 
                 // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio|credencialDiscapacidad|movilidadReducida|dormitorios|integrantesNucleo"
