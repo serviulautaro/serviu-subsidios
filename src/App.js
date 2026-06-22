@@ -617,7 +617,7 @@ function combinarProgramas(programasCustom = []) {
       porId.set(p.id, {
         ...anterior,
         ...normalizado,
-        documentos: normalizado.documentos.length ? normalizado.documentos : anterior.documentos,
+        documentos: normalizado.documentos.length ? completarDocumentosProgramaBase(anterior.documentos, normalizado.documentos) : anterior.documentos,
         esCustom: false,
         esBase: true,
         editadoAdmin: true,
@@ -960,6 +960,47 @@ const fusionarDocumentoPrograma = (actual = {}, docPrograma = {}, idx = 0) => ({
   etiquetaTexto: docPrograma.etiquetaTexto || actual.etiquetaTexto || "",
   subopciones: docPrograma.subopciones || actual.subopciones || null,
 });
+
+const completarDocumentosProgramaBase = (documentosBase = [], documentosEditados = []) => {
+  const base = Array.isArray(documentosBase) ? documentosBase : [];
+  const editados = Array.isArray(documentosEditados) ? documentosEditados : [];
+  const usados = new Set();
+  const resultado = base.map((docBaseRaw, idx) => {
+    const docBase = documentoProgramaConClave(docBaseRaw, idx);
+    const baseKey = claveDocumentoPrograma(docBase, idx);
+    const baseNombre = claveNombreDocumento(docBase.nombre);
+    const editIdx = editados.findIndex((docEditado, i) => {
+      if (usados.has(i)) return false;
+      const editKey = docEditado?.docKey ? claveDocumentoPrograma(docEditado, i) : "";
+      const editNombre = claveNombreDocumento(docEditado?.nombre);
+      const editOriginal = claveNombreDocumento(docEditado?.nombreOriginal);
+      return (editKey && editKey === baseKey) ||
+        (baseNombre && (editNombre === baseNombre || editOriginal === baseNombre)) ||
+        documentosCompatibles(docEditado, docBase);
+    });
+    if (editIdx < 0) return docBase;
+    usados.add(editIdx);
+    const editado = editados[editIdx] || {};
+    return {
+      ...docBase,
+      ...editado,
+      docKey: baseKey,
+      nombreOriginal: editado.nombreOriginal || docBase.nombreOriginal || docBase.nombre,
+      nombre: editado.nombre || docBase.nombre,
+      obligatorio: !!docBase.obligatorio,
+      tipo: docBase.tipo || editado.tipo || null,
+      opciones: docBase.opciones || editado.opciones || null,
+      requiereArchivo: docBase.requiereArchivo || editado.requiereArchivo || false,
+      requiereTexto: docBase.requiereTexto || editado.requiereTexto || false,
+      etiquetaTexto: editado.etiquetaTexto || docBase.etiquetaTexto || "",
+      subopciones: docBase.subopciones || editado.subopciones || null,
+    };
+  });
+  editados.forEach((doc, i) => {
+    if (!usados.has(i)) resultado.push(documentoProgramaConClave(doc, resultado.length));
+  });
+  return resultado;
+};
 
 const documentoTieneDatosUsuario = (doc = {}) =>
   !!(doc.entregado || doc.vb || doc.valor || doc.archivo || doc.storagePath || doc.archivoData || doc.dataUrl || doc.num_ord || doc.fecha_resp || doc.opcionSeleccionada || doc.etiqueta);
@@ -3198,9 +3239,30 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
   const misSols = solicitudes.filter(s => s.personaId === personaId);
+  const completarSolicitudActiva = (sol = {}) => {
+    const programaId = sol.programaId || sol.programa_id;
+    const prog = todosProgramas.find(p => p.id === programaId);
+    if (!prog) return sol;
+    const documentos = completarDocumentosDesdePrograma(sol.documentos || [], prog);
+    return documentos === sol.documentos ? sol : { ...sol, documentos, documentosCargados: true };
+  };
   const firmaArchivosSolicitudes = misSols.map(s => {
     return `${s.id}:${s.documentosCargados ? "1" : "0"}`;
   }).join("|");
+  useEffect(() => {
+    if (!misSols.length) return;
+    let cambio = false;
+    const actualizadas = solicitudes.map(s => {
+      if ((s.personaId || s.persona_id) !== personaId) return s;
+      const completa = completarSolicitudActiva(s);
+      if (completa !== s && JSON.stringify(completa.documentos || []) !== JSON.stringify(s.documentos || [])) {
+        cambio = true;
+        return completa;
+      }
+      return s;
+    });
+    if (cambio) onSaveSolicitudes(actualizadas);
+  }, [personaId, misSols.length, todosProgramas.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!misSols.length) {
       setProgramaTrabajoId("");
@@ -3211,10 +3273,11 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     }
   }, [personaId, misSols.length, programaTrabajoId]); // eslint-disable-line react-hooks/exhaustive-deps
   const programaSeleccionadoId = programaTrabajoId || misSols[0]?.programaId || misSols[0]?.programa_id || "";
-  const solsTrabajo = programaSeleccionadoId ? misSols.filter(s => (s.programaId || s.programa_id) === programaSeleccionadoId) : misSols;
+  const misSolsCompletas = misSols.map(completarSolicitudActiva);
+  const solsTrabajo = programaSeleccionadoId ? misSolsCompletas.filter(s => (s.programaId || s.programa_id) === programaSeleccionadoId) : misSolsCompletas;
   const solicitudesActivasVista = [
     ...solsTrabajo.map(s => s),
-    ...misSols.filter(s => !solsTrabajo.some(sel => sel.id === s.id)),
+    ...misSolsCompletas.filter(s => !solsTrabajo.some(sel => sel.id === s.id)),
   ];
   const tieneSolicitudCsp = solsTrabajo.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
   const [lineaTiempoPersonaCsp, setLineaTiempoPersonaCsp] = useState(() => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));

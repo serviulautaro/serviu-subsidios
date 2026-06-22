@@ -84,6 +84,7 @@ function main() {
   ok("VB Respuesta SERVIU exige clave y resultado paso 9", contains(app, "Marcar VB Respuesta SERVIU") && contains(app, "abrirResultadoRespuestaServiuConClave") && contains(app, "confirmarClaveVbDesmarque"));
   ok("Renombrar requisito no duplica documento en solicitudes", contains(app, "claveDocumentoPrograma") && contains(app, "fusionarDocumentoPrograma") && contains(app, "documentoProgramaConClave"));
   ok("Cuenta de ahorro no mezcla opciones de discapacidad", contains(app, "esCuentaAhorroNombre ? null") && contains(app, "tipo: null") && contains(app, "bancosCuentaAhorroPermitidos"));
+  ok("Programas base editados mantienen todos sus requisitos", contains(app, "completarDocumentosProgramaBase") && contains(app, "completarSolicitudActiva"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);
