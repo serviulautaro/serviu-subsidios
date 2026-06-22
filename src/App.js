@@ -1019,6 +1019,9 @@ const sanitizarDocumentoPorTipo = (doc = {}) => {
     const valor = numero && bancoValido ? `${numero}|${banco}${partes[2] === "ok" ? "|ok" : ""}` : "";
     return {
       ...doc,
+      tipo: null,
+      opciones: null,
+      subopciones: null,
       valor,
       opcionSeleccionada: null,
       etiqueta: null,
@@ -6222,12 +6225,15 @@ const datosSolicitud = {
                 }
                 // Detectar tipo especial por nombre (independiente del campo tipo)
                 const nom = doc.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const tipoReal = doc.tipo ||
+                const esCuentaAhorroNombre = esCsp && nom.includes("cuenta de ahorro");
+                const tipoGuardadoCompatible = ["luz", "agua", "discapacidad"].includes(doc.tipo) ? doc.tipo : null;
+                const tipoReal = esCuentaAhorroNombre ? null : tipoGuardadoCompatible ||
                   (nom.includes("boleta de luz") || nom.includes("suministro electrico") || nom.includes("suministro electrico") || nom.includes("electrico") ? "luz" :
                    nom.includes("boleta de agua") || nom.includes("agua potable") || nom.includes("agua (apr") ? "agua" :
                    nom.includes("credencial de discapacidad") ? "discapacidad" : null);
 
-                const opcionesReal = doc.opciones ||
+                const opcionesGuardadasCompatibles = tipoReal && Array.isArray(doc.opciones) ? doc.opciones : null;
+                const opcionesReal = opcionesGuardadasCompatibles ||
                   (tipoReal === "luz" ? ["FRONTEL", "CODINER", "CGE"] :
                    tipoReal === "agua" ? ["Aguas Araucania", "Aguas San Isidro", "APR", "Pozo"] :
                    tipoReal === "discapacidad" ? ["Con discapacidad", "Sin discapacidad"] : null);
@@ -6288,7 +6294,7 @@ const datosSolicitud = {
                 const esConDiscapacidad = tipoReal === "discapacidad" && opSel === "Con discapacidad";
                 const esConArranque = esCsp && tipoReal === "agua" && opSel && opSel !== "Pozo";
                 const esCertRuralidad = esCsp && nom.includes("certificado de ruralidad");
-                const esCuentaAhorro = esCsp && nom.includes("cuenta de ahorro");
+                const esCuentaAhorro = esCuentaAhorroNombre;
                 const esTituloDominio = !esEspecial && (
                   nom.includes("titulo de dominio") ||
                   nom.includes("título de dominio") ||
