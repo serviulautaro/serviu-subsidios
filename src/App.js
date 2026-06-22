@@ -84,33 +84,6 @@ const textoAdultoMayor = (fechaNac) => {
   return `${edad >= 60 ? "SI" : "NO"}/ ${edad} años`;
 };
 const docNombreNorm = (doc) => (doc?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-const docNombreCanonico = (doc) => {
-  const n = docNombreNorm(doc).replace(/\s+/g, " ").trim();
-  if (!n) return "";
-  if (n.includes("antecedentes de la vivienda") || n.includes("certificado de la vivienda")) return "certificados_antecedentes_vivienda";
-  if (n.includes("cedula") && n.includes("identidad")) return "cedula_identidad";
-  return n;
-};
-const docTieneDatosGuardados = (doc = {}) => !!(
-  doc.entregado ||
-  doc.archivo ||
-  doc.storagePath ||
-  doc.archivoData ||
-  String(doc.valor || "").trim() ||
-  doc.opcionSeleccionada
-);
-const indicesDocumentosVisibles = (documentos = []) => {
-  const elegidos = new Map();
-  (documentos || []).forEach((doc, idx) => {
-    if (!doc || doc.interno) return;
-    const key = docNombreCanonico(doc) || "__doc_" + idx;
-    const previo = elegidos.get(key);
-    if (previo === undefined || (!docTieneDatosGuardados(documentos[previo]) && docTieneDatosGuardados(doc))) {
-      elegidos.set(key, idx);
-    }
-  });
-  return new Set(elegidos.values());
-};
 const DOC_PRIORIDAD_SOLICITANTE = "__prioridad_solicitante";
 const prioridadSolicitud = (sol = {}) => {
   const doc = (sol.documentos || []).find(d => d.nombre === DOC_PRIORIDAD_SOLICITANTE);
@@ -5844,16 +5817,18 @@ const datosSolicitud = {
 
       {solicitudesActivasVista.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
-        const p = pct(sol.documentos, sol.programaId);
-        const conteoSol = conteoDocumentosSolicitud(sol.documentos, sol.programaId);
+        const documentosVista = completarDocumentosDesdePrograma(sol.documentos || [], prog);
+        const solVista = documentosVista === sol.documentos ? sol : { ...sol, documentos: documentosVista, documentosCargados: true };
+        const p = pct(solVista.documentos, solVista.programaId);
+        const conteoSol = conteoDocumentosSolicitud(solVista.documentos, solVista.programaId);
         const ok = conteoSol.completos;
         const progNombreNorm = (prog?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const esMave = sol.programaId === "mave_rural" || progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
-        const esAmpliacion = sol.programaId === "ampliacion_vivienda" || progNombreNorm.includes("ampliacion de la vivienda");
+        const esMave = solVista.programaId === "mave_rural" || progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
+        const esAmpliacion = solVista.programaId === "ampliacion_vivienda" || progNombreNorm.includes("ampliacion de la vivienda");
         const esProgramaEspecialVivienda = esMave || esAmpliacion;
-        const esCsp = sol.programaId === "csp_rural" || sol.programaId === "csp_urbano" || esProgramaEspecialVivienda;
+        const esCsp = solVista.programaId === "csp_rural" || solVista.programaId === "csp_urbano" || esProgramaEspecialVivienda;
         const esCustom = !!(prog && prog.esCustom && !esProgramaEspecialVivienda);
-        const prioridadActual = prioridadSolicitud(sol);
+        const prioridadActual = prioridadSolicitud(solVista);
         return (
           <div key={sol.id} style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 16, border: "1px solid #e8e3de" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
@@ -5873,7 +5848,7 @@ const datosSolicitud = {
                 </button>
                 {solsEditando[sol.id] && (
                   <button onClick={async () => {
-                    const docs = sol.documentos || [];
+                    const docs = solVista.documentos || [];
                     const db = {}; // campos para Supabase (snake_case)
                     const lc = {}; // campos para estado local (camelCase)
                     for (const d of docs) {
@@ -6016,15 +5991,15 @@ const datosSolicitud = {
             <div style={{ height: 8, background: "#f0ede8", borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
               <div style={{ height: "100%", width: p + "%", background: statusColor(p), borderRadius: 4 }} />
             </div>
-            {sol.programaId === "habitabilidad" && (
+            {solVista.programaId === "habitabilidad" && (
               <>
-                <LineaAvanceDesmarque sol={sol} onTogglePaso={(numeroPaso, marcado) => guardarAvanceManualDesmarque(sol, numeroPaso, marcado)} />
+                <LineaAvanceDesmarque sol={solVista} onTogglePaso={(numeroPaso, marcado) => guardarAvanceManualDesmarque(solVista, numeroPaso, marcado)} />
                 {(() => {
-                  const st = estadoLineaDesmarque(sol);
+                  const st = estadoLineaDesmarque(solVista);
                   return <div style={{ marginBottom: 14, padding: "10px 14px", background: st.calificacion.estado === "NO_CALIFICA" ? "#FEF2F2" : st.calificacion.estado === "CALIFICA" ? "#ECFDF5" : "#F9FAFB", borderRadius: 8, border: "1px solid " + (st.calificacion.estado === "NO_CALIFICA" ? "#FCA5A5" : st.calificacion.estado === "CALIFICA" ? "#86EFAC" : "#E5E7EB"), display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <div style={{ fontSize: 11, fontWeight: 900, color: "#374151", textTransform: "uppercase" }}>Calificación manual para visita</div>
-                    <button onClick={() => guardarCalificacionDesmarque(sol, "CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#059669", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Califica</button>
-                    <button onClick={() => guardarCalificacionDesmarque(sol, "NO_CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#DC2626", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>No califica</button>
+                    <button onClick={() => guardarCalificacionDesmarque(solVista, "CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#059669", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Califica</button>
+                    <button onClick={() => guardarCalificacionDesmarque(solVista, "NO_CALIFICA")} style={{ padding: "6px 12px", border: 0, borderRadius: 7, background: "#DC2626", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>No califica</button>
                     {st.calificacion.estado === "CALIFICA" && <span style={{ fontSize: 12, color: "#047857", fontWeight: 800 }}>✓ Solicitante califica para visita</span>}
                     {st.calificacion.estado === "NO_CALIFICA" && <span style={{ fontSize: 12, color: "#B91C1C", fontWeight: 800 }}>NO CALIFICA: {st.calificacion.detalle}</span>}
                     {!st.calificacion.estado && <span style={{ fontSize: 12, color: "#6B7280" }}>Pendiente de revisión manual</span>}
@@ -6033,14 +6008,14 @@ const datosSolicitud = {
               </>
             )}
             {/* Campo Fecha de Visita inline para Desmarque */}
-            {sol.programaId === "habitabilidad" && (
-              <div style={{ marginBottom: 14, padding: "10px 14px", background: fechaVisitaSolicitud(sol) ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (fechaVisitaSolicitud(sol) ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
+            {solVista.programaId === "habitabilidad" && (
+              <div style={{ marginBottom: 14, padding: "10px 14px", background: fechaVisitaSolicitud(solVista) ? "#f0fdf4" : "#fffbeb", borderRadius: 8, border: "1px solid " + (fechaVisitaSolicitud(solVista) ? "#bbf7d0" : "#fde68a"), display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", whiteSpace: "nowrap" }}>📅 Fecha de Visita</div>
-                <input type="date" value={fechaVisitaSolicitud(sol)}
+                <input type="date" value={fechaVisitaSolicitud(solVista)}
                   onClick={e => e.stopPropagation()}
                   onChange={async e => {
                     const val = e.target.value;
-                    const guardada = await guardarFechaVisitaDesmarque(sol, val);
+                    const guardada = await guardarFechaVisitaDesmarque(solVista, val);
                     if (!guardada) return;
                     if (val && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","INFORME EN DOM","INFORME EN SERVIU"].includes(persona.estado_desmarque)) {
                       const nuevoEstado = "VISITA HECHA FALTA INFORME";
@@ -6050,8 +6025,8 @@ const datosSolicitud = {
                       }
                     }
                   }}
-                  style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (fechaVisitaSolicitud(sol) ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
-                {fechaVisitaSolicitud(sol)
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "1.5px solid " + (fechaVisitaSolicitud(solVista) ? "#059669" : "#ddd"), fontSize: 12, background: "#fff" }} />
+                {fechaVisitaSolicitud(solVista)
                   ? <span style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>✓ Visita registrada</span>
                   : <span style={{ fontSize: 11, color: "#B45309" }}>⚠ Sin fecha de visita — estado: No Visitado</span>}
               </div>
@@ -6077,9 +6052,8 @@ const datosSolicitud = {
               );
             })()}
             {!solsEditando[sol.id] && (() => {
-              const visibles = indicesDocumentosVisibles(sol.documentos || []);
-              const docsVisibles = (sol.documentos || []).filter((doc, i) =>
-                visibles.has(i) && !doc.interno && !(doc.nombre || "").toLowerCase().includes("credencial de discapacidad")
+              const docsVisibles = (solVista.documentos || []).filter((doc) =>
+                !doc.interno && !(doc.nombre || "").toLowerCase().includes("credencial de discapacidad")
               );
               if (!docsVisibles.length) return null;
               return (
@@ -6098,9 +6072,7 @@ const datosSolicitud = {
             })()}
             {solsEditando[sol.id] && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {(() => {
-                const visibles = indicesDocumentosVisibles(sol.documentos || []);
-                return (sol.documentos || []).map((doc, i) => {
-                if (!visibles.has(i)) return null;
+                return (solVista.documentos || []).map((doc, i) => {
                 if (doc.interno) return null;
                 if ((doc.nombre || "").toLowerCase().includes("credencial de discapacidad")) return null;
                 // ── PROGRAMA PERSONALIZADO: renderizado genérico ──────────────
@@ -6277,11 +6249,11 @@ const datosSolicitud = {
                 // ── FIN PROGRAMA PERSONALIZADO ────────────────────────────────
 
                 // Ocultar documentos obsoletos o duplicados (preservando índice original para updates)
-                if (sol.programaId === "csp_urbano") {
+                if (solVista.programaId === "csp_urbano") {
                   const n = (doc.nombre || "").toLowerCase();
                   if (n.includes("fecha de nacimiento")) return null;
                 }
-                if (sol.programaId === "csp_rural") {
+                if (solVista.programaId === "csp_rural") {
                   const n = (doc.nombre||"").toLowerCase();
                   if (n.includes("fecha de nacimiento")) return null;
                   if (n.includes("titulo de dominio") || n.includes("título de dominio")) return null;
@@ -6596,7 +6568,7 @@ const datosSolicitud = {
                           toggleDoc(sol.id, i);
                         }
                         if (esDocArchivo && !doc.entregado) {
-                          if (sol.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
+                          if (solVista.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
                           marcarDocEntregado(sol.id, i, true);
                         }
                         if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, i, true);
