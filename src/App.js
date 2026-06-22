@@ -915,29 +915,80 @@ const claveNombreDocumento = (nombre = "") =>
     .trim()
     .toUpperCase();
 
+const claveDocumentoPrograma = (doc = {}, idx = 0) =>
+  String(doc.docKey || doc.id || doc.clave || doc.key || doc.nombreOriginal || doc.nombre_base || `pos_${idx}`)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase() || `pos_${idx}`;
+
+const documentoProgramaConClave = (doc = {}, idx = 0) => ({
+  ...doc,
+  docKey: claveDocumentoPrograma(doc, idx),
+  nombreOriginal: doc.nombreOriginal || doc.nombre || "",
+});
+
+const documentoSolicitudDesdePrograma = (doc = {}, idx = 0) => ({
+  docKey: claveDocumentoPrograma(doc, idx),
+  nombreOriginal: doc.nombreOriginal || doc.nombre || "",
+  nombre: doc.nombre,
+  obligatorio: !!doc.obligatorio,
+  entregado: false,
+  tipo: doc.tipo || null,
+  opciones: doc.opciones || null,
+  opcionSeleccionada: doc.opcionSeleccionada || null,
+  etiqueta: doc.etiqueta || null,
+  valor: doc.valor || "",
+  requiereArchivo: doc.requiereArchivo || false,
+  requiereTexto: doc.requiereTexto || false,
+  etiquetaTexto: doc.etiquetaTexto || "",
+  subopciones: doc.subopciones || null,
+});
+
+const fusionarDocumentoPrograma = (actual = {}, docPrograma = {}, idx = 0) => ({
+  ...documentoSolicitudDesdePrograma(docPrograma, idx),
+  ...actual,
+  docKey: actual.docKey || claveDocumentoPrograma(docPrograma, idx),
+  nombreOriginal: actual.nombreOriginal || docPrograma.nombreOriginal || actual.nombre || docPrograma.nombre || "",
+  nombre: docPrograma.nombre || actual.nombre,
+  obligatorio: !!docPrograma.obligatorio,
+  tipo: docPrograma.tipo || actual.tipo || null,
+  opciones: docPrograma.opciones || actual.opciones || null,
+  requiereArchivo: docPrograma.requiereArchivo || false,
+  requiereTexto: docPrograma.requiereTexto || false,
+  etiquetaTexto: docPrograma.etiquetaTexto || actual.etiquetaTexto || "",
+  subopciones: docPrograma.subopciones || actual.subopciones || null,
+});
+
 const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
   if (!programa || !Array.isArray(programa.documentos) || !programa.documentos.length) return documentos || [];
-  const base = Array.isArray(documentos) ? documentos : [];
-  const existentes = new Set(base.map(d => claveNombreDocumento(d?.nombre)).filter(Boolean));
-  const faltantes = programa.documentos.filter(d => d?.nombre && !existentes.has(claveNombreDocumento(d.nombre)));
-  if (!faltantes.length) return base;
-  return [
-    ...base,
-    ...faltantes.map(d => ({
-      nombre: d.nombre,
-      obligatorio: !!d.obligatorio,
-      entregado: false,
-      tipo: d.tipo || null,
-      opciones: d.opciones || null,
-      opcionSeleccionada: d.opcionSeleccionada || null,
-      etiqueta: d.etiqueta || null,
-      valor: d.valor || "",
-      requiereArchivo: d.requiereArchivo || false,
-      requiereTexto: d.requiereTexto || false,
-      etiquetaTexto: d.etiquetaTexto || "",
-      subopciones: d.subopciones || null,
-    }))
-  ];
+  const base = Array.isArray(documentos) ? documentos.map(d => ({ ...d })) : [];
+  const usados = new Set();
+  let cambio = false;
+
+  (programa.documentos || []).forEach((docRaw, idx) => {
+    if (!docRaw?.nombre) return;
+    const docProg = documentoProgramaConClave(docRaw, idx);
+    const docKey = claveDocumentoPrograma(docProg, idx);
+    const nombreKey = claveNombreDocumento(docProg.nombre);
+    let pos = base.findIndex((d, i) => !usados.has(i) && d?.docKey && claveDocumentoPrograma(d, i) === docKey);
+    if (pos < 0) pos = base.findIndex((d, i) => !usados.has(i) && claveNombreDocumento(d?.nombre) === nombreKey);
+    if (pos < 0 && base[idx] && !usados.has(idx)) pos = idx;
+
+    if (pos >= 0) {
+      const fusionado = fusionarDocumentoPrograma(base[pos], docProg, idx);
+      if (JSON.stringify(fusionado) !== JSON.stringify(base[pos])) cambio = true;
+      base[pos] = fusionado;
+      usados.add(pos);
+    } else {
+      base.push(documentoSolicitudDesdePrograma(docProg, idx));
+      usados.add(base.length - 1);
+      cambio = true;
+    }
+  });
+
+  return cambio ? base : documentos || [];
 };
 
 const DB = {
@@ -7856,11 +7907,7 @@ const datosSolicitud = {
                   const nueva = {
                     id: uid(), personaId, personaNombre: persona.nombre,
                     programaId: prog.id, fecha: today(),
-                    documentos: prog.documentos.map(d => ({
-                      nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
-                      tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null,
-                      requiereArchivo: !!d.requiereArchivo, requiereTexto: !!d.requiereTexto, etiquetaTexto: d.etiquetaTexto || "", valor: d.valor || ""
-                    }))
+                    documentos: prog.documentos.map((d, idx) => documentoSolicitudDesdePrograma(d, idx))
                   };
                   const { data: inserted } = await supabase.from("solicitudes").insert([{
                     id: nueva.id, persona_id: personaId, persona_nombre: persona.nombre,
@@ -8043,19 +8090,19 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
     if (accionPendiente?.tipo === "agregar") { setMostrarForm(true); }
     if (accionPendiente?.tipo === "editar") {
       const p = accionPendiente.prog;
-      setFormEdit({ id: p.id, nombre: p.nombre, descripcion: p.descripcion || "", color: p.color || "#2563EB", colorLight: p.colorLight || p.colorlight || "#EFF6FF", icon: p.icon || "P", documentos: (p.documentos || []).map(d => ({ ...d })), esCustom: !!p.esCustom, esBase: !!p.esBase });
+      setFormEdit({ id: p.id, nombre: p.nombre, descripcion: p.descripcion || "", color: p.color || "#2563EB", colorLight: p.colorLight || p.colorlight || "#EFF6FF", icon: p.icon || "P", documentos: (p.documentos || []).map((d, idx) => documentoProgramaConClave(d, idx)), esCustom: !!p.esCustom, esBase: !!p.esBase });
       setEditandoProg(p.id);
       setProgSeleccionado(p.id);
     }
     setAccionPendiente(null);
   };
-  const addDocEdit = () => setFormEdit(f => ({ ...f, documentos: [...f.documentos, { nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] }));
+  const addDocEdit = () => setFormEdit(f => ({ ...f, documentos: [...f.documentos, { docKey: `nuevo_${uid()}`, nombreOriginal: "", nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] }));
   const removeDocEdit = (i) => setFormEdit(f => ({ ...f, documentos: f.documentos.filter((_, j) => j !== i) }));
   const setDocEdit = (i, key, val) => setFormEdit(f => ({ ...f, documentos: f.documentos.map((d, j) => j === i ? { ...d, [key]: val } : d) }));
   const guardarEdicion = async () => {
     if (!formEdit.nombre.trim()) { alert("El nombre es obligatorio."); return; }
     if (formEdit.documentos.some(d => !d.nombre.trim())) { alert("Todos los documentos deben tener nombre."); return; }
-    await onUpdatePrograma(formEdit);
+    await onUpdatePrograma({ ...formEdit, documentos: formEdit.documentos.map((d, idx) => documentoProgramaConClave(d, idx)) });
     setEditandoProg(null); setFormEdit(null);
   };
   const plantillaMave = () => DOCUMENTOS_MAVE.map(d => ({
@@ -8070,7 +8117,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
   });
 
   const colIdx = COLORES_PROG.findIndex(c => c.color === form.color);
-  const addDoc = () => setForm(f => ({ ...f, documentos: [...f.documentos, { nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] }));
+  const addDoc = () => setForm(f => ({ ...f, documentos: [...f.documentos, { docKey: `nuevo_${uid()}`, nombreOriginal: "", nombre: "", obligatorio: true, requiereArchivo: true, requiereTexto: false, etiquetaTexto: "" }] }));
   const removeDoc = (i) => setForm(f => ({ ...f, documentos: f.documentos.filter((_, j) => j !== i) }));
   const setDoc = (i, key, val) => setForm(f => ({ ...f, documentos: f.documentos.map((d, j) => j === i ? { ...d, [key]: val } : d) }));
   const htmlSeguro = (txt) => String(txt || "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -8114,7 +8161,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
     if (!form.nombre.trim()) { alert("El nombre del programa es obligatorio."); return; }
     if (form.documentos.some(d => !d.nombre.trim())) { alert("Todos los documentos deben tener nombre."); return; }
     setGuardando(true);
-    await onAddPrograma({ ...form, documentos: form.documentos });
+    await onAddPrograma({ ...form, documentos: form.documentos.map((d, idx) => documentoProgramaConClave(d, idx)) });
     setForm({ nombre: "", descripcion: "", color: "#2563EB", colorLight: "#EFF6FF", icon: "N", documentos: plantillaMave() });
     setMostrarForm(false);
     setGuardando(false);
@@ -8546,11 +8593,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
             const nuevaSol = {
               id: uid(), personaId: id, personaNombre: persona.nombre,
               programaId: prog.id, fecha: today(),
-              documentos: prog.documentos.map(d => ({
-                nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
-                tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null, valor: d.valor || "",
-                requiereArchivo: !!d.requiereArchivo, requiereTexto: !!d.requiereTexto, etiquetaTexto: d.etiquetaTexto || ""
-              }))
+              documentos: prog.documentos.map((d, idx) => documentoSolicitudDesdePrograma(d, idx))
             };
             await sb.from("solicitudes").insert([{
               id: nuevaSol.id, persona_id: nuevaSol.personaId, persona_nombre: nuevaSol.personaNombre,
@@ -9575,19 +9618,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
             comite: destino.nombre,
             codigoComite: destino.id,
             tipoComite: tipoDestino,
-            documentos: (programaDestino.documentos || []).map(d => ({
-              nombre: d.nombre,
-              obligatorio: d.obligatorio,
-              entregado: false,
-              tipo: d.tipo || null,
-              opciones: d.opciones || null,
-              opcionSeleccionada: null,
-              etiqueta: null,
-              valor: d.valor || "",
-              requiereArchivo: !!d.requiereArchivo,
-              requiereTexto: !!d.requiereTexto,
-              etiquetaTexto: d.etiquetaTexto || "",
-            })),
+            documentos: (programaDestino.documentos || []).map((d, idx) => documentoSolicitudDesdePrograma(d, idx)),
           };
           await onSaveSolicitudes([...solicitudesBase, nuevaSol]);
         } else {
@@ -11360,10 +11391,7 @@ export default function App() {
             personaNombre: ultima.nombre,
             programaId: "habitabilidad",
             fecha: today(),
-            documentos: progHab.documentos.map(d => ({
-              nombre: d.nombre, obligatorio: d.obligatorio, entregado: false,
-              tipo: d.tipo || null, opciones: d.opciones || null, opcionSeleccionada: null, etiqueta: null, valor: d.valor || ""
-            }))
+            documentos: progHab.documentos.map((d, idx) => documentoSolicitudDesdePrograma(d, idx))
           };
           // Insert solicitud via Render
           let solOk = false;
@@ -11404,20 +11432,7 @@ export default function App() {
             comite: comitePersona?.nombre || ultima.comite || null,
             codigoComite: comitePersona?.id || comitePersona?.codigo || ultima.comiteId || null,
             tipoComite: comitePersona?.tipo || ultima.tipo_comite || null,
-            documentos: (programaAsignado.documentos || []).map(d => ({
-              nombre: d.nombre,
-              obligatorio: !!d.obligatorio,
-              entregado: false,
-              tipo: d.tipo || null,
-              opciones: d.opciones || null,
-              opcionSeleccionada: null,
-              etiqueta: d.etiqueta || null,
-              valor: d.valor || "",
-              requiereArchivo: !!d.requiereArchivo,
-              requiereTexto: !!d.requiereTexto,
-              etiquetaTexto: d.etiquetaTexto || "",
-              subopciones: d.subopciones || null,
-            }))
+            documentos: (programaAsignado.documentos || []).map((d, idx) => documentoSolicitudDesdePrograma(d, idx))
           };
           let solOk = false;
           const solPayload = [{
@@ -11801,6 +11816,8 @@ export default function App() {
           await registrarAuditoria("eliminar_programa", "programas_custom", id, {});
         }} onUpdatePrograma={async (prog) => {
           const esBase = PROGRAMAS.some(p => p.id === prog.id);
+          const documentosPrograma = (prog.documentos || []).map((d, idx) => documentoProgramaConClave(d, idx));
+          const programaActualizado = { ...prog, documentos: documentosPrograma };
           const payload = {
             id: prog.id,
             nombre: prog.nombre,
@@ -11808,18 +11825,27 @@ export default function App() {
             color: prog.color,
             colorlight: prog.colorLight,
             icon: prog.icon,
-            documentos: prog.documentos
+            documentos: documentosPrograma
           };
           const { error } = esBase
             ? await supabase.from("programas_custom").upsert([payload], { onConflict: "id" })
             : await supabase.from("programas_custom").update(payload).eq("id", prog.id);
           if (error) { alert("Error al actualizar programa: " + error.message); return; }
           setProgramasCustom(prev => {
-            const nuevo = { ...prog, colorlight: prog.colorLight, colorLight: prog.colorLight, esCustom: !esBase };
+            const nuevo = { ...programaActualizado, colorlight: prog.colorLight, colorLight: prog.colorLight, esCustom: !esBase };
             return prev.some(p => p.id === prog.id)
               ? prev.map(p => p.id !== prog.id ? p : { ...p, ...nuevo })
               : [...prev, nuevo];
           });
+          const solicitudesActualizadas = solicitudes.map(s => {
+            if ((s.programaId || s.programa_id) !== prog.id) return s;
+            if (!Array.isArray(s.documentos) || s.documentosCargados === false) return s;
+            const documentos = completarDocumentosDesdePrograma(s.documentos, programaActualizado);
+            return documentos === s.documentos ? s : { ...s, documentos, documentosCargados: true };
+          });
+          if (solicitudesActualizadas.some((s, idx) => s !== solicitudes[idx])) {
+            await saveSolicitudes(solicitudesActualizadas);
+          }
           await registrarAuditoria("actualizar_programa", "programas_custom", prog.id, { nombre: prog.nombre });
         }} />}
         {datosBaseListos && view === "solicitudes" && <SolicitudesView solicitudes={solicitudes} personas={personas} programasCustom={programasCustom} onDetail={goDetail} />}
