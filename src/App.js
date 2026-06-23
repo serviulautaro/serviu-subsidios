@@ -1008,6 +1008,8 @@ const tipoDocumentoCanonico = (doc = {}) => {
   if (n.includes("CEDULA") || n.includes("CÉDULA") || n.includes("IDENTIDAD")) return "cedula";
   if (n.includes("BOLETA") && n.includes("LUZ")) return "luz";
   if (n.includes("BOLETA") && n.includes("AGUA")) return "agua";
+  if (n.includes("INFORMACIONES PREVIAS")) return "informaciones_previas";
+  if (n.includes("ANTECEDENTES") && n.includes("VIVIENDA")) return "antecedentes_vivienda";
   if (n.includes("CORREO")) return "correo";
   if (n.includes("FECHA") && n.includes("NACIMIENTO")) return "fecha_nacimiento";
   return "";
@@ -1021,6 +1023,23 @@ const documentosCompatibles = (a = {}, b = {}) => {
 };
 
 const bancosCuentaAhorroPermitidos = ["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","ItaÃº","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"];
+
+const indiceDocumentoSolicitud = (documentos = [], docVista = {}, fallback = 0) => {
+  const vistaKey = docVista?.docKey ? claveDocumentoPrograma(docVista, fallback) : "";
+  const vistaNombre = claveNombreDocumento(docVista?.nombre);
+  const vistaOriginal = claveNombreDocumento(docVista?.nombreOriginal);
+  const exacto = (documentos || []).findIndex((d, i) => {
+    const dKey = d?.docKey ? claveDocumentoPrograma(d, i) : "";
+    const dNombre = claveNombreDocumento(d?.nombre);
+    const dOriginal = claveNombreDocumento(d?.nombreOriginal);
+    return (vistaKey && dKey === vistaKey) ||
+      (vistaNombre && (dNombre === vistaNombre || dOriginal === vistaNombre)) ||
+      (vistaOriginal && (dNombre === vistaOriginal || dOriginal === vistaOriginal));
+  });
+  if (exacto >= 0) return exacto;
+  const compatible = (documentos || []).findIndex(d => documentosCompatibles(d, docVista));
+  return compatible >= 0 ? compatible : fallback;
+};
 
 const sanitizarDocumentoPorTipo = (doc = {}) => {
   const tipo = tipoDocumentoCanonico(doc);
@@ -1052,8 +1071,9 @@ const sanitizarDocumentoPorTipo = (doc = {}) => {
   return doc;
 };
 
-const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
+const completarDocumentosDesdePrograma = (documentos = [], programa = null, opciones = {}) => {
   if (!programa || !Array.isArray(programa.documentos) || !programa.documentos.length) return documentos || [];
+  const incluirExtras = opciones.incluirExtras !== false;
   const base = Array.isArray(documentos) ? documentos.map(d => ({ ...d })) : [];
   const usados = new Set();
   const retenidos = new Set();
@@ -1102,9 +1122,9 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null) => {
     }
   });
 
-  const extras = base.filter((_, i) => !usados.has(i));
+  const extras = incluirExtras ? base.filter((_, i) => !usados.has(i)) : [];
   const resultado = [...base.filter((_, i) => retenidos.has(i)), ...extras];
-  return cambio ? resultado : documentos || [];
+  return cambio || !incluirExtras ? resultado : documentos || [];
 };
 
 const DB = {
@@ -5817,7 +5837,7 @@ const datosSolicitud = {
 
       {solicitudesActivasVista.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
-        const documentosVista = completarDocumentosDesdePrograma(sol.documentos || [], prog);
+        const documentosVista = completarDocumentosDesdePrograma(sol.documentos || [], prog, { incluirExtras: false });
         const solVista = documentosVista === sol.documentos ? sol : { ...sol, documentos: documentosVista, documentosCargados: true };
         const p = pct(solVista.documentos, solVista.programaId);
         const conteoSol = conteoDocumentosSolicitud(solVista.documentos, solVista.programaId);
@@ -6052,9 +6072,7 @@ const datosSolicitud = {
               );
             })()}
             {!solsEditando[sol.id] && (() => {
-              const docsVisibles = (solVista.documentos || []).filter((doc) =>
-                !doc.interno && !(doc.nombre || "").toLowerCase().includes("credencial de discapacidad")
-              );
+              const docsVisibles = (solVista.documentos || []).filter((doc) => !doc.interno);
               if (!docsVisibles.length) return null;
               return (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8, marginBottom: 14 }}>
@@ -6074,7 +6092,7 @@ const datosSolicitud = {
               {(() => {
                 return (solVista.documentos || []).map((doc, i) => {
                 if (doc.interno) return null;
-                if ((doc.nombre || "").toLowerCase().includes("credencial de discapacidad")) return null;
+                const docIdx = indiceDocumentoSolicitud(sol.documentos || [], doc, i);
                 // ── PROGRAMA PERSONALIZADO: renderizado genérico ──────────────
                 if (esCustom) {
                   const reqArch = !!doc.requiereArchivo;
@@ -6111,7 +6129,7 @@ const datosSolicitud = {
                   const bordeColor = doc.entregado ? "#6EE7B7" : requisitosOk ? "#FCD34D" : "#e5e7eb";
 
                   const guardarValorYFicha = async (nuevoValor, campoFicha, valorFicha) => {
-                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d, j) => j === i ? { ...d, valor: nuevoValor } : d) });
+                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d, j) => j === docIdx ? { ...d, valor: nuevoValor } : d) });
                     onSaveSolicitudes(nuevasSols);
                     await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
                     if (campoFicha && valorFicha !== undefined) {
@@ -6122,7 +6140,7 @@ const datosSolicitud = {
                   };
 
                   const marcarVB = async () => {
-                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d, j) => j === i ? { ...d, entregado: true } : d) });
+                    const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d, j) => j === docIdx ? { ...d, entregado: true } : d) });
                     onSaveSolicitudes(nuevasSols);
                     await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s=>s.id===sol.id).documentos }).eq("id", sol.id);
                   };
@@ -6565,13 +6583,13 @@ const datosSolicitud = {
                       onClick={() => {
                         if (bloqueadoPorArchivo) return;
                         if (!esEspecial && !esDocArchivo && !esRsh && !esFechaNac && !esTelefonoContacto) {
-                          toggleDoc(sol.id, i);
+                          toggleDoc(sol.id, docIdx);
                         }
                         if (esDocArchivo && !doc.entregado) {
                           if (solVista.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
-                          marcarDocEntregado(sol.id, i, true);
+                          marcarDocEntregado(sol.id, docIdx, true);
                         }
-                        if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, i, true);
+                        if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, docIdx, true);
                       }}>
                       {esSinDiscapacidad ? (
                         <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>N/A</span>
@@ -6594,7 +6612,7 @@ const datosSolicitud = {
                       <div style={{ display: "flex", gap: 6, marginBottom: esLuz ? 6 : 4 }}>
                         {opcionesReal.map((op, oi) => (
                           <button key={oi} onClick={async () => {
-                            await setDocOpcion(sol.id, i, op, tipoReal);
+                            await setDocOpcion(sol.id, docIdx, op, tipoReal);
                             if (esCsp && tipoReal === "agua" && op === "Pozo") await syncPersona({ sistemaAgua: "Pozo", nServicioAgua: "N/A" });
                             if (esCsp && tipoReal === "agua" && op !== "Pozo") await syncPersona({ sistemaAgua: op });
                             if (esCsp && tipoReal === "luz" && op !== "Sin empalme") await syncPersona({ proveedorElectrico: op });
@@ -6752,7 +6770,7 @@ const datosSolicitud = {
                     {esFechaNac && (() => {
                       const fechaValor = /^\d{4}-\d{2}-\d{2}$/.test(doc.valor || "") ? doc.valor : "";
                       const guardarFecha = async (fechaCompleta) => {
-                        setDocValor(sol.id, i, fechaCompleta);
+                        setDocValor(sol.id, docIdx, fechaCompleta);
                         if (fechaCompleta) {
                           const am = textoAdultoMayor(fechaCompleta);
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
@@ -6871,7 +6889,7 @@ const datosSolicitud = {
                           {tieneArchivoCuenta ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir cartola/certificado en Carpeta de documentos"}
                         </div>
                         {cuentaNum.trim() && cuentaBanco.trim() && (
-                          <button onClick={() => marcarDocEntregado(sol.id, i, true)}
+                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true)}
                             style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
                             Marcar VB ✓
                           </button>
@@ -6894,13 +6912,13 @@ const datosSolicitud = {
                         <input type="text"
                           placeholder={esInformeDOM ? "N° del informe (ej: 15/2026)" : esMemoDOM ? "N° del memorando (ej: 25/2026)" : "N° de la carta (ej: 45/2026)"}
                           value={tramiteNum}
-                          onChange={e => { const v = e.target.value + "|" + tramiteFecha; setDocValor(sol.id, i, v); }}
+                          onChange={e => { const v = e.target.value + "|" + tramiteFecha; setDocValor(sol.id, docIdx, v); }}
                           onClick={e => e.stopPropagation()}
                           style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid " + (tramiteNum.trim()?"#059669":"#ddd"), fontSize:12, background:"#fff", boxSizing:"border-box" }} />
                         <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha</div>
                         <input type="date"
                           value={tramiteFecha}
-                          onChange={e => { const v = tramiteNum + "|" + e.target.value; setDocValor(sol.id, i, v); }}
+                          onChange={e => { const v = tramiteNum + "|" + e.target.value; setDocValor(sol.id, docIdx, v); }}
                           onClick={e => e.stopPropagation()}
                           style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid " + (tramiteFecha?"#059669":"#ddd"), fontSize:12, background:"#fff", boxSizing:"border-box" }} />
                         {tramiteCompleto
@@ -7401,7 +7419,7 @@ const datosSolicitud = {
                         <div style={{ fontSize: 11, color: tieneArchivo ? "#059669" : "#B45309", marginBottom: 4, fontWeight: 600 }}>
                           {tieneArchivo ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir respaldo en Carpeta de documentos"}
                         </div>
-                        <button onClick={() => { marcarDocEntregado(sol.id, i, true); }}
+                        <button onClick={() => { marcarDocEntregado(sol.id, docIdx, true); }}
                           style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                           Marcar VB ✓
                         </button>
@@ -7416,7 +7434,7 @@ const datosSolicitud = {
                           <span style={{ fontSize: 11, color: tieneArchivoEspecial ? "#059669" : "#B45309", fontWeight: 700 }}>
                             {tieneArchivoEspecial ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
                           </span>
-                          <button onClick={() => marcarDocEntregado(sol.id, i, true)}
+                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
                             Marcar VB ✓
                           </button>
@@ -7425,7 +7443,7 @@ const datosSolicitud = {
                         /* Otros programas: archivo en carpeta, VB desde solicitudes */
                         <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
                           <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>📁 Subir archivo en Carpeta de documentos</span>
-                          <button onClick={() => marcarDocEntregado(sol.id, i, true)}
+                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
                             Marcar VB ✓
                           </button>

@@ -85,7 +85,8 @@ function main() {
   ok("Renombrar requisito no duplica documento en solicitudes", contains(app, "claveDocumentoPrograma") && contains(app, "fusionarDocumentoPrograma") && contains(app, "documentoProgramaConClave"));
   ok("Cuenta de ahorro no mezcla opciones de discapacidad", contains(app, "esCuentaAhorroNombre ? null") && contains(app, "tipo: null") && contains(app, "bancosCuentaAhorroPermitidos"));
   ok("Programas base editados mantienen todos sus requisitos", contains(app, "completarDocumentosProgramaBase") && contains(app, "completarSolicitudActiva"));
-  ok("Solicitudes activas muestran documentos completos sin filtro de indices", contains(app, "const solVista = documentosVista === sol.documentos") && contains(app, "const docsVisibles = (solVista.documentos || []).filter((doc)") && !contains(app, "visibles.has(i) && !doc.interno"));
+  ok("Solicitudes activas muestran documentos completos sin filtro de indices", contains(app, "const solVista = documentosVista === sol.documentos") && contains(app, "const docsVisibles = (solVista.documentos || []).filter((doc) => !doc.interno)") && !contains(app, "visibles.has(i) && !doc.interno"));
+  ok("Solicitudes activas muestran solo requisitos oficiales del programa", contains(app, "incluirExtras: false") && contains(app, "informaciones_previas") && contains(app, "antecedentes_vivienda") && contains(app, "indiceDocumentoSolicitud"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);
