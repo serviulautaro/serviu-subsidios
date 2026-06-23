@@ -587,10 +587,13 @@ function combinarProgramas(programasCustom = []) {
     };
     if (porId.has(p.id)) {
       const anterior = porId.get(p.id);
+      const documentosExactos = normalizado.documentos.some(d => d?.__listaExactaPrograma);
       porId.set(p.id, {
         ...anterior,
         ...normalizado,
-        documentos: normalizado.documentos.length ? completarDocumentosProgramaBase(anterior.documentos, normalizado.documentos) : anterior.documentos,
+        documentos: normalizado.documentos.length
+          ? (documentosExactos ? normalizado.documentos : completarDocumentosProgramaBase(anterior.documentos, normalizado.documentos))
+          : anterior.documentos,
         esCustom: false,
         esBase: true,
         editadoAdmin: true,
@@ -8267,7 +8270,11 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
   const guardarEdicion = async () => {
     if (!formEdit.nombre.trim()) { alert("El nombre es obligatorio."); return; }
     if (formEdit.documentos.some(d => !d.nombre.trim())) { alert("Todos los documentos deben tener nombre."); return; }
-    await onUpdatePrograma({ ...formEdit, documentos: formEdit.documentos.map((d, idx) => documentoProgramaConClave(d, idx)) });
+    const documentosExactos = formEdit.documentos.map((d, idx) => ({
+      ...documentoProgramaConClave(d, idx),
+      __listaExactaPrograma: true,
+    }));
+    await onUpdatePrograma({ ...formEdit, documentos: documentosExactos });
     setEditandoProg(null); setFormEdit(null);
   };
   const plantillaMave = () => DOCUMENTOS_MAVE.map(d => ({
@@ -11994,10 +12001,26 @@ export default function App() {
             icon: prog.icon,
             documentos: documentosPrograma
           };
-          const { error } = esBase
-            ? await supabase.from("programas_custom").upsert([payload], { onConflict: "id" })
-            : await supabase.from("programas_custom").update(payload).eq("id", prog.id);
-          if (error) { alert("Error al actualizar programa: " + error.message); return; }
+          let guardadoOk = false;
+          let errorGuardado = "";
+          try {
+            const res = await fetch(`${API}/api/db/programas_custom/upsert`, {
+              method: "POST",
+              headers: jsonHeaders(),
+              body: JSON.stringify([payload])
+            });
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.ok !== false) guardadoOk = true;
+            else errorGuardado = json.error || `HTTP ${res.status}`;
+          } catch (e) {
+            errorGuardado = e.message;
+          }
+          if (!guardadoOk) {
+            const { error } = esBase
+              ? await supabase.from("programas_custom").upsert([payload], { onConflict: "id" })
+              : await supabase.from("programas_custom").update(payload).eq("id", prog.id);
+            if (error) { alert("Error al actualizar programa: " + (errorGuardado || error.message)); return; }
+          }
           setProgramasCustom(prev => {
             const nuevo = { ...programaActualizado, colorlight: prog.colorLight, colorLight: prog.colorLight, esCustom: !esBase };
             return prev.some(p => p.id === prog.id)
