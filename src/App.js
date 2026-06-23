@@ -942,15 +942,18 @@ const completarDocumentosProgramaBase = (documentosBase = [], documentosEditados
     const docBase = documentoProgramaConClave(docBaseRaw, idx);
     const baseKey = claveDocumentoPrograma(docBase, idx);
     const baseNombre = claveNombreDocumento(docBase.nombre);
-    const editIdx = editados.findIndex((docEditado, i) => {
-      if (usados.has(i)) return false;
+    const candidatos = [];
+    editados.forEach((docEditado, i) => {
+      if (usados.has(i)) return;
       const editKey = docEditado?.docKey ? claveDocumentoPrograma(docEditado, i) : "";
       const editNombre = claveNombreDocumento(docEditado?.nombre);
       const editOriginal = claveNombreDocumento(docEditado?.nombreOriginal);
-      return (editKey && editKey === baseKey) ||
+      const coincide = (editKey && editKey === baseKey) ||
         (baseNombre && (editNombre === baseNombre || editOriginal === baseNombre)) ||
         documentosCompatibles(docEditado, docBase);
+      if (coincide) candidatos.push(i);
     });
+    const editIdx = candidatos.length ? candidatos[candidatos.length - 1] : -1;
     if (editIdx < 0) return docBase;
     usados.add(editIdx);
     const editado = editados[editIdx] || {};
@@ -970,7 +973,9 @@ const completarDocumentosProgramaBase = (documentosBase = [], documentosEditados
     };
   });
   editados.forEach((doc, i) => {
-    if (!usados.has(i)) resultado.push(documentoProgramaConClave(doc, resultado.length));
+    if (usados.has(i)) return;
+    if (resultado.some(docBase => documentosCompatibles(doc, docBase))) return;
+    resultado.push(documentoProgramaConClave(doc, resultado.length));
   });
   return resultado;
 };
