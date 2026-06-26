@@ -4590,7 +4590,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     else if (res === "RECHAZADO_APELABLE") nuevoEstado = "RECHAZADO APELABLE";
     else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "DESMARQUE RECHAZADO";
     try {
-      const solActual = solicitudes.find(s => respuestaServiuSolicitudId && s.id === respuestaServiuSolicitudId)
+      const solActual = solicitudes.find(s => respuestaServiuSolicitudId && String(s.id) === String(respuestaServiuSolicitudId))
         || solicitudes.find(s => {
           const esHabitabilidad = s.programaId === "habitabilidad" || s.programa_id === "habitabilidad";
           const esPersona = String(s.persona_id || s.personaId || "") === String(persona.id || "");
@@ -4998,54 +4998,65 @@ const datosSolicitud = {
     setShowModal(false);
   };
 
-  const toggleDoc = async (solId, idx) => {
-    const sol = solicitudes.find(s => s.id === solId);
-    if (!sol) return;
-    const doc = sol.documentos[idx];
+  const actualizarDocumentoSolicitud = async (solId, idx, patch, docBase = null) => {
+    const nuevasSols = solicitudes.map(s => {
+      if (String(s.id) !== String(solId)) return s;
+      const docs = Array.isArray(s.documentos) ? [...s.documentos] : [];
+      if (idx >= 0 && idx < docs.length) {
+        docs[idx] = { ...docs[idx], ...patch };
+      } else if (docBase) {
+        docs.push({ ...docBase, ...patch });
+      } else {
+        return s;
+      }
+      return { ...s, documentos: docs };
+    });
+    onSaveSolicitudes(nuevasSols);
+    const solActualizada = nuevasSols.find(s => String(s.id) === String(solId));
+    if (solActualizada) await actualizarSolicitudEnDb(solId, { documentos: solActualizada.documentos });
+    return solActualizada;
+  };
+
+  const toggleDoc = async (solId, idx, docBase = null) => {
+    const sol = solicitudes.find(s => String(s.id) === String(solId));
+    if (!sol && !docBase) return;
+    const doc = (sol?.documentos || [])[idx] || docBase;
+    if (!doc) return;
     // Documentos que requieren archivo o proceso especial: no se pueden marcar manualmente
     const requiereArchivo = doc.nombre && (
       doc.nombre.toLowerCase().includes('cedula') ||
-      doc.nombre.toLowerCase().includes('título') ||
+      doc.nombre.toLowerCase().includes('t�tulo') ||
       doc.nombre.toLowerCase().includes('titulo') ||
       doc.nombre.toLowerCase().includes('certificado de avaluo') ||
       doc.nombre.toLowerCase().includes('avaluo') ||
       doc.nombre.toLowerCase().includes('informe dom')
     );
     if (requiereArchivo) return; // Solo se marca al subir archivo
-    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
-      ...s, documentos: s.documentos.map((d, i) => i === idx ? { ...d, entregado: !d.entregado } : d)
-    });
-    onSaveSolicitudes(nuevasSols);
-    const solActualizada = nuevasSols.find(s => s.id === solId);
-    if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
+    await actualizarDocumentoSolicitud(solId, idx, { entregado: !doc.entregado }, doc);
   };
 
-  const actualizarDocumentoSolicitud = async (solId, idx, patch) => {
-    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
-      ...s,
-      documentos: (s.documentos || []).map((d, i) => i === idx ? { ...d, ...patch } : d)
+  const marcarDocEntregado = async (solId, idx, entregado = true, docBase = null) => {
+    await actualizarDocumentoSolicitud(solId, idx, { entregado }, docBase);
+  };
+
+  const setDocValor = async (solId, idx, valor, docBase = null) => {
+    let solActualizada = null;
+    const nuevasSols = solicitudes.map(s => {
+      if (String(s.id) !== String(solId)) return s;
+      const docs = Array.isArray(s.documentos) ? [...s.documentos] : [];
+      const base = (idx >= 0 && idx < docs.length) ? docs[idx] : docBase;
+      if (!base) return s;
+      // Memo, Carta e Informe DOM: requiere N y fecha (separados por |)
+      const necesitaNumYFecha = base.nombre && (base.nombre.includes('Memo DOM') || base.nombre.includes('Carta SERVIU') || base.nombre.includes('Informe DOM'));
+      const partes = valor.split("|").map(p => p.trim()).filter(Boolean);
+      const completo = necesitaNumYFecha ? partes.length >= 2 && partes[0] && partes[1] : valor.trim() !== '';
+      const actualizado = { ...base, valor, entregado: completo };
+      if (idx >= 0 && idx < docs.length) docs[idx] = actualizado;
+      else docs.push(actualizado);
+      solActualizada = { ...s, documentos: docs };
+      return solActualizada;
     });
     onSaveSolicitudes(nuevasSols);
-    const solActualizada = nuevasSols.find(s => s.id === solId);
-    if (solActualizada) await actualizarSolicitudEnDb(solId, { documentos: solActualizada.documentos });
-    return solActualizada;
-  };
-  const marcarDocEntregado = async (solId, idx, entregado = true) => {
-    await actualizarDocumentoSolicitud(solId, idx, { entregado });
-  };
-  const setDocValor = async (solId, idx, valor) => {
-    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
-      ...s, documentos: s.documentos.map((d, i) => {
-        if (i !== idx) return d;
-        // Memo, Carta e Informe DOM: requiere N y fecha (separados por |)
-        const necesitaNumYFecha = d.nombre && (d.nombre.includes('Memo DOM') || d.nombre.includes('Carta SERVIU') || d.nombre.includes('Informe DOM'));
-        const partes = valor.split("|").map(p => p.trim()).filter(Boolean);
-        const completo = necesitaNumYFecha ? partes.length >= 2 && partes[0] && partes[1] : valor.trim() !== '';
-        return { ...d, valor, entregado: completo };
-      })
-    });
-    onSaveSolicitudes(nuevasSols);
-    const solActualizada = nuevasSols.find(s => s.id === solId);
     if (solActualizada) await actualizarSolicitudEnDb(solId, { documentos: solActualizada.documentos });
     // Actualizar estado automatico si es desmarque
     if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
@@ -6638,13 +6649,13 @@ const datosSolicitud = {
                       onClick={() => {
                         if (bloqueadoPorArchivo) return;
                         if (!esEspecial && !esDocArchivo && !esRsh && !esFechaNac && !esTelefonoContacto) {
-                          toggleDoc(sol.id, docIdx);
+                          toggleDoc(sol.id, docIdx, doc);
                         }
                         if (esDocArchivo && !doc.entregado) {
                           if (solVista.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
-                          marcarDocEntregado(sol.id, docIdx, true);
+                          marcarDocEntregado(sol.id, docIdx, true, doc);
                         }
-                        if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, docIdx, true);
+                        if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, docIdx, true, doc);
                       }}>
                       {esSinDiscapacidad ? (
                         <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>N/A</span>
@@ -6825,7 +6836,7 @@ const datosSolicitud = {
                     {esFechaNac && (() => {
                       const fechaValor = /^\d{4}-\d{2}-\d{2}$/.test(doc.valor || "") ? doc.valor : "";
                       const guardarFecha = async (fechaCompleta) => {
-                        setDocValor(sol.id, docIdx, fechaCompleta);
+                        setDocValor(sol.id, docIdx, fechaCompleta, doc);
                         if (fechaCompleta) {
                           const am = textoAdultoMayor(fechaCompleta);
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
@@ -6944,7 +6955,7 @@ const datosSolicitud = {
                           {tieneArchivoCuenta ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir cartola/certificado en Carpeta de documentos"}
                         </div>
                         {cuentaNum.trim() && cuentaBanco.trim() && (
-                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true)}
+                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true, doc)}
                             style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
                             Marcar VB ✓
                           </button>
@@ -6967,13 +6978,13 @@ const datosSolicitud = {
                         <input type="text"
                           placeholder={esInformeDOM ? "N° del informe (ej: 15/2026)" : esMemoDOM ? "N° del memorando (ej: 25/2026)" : "N° de la carta (ej: 45/2026)"}
                           value={tramiteNum}
-                          onChange={e => { const v = e.target.value + "|" + tramiteFecha; setDocValor(sol.id, docIdx, v); }}
+                          onChange={e => { const v = e.target.value + "|" + tramiteFecha; setDocValor(sol.id, docIdx, v, doc); }}
                           onClick={e => e.stopPropagation()}
                           style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid " + (tramiteNum.trim()?"#059669":"#ddd"), fontSize:12, background:"#fff", boxSizing:"border-box" }} />
                         <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha</div>
                         <input type="date"
                           value={tramiteFecha}
-                          onChange={e => { const v = tramiteNum + "|" + e.target.value; setDocValor(sol.id, docIdx, v); }}
+                          onChange={e => { const v = tramiteNum + "|" + e.target.value; setDocValor(sol.id, docIdx, v, doc); }}
                           onClick={e => e.stopPropagation()}
                           style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid " + (tramiteFecha?"#059669":"#ddd"), fontSize:12, background:"#fff", boxSizing:"border-box" }} />
                         {tramiteCompleto
@@ -6990,12 +7001,12 @@ const datosSolicitud = {
                             <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>N° Ordinario (opcional)</div>
                             <input type="text" placeholder="Ej: 1234/2026" value={doc.num_ord || ""}
                               onClick={e => e.stopPropagation()}
-                              onChange={async e => { await actualizarDocumentoSolicitud(sol.id, docIdx, { num_ord: e.target.value }); }}
+                              onChange={async e => { await actualizarDocumentoSolicitud(sol.id, docIdx, { num_ord: e.target.value }, doc); }}
                               style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, boxSizing:"border-box" }} />
                             <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>Fecha Respuesta (opcional)</div>
                             <input type="date" value={doc.fecha_resp || ""}
                               onClick={e => e.stopPropagation()}
-                              onChange={async e => { await actualizarDocumentoSolicitud(sol.id, docIdx, { fecha_resp: e.target.value }); }}
+                              onChange={async e => { await actualizarDocumentoSolicitud(sol.id, docIdx, { fecha_resp: e.target.value }, doc); }}
                               style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, boxSizing:"border-box" }} />
                             <div style={{ fontSize: 11, color: "#B45309", fontWeight: 600, marginTop: 2 }}>
                               ⚠ Use el botón "Subir Respuesta SERVIU" para registrar el resultado
@@ -7018,7 +7029,7 @@ const datosSolicitud = {
                               </div>
                             )}
                             <button onClick={async () => {
-                                await actualizarDocumentoSolicitud(sol.id, docIdx, { entregado: false, valor: "" });
+                                await actualizarDocumentoSolicitud(sol.id, docIdx, { entregado: false, valor: "" }, doc);
                               }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "#DC2626", color: "#fff", border: "none", cursor: "pointer", marginTop: 4 }}>
                                 Modificar resultado
                               </button>
@@ -7466,7 +7477,7 @@ const datosSolicitud = {
                         <div style={{ fontSize: 11, color: tieneArchivo ? "#059669" : "#B45309", marginBottom: 4, fontWeight: 600 }}>
                           {tieneArchivo ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir respaldo en Carpeta de documentos"}
                         </div>
-                        <button onClick={() => { marcarDocEntregado(sol.id, docIdx, true); }}
+                        <button onClick={() => { marcarDocEntregado(sol.id, docIdx, true, doc); }}
                           style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                           Marcar VB ✓
                         </button>
@@ -7481,7 +7492,7 @@ const datosSolicitud = {
                           <span style={{ fontSize: 11, color: tieneArchivoEspecial ? "#059669" : "#B45309", fontWeight: 700 }}>
                             {tieneArchivoEspecial ? "✓ Archivo encontrado en carpeta" : "📁 Subir archivo en Carpeta de documentos"}
                           </span>
-                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true)}
+                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true, doc)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
                             Marcar VB ✓
                           </button>
@@ -7490,7 +7501,7 @@ const datosSolicitud = {
                         /* Otros programas: archivo en carpeta, VB desde solicitudes */
                         <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, background: "#FFFBEB", borderRadius: 6, padding: "5px 8px" }}>
                           <span style={{ fontSize: 11, color: "#D97706", fontWeight: 700 }}>📁 Subir archivo en Carpeta de documentos</span>
-                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true)}
+                          <button onClick={() => marcarDocEntregado(sol.id, docIdx, true, doc)}
                             style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, background: "#059669", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, marginLeft: "auto" }}>
                             Marcar VB ✓
                           </button>
