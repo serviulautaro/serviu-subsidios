@@ -453,6 +453,11 @@ const estadoActualLineaDesmarqueConManual = (sol = {}, fallback = "") => {
   }
   return actual;
 };
+const estadoActualDesmarqueSolicitud = (sol = {}, persona = {}) =>
+  estadoActualLineaDesmarqueConManual(
+    aplicarEstadoDirectoDesmarqueSolicitud(sol),
+    persona.estado_desmarque || persona.estadoDesmarque || ""
+  );
 
 const DOCUMENTOS_MAVE = [
   { nombre: "Cedula de identidad vigente del postulante", obligatorio: true },
@@ -5195,7 +5200,7 @@ const datosSolicitud = {
             )}
             {persona.comiteId === "comite_desmarque" && (() => {
               const solDesmarque = misSols.find(s => (s.programaId || s.programa_id) === "habitabilidad");
-              const est = estadoActualLineaDesmarqueConManual(solDesmarque, persona.estado_desmarque);
+              const est = estadoActualDesmarqueSolicitud(solDesmarque, persona);
               return <span style={{ display:"inline-block", marginTop:6, background:est.bg, color:est.color, borderRadius:10, padding:"4px 14px", fontSize:13, fontWeight:800 }}>{est.label}</span>;
             })()}
             {esPrioritario && (
@@ -8739,7 +8744,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   const solicitudDesmarquePersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
-    const estado = estadoActualLineaDesmarqueConManual(sol, p.estado_desmarque || p.estadoDesmarque || "");
+    const estado = estadoActualDesmarqueSolicitud(sol, p);
     return estado;
   };
   const estadoSeguimiento = (p) => {
@@ -8951,7 +8956,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
           const sel = seleccionados.includes(p.id);
           const misSols = solicitudes.filter(s => s.personaId === p.id);
           const solHabitabilidad = solicitudDesmarquePersona(p.id);
-          const estadoDesmarqueVisible = solHabitabilidad ? estadoActualLineaDesmarqueConManual(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "") : null;
+          const estadoDesmarqueVisible = solHabitabilidad ? estadoActualDesmarqueSolicitud(solHabitabilidad, p) : null;
           return (
             <div key={p.id} style={{
               background: sel ? "#EFF6FF" : "#fff", borderRadius: 12, padding: "14px 18px",
@@ -9388,7 +9393,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
   };
   const estadoDesmarquePersona = (p) => {
     const sol = solicitudHabitabilidadPersona(p.id);
-    return estadoActualLineaDesmarqueConManual(sol, p.estado_desmarque || p.estadoDesmarque || "");
+    return estadoActualDesmarqueSolicitud(sol, p);
   };
   const estadoClaveDesmarquePersona = (p) => estadoDesmarquePersona(p)?.key || "";
   const esDesmarcadoActual = (p) =>
@@ -10104,7 +10109,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           const sols = solsAll.length;
           const solHabitabilidad = solsAll.find(s => s.programaId === "habitabilidad");
           const estadoDesmarqueVisible = solHabitabilidad
-            ? estadoActualLineaDesmarqueConManual(solHabitabilidad, p.estado_desmarque || p.estadoDesmarque || "")
+            ? estadoActualDesmarqueSolicitud(solHabitabilidad, p)
             : null;
           const tieneHabitabilidad = solsAll.some(s => s.programaId === "habitabilidad");
           const tieneOtroPrograma = solsAll.some(s => s.programaId !== "habitabilidad");
