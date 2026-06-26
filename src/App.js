@@ -503,7 +503,9 @@ const PROGRAMAS = [
       { nombre: "Informe DOM", obligatorio: false, valor: "" },
       { nombre: "N° Memo DOM", obligatorio: false, valor: "" },
       { nombre: "N° Carta SERVIU", obligatorio: false, valor: "" },
-      { nombre: "Respuesta SERVIU", obligatorio: false, valor: "" }
+      { nombre: "Respuesta SERVIU", docKey: "respuesta_serviu",
+            nombreOriginal: "Respuesta SERVIU",
+            obligatorio: false, valor: "" }
     ]
   },
   {
@@ -3759,6 +3761,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       totalMetros:           "totalmetros",
       modalidadPostulacion:  "modalidadpostulacion",
       lineaTiempoCsp:        "linea_tiempo_csp",
+      estadoDesmarque:       "estado_desmarque",
     };
     const dbFields = {};
     for (const [k, v] of Object.entries(fields)) dbFields[snakeMap[k] || k] = v;
@@ -3783,7 +3786,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       } catch (err) { console.warn("[syncPersona] excepcion:", err.message); }
     }
     onSavePersonas(personas.map(p => {
-      if (p.id !== persona.id) return p;
+      if (String(p.id) !== String(persona.id)) return p;
       const actualizado = { ...p, ...fields };
       if (!Object.prototype.hasOwnProperty.call(fields, "observaciones") && p.observaciones) {
         actualizado.observaciones = p.observaciones;
@@ -4605,7 +4608,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const docsBase = Array.isArray(solActual.documentos) ? solActual.documentos : [];
       let encontroRespuesta = false;
       let docsActualizados = docsBase.map(d => {
-        if (!(d.nombre && d.nombre.includes("Respuesta SERVIU"))) return d;
+        if (!docNombreNorm(d).includes("respuesta serviu")) return d;
         encontroRespuesta = true;
         return { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true, vb: true };
       });
@@ -4614,6 +4617,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           ...docsActualizados,
           {
             nombre: "Respuesta SERVIU",
+            docKey: "respuesta_serviu",
+            nombreOriginal: "Respuesta SERVIU",
             obligatorio: false,
             valor: etiqueta + (nota ? " - " + nota : ""),
             entregado: true,
@@ -4624,7 +4629,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const guardoSolicitud = await actualizarSolicitudEnDb(solActual.id, { documentos: docsActualizados, respuesta_serviu_estado: etiqueta });
       if (!guardoSolicitud) throw new Error("No se pudo guardar la solicitud en PostgreSQL.");
       onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(solActual.id) ? { ...s, documentos: docsActualizados, respuesta_serviu_estado: etiqueta, respuestaServiuEstado: etiqueta, fecha_visita: fechaVisitaSolicitud({ ...solActual, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
-      await syncPersona({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones });
+      await syncPersona({ estado_desmarque: nuevoEstado, estadoDesmarque: nuevoEstado, observaciones: nota || persona.observaciones });
       setShowModalRespuestaServiu(false);
       setResultadoRespuestaServiu("");
       setNotaResultado("");
@@ -4803,7 +4808,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       alert("No se pudo guardar la calificacion en la solicitud. Revise conexion e intente nuevamente.");
       return;
     }
-    await syncPersona({ estado_desmarque: nuevoEstado });
+    await syncPersona({ estado_desmarque: nuevoEstado, estadoDesmarque: nuevoEstado });
     onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(sol.id) ? { ...s, documentos, calificacion_desmarque: valor, calificacionDesmarque: valor } : s));
     await registrarAuditoria?.("calificar_desmarque", "solicitudes", sol.id, { solicitante: persona.nombre, resultado: estado, detalle });
   };
@@ -5063,7 +5068,7 @@ const datosSolicitud = {
     // Actualizar estado automatico si es desmarque
     if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
       const nuevoEstado = calcularEstadoDesmarque(solActualizada, persona.estado_desmarque);
-      if (nuevoEstado !== persona.estado_desmarque) await syncPersona({ estado_desmarque: nuevoEstado });
+      if (nuevoEstado !== persona.estado_desmarque) await syncPersona({ estado_desmarque: nuevoEstado, estadoDesmarque: nuevoEstado });
     }
   };
   const guardarPrioridadSolicitud = async (solId, valor) => {
