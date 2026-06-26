@@ -373,45 +373,48 @@ const estadoLineaDesmarque = (sol = {}) => {
   };
 };
 
-const estadoActualLineaDesmarque = (sol = {}, fallback = "") => {
-  const st = estadoLineaDesmarque(sol);
-  let actual = { key: "INGRESO_SOLICITANTE", label: "Ingreso solicitante", bg: "#EFF6FF", color: "#1D4ED8" };
-  if (st.docsCompletos) actual = { key: "DOCUMENTOS_OBLIGATORIOS", label: "Documentos obligatorios", bg: "#ECFDF5", color: "#047857" };
-  if (st.calificacion.estado === "CALIFICA") actual = { key: "CALIFICA_PARA_VISITA", label: "Califica para visita", bg: "#ECFDF5", color: "#047857" };
-  if (st.docsCompletos && st.calificacion.estado === "CALIFICA") actual = { key: "LISTO_PARA_VISITA", label: "Listo para visita", bg: "#ECFDF5", color: "#047857" };
-  if (st.visitado) actual = { key: "SOLICITANTE_VISITADO", label: "Solicitante visitado", bg: "#FFF3E0", color: "#C2693A" };
-  if (st.solicitudDom) actual = { key: "SOLICITUD_EN_DOM", label: "Solicitud en DOM", bg: "#F5F3FF", color: "#7C3AED" };
-  if (st.informeIngresado) actual = { key: "INFORME_DOM", label: "Informe DOM ingresado", bg: "#ECFDF5", color: "#047857" };
-  if (st.informeAprobado) actual = { key: "INFORME_DOM_APROBADO", label: "Informe DOM aprobado", bg: "#ECFDF5", color: "#047857" };
-  if (st.informeRechazadoApelable) actual = { key: "INFORME_DOM_RECHAZADO_APELABLE", label: "Informe DOM rechazado apelable", bg: "#FFFBEB", color: "#B45309" };
-  if (st.ingresadoServiu) actual = { key: "INFORME EN SERVIU", label: "Informe en SERVIU", bg: "#ECFDF5", color: "#3D5A23" };
-  if (st.respuestaIngresada) actual = { key: "RESPUESTA_SERVIU", label: "Respuesta SERVIU ingresada", bg: "#ECFDF5", color: "#047857" };
-  if (st.calificacion.estado === "NO_CALIFICA") actual = { key: "NO CALIFICA", label: "No califica", bg: "#FEF2F2", color: "#B91C1C" };
-  if (st.informeRechazado) actual = { key: "RECHAZADO DOM", label: "Rechazado DOM", bg: "#FEF2F2", color: "#B91C1C" };
-  if (st.desmarcado) actual = { key: "DESMARCADO", label: "Desmarcado", bg: "#E0F7FA", color: "#0E7490" };
-  if (st.serviuRechazadoApelable) actual = { key: "RECHAZADO APELABLE", label: "Rechazado apelable", bg: "#FFFBEB", color: "#B45309" };
-  if (st.serviuRechazado) actual = { key: "DESMARQUE RECHAZADO", label: "Desmarque rechazado", bg: "#FEF2F2", color: "#B91C1C" };
+const estadoDesdePasosLineaDesmarque = (sol = {}, fallback = "") => {
   if (!sol || !Array.isArray(sol.documentos)) {
     const est = ESTADO_DESMARQUE[fallback] || ESTADO_DESMARQUE["NO VISITADO"];
     return { key: fallback || "NO VISITADO", label: est.label, bg: est.bg, color: est.color };
   }
-  return actual;
-};
+  const st = estadoLineaDesmarque(sol);
+  const avanceManual = leerAvanceManualDesmarque(sol?.documentos || []);
+  const pasoEstado = (numero, key, label, estado, bg, color) => ({ numero, key, label, estado, bg, color });
+  let pasos = [
+    pasoEstado(1, "INGRESO_SOLICITANTE", "Ingreso solicitante", true, "#EFF6FF", "#1D4ED8"),
+    pasoEstado(2, "DOCUMENTOS_OBLIGATORIOS", "Documentos obligatorios", st.docsCompletos, "#ECFDF5", "#047857"),
+  ];
 
-const ORDEN_ESTADO_DESMARQUE_LINEA = {
-  "NO VISITADO": 0,
-  INGRESO_SOLICITANTE: 1,
-  DOCUMENTOS_OBLIGATORIOS: 2,
-  CALIFICA_PARA_VISITA: 3,
-  LISTO_PARA_VISITA: 4,
-  SOLICITANTE_VISITADO: 5,
-  SOLICITUD_EN_DOM: 6,
-  "INFORME EN DOM": 6,
-  INFORME_DOM: 7,
-  INFORME_DOM_APROBADO: 8,
-  "INFORME EN SERVIU": 9,
-  RESPUESTA_SERVIU: 10,
+  if (st.calificacion.estado === "NO_CALIFICA") {
+    pasos.push(pasoEstado(3, "NO CALIFICA", "No califica", true, "#FEF2F2", "#B91C1C"));
+  } else {
+    pasos.push(pasoEstado(3, "LISTO_PARA_VISITA", "Listo para visita", st.calificacion.estado === "CALIFICA", "#ECFDF5", "#047857"));
+    pasos.push(pasoEstado(5, "SOLICITANTE_VISITADO", "Fecha de visita", st.visitado, "#FFF3E0", "#C2693A"));
+    pasos.push(pasoEstado(6, "SOLICITUD_EN_DOM", "Memo recibido DOM", st.solicitudDom, "#F5F3FF", "#7C3AED"));
+    if (st.informeRechazado) pasos.push(pasoEstado(7, "RECHAZADO DOM", "Rechazado DOM", true, "#FEF2F2", "#B91C1C"));
+    else if (st.informeRechazadoApelable) pasos.push(pasoEstado(7, "INFORME_DOM_RECHAZADO_APELABLE", "Informe DOM rechazado apelable", true, "#FFFBEB", "#B45309"));
+    else pasos.push(pasoEstado(7, "INFORME_DOM", "Informe DOM", st.informeIngresado, "#ECFDF5", "#047857"));
+    pasos.push(pasoEstado(8, "INFORME EN SERVIU", "Ingresado a SERVIU", st.ingresadoServiu, "#ECFDF5", "#3D5A23"));
+    if (st.desmarcado) pasos.push(pasoEstado(9, "DESMARCADO", "Desmarcado", true, "#E0F7FA", "#0E7490"));
+    else if (st.serviuRechazadoApelable) pasos.push(pasoEstado(9, "RECHAZADO APELABLE", "Rechazado apelable", true, "#FFFBEB", "#B45309"));
+    else if (st.serviuRechazado) pasos.push(pasoEstado(9, "DESMARQUE RECHAZADO", "Desmarque rechazado", true, "#FEF2F2", "#B91C1C"));
+    else pasos.push(pasoEstado(9, "RESPUESTA_SERVIU", "Respuesta SERVIU", st.respuestaIngresada, "#ECFDF5", "#047857"));
+  }
+
+  const PASOS_SOLO_AUTOMATICOS = [9];
+  pasos = pasos.map(p => {
+    if (avanceManual[p.numero] === undefined) return p;
+    if (["NO CALIFICA", "RECHAZADO DOM", "INFORME_DOM_RECHAZADO_APELABLE", "RECHAZADO APELABLE", "DESMARQUE RECHAZADO", "DESMARCADO"].includes(p.key)) return p;
+    if (PASOS_SOLO_AUTOMATICOS.includes(p.numero)) return p;
+    return { ...p, estado: !!avanceManual[p.numero] };
+  });
+
+  const actual = pasos.reduce((ultimo, p) => p.estado ? p : ultimo, null) || pasos[0];
+  return { key: actual.key, label: actual.label, bg: actual.bg, color: actual.color, paso: actual.numero };
 };
+const estadoActualLineaDesmarque = (sol = {}, fallback = "") => estadoDesdePasosLineaDesmarque(sol, fallback);
+
 
 const aplicarEstadoDirectoDesmarqueSolicitud = (sol = {}) => {
   if (!sol || (sol.programaId || sol.programa_id) !== "habitabilidad") return sol;
@@ -444,15 +447,7 @@ const aplicarEstadoDirectoDesmarqueSolicitud = (sol = {}) => {
   }
   return { ...sol, documentos };
 };
-const estadoActualLineaDesmarqueConManual = (sol = {}, fallback = "") => {
-  const actual = estadoActualLineaDesmarque(sol, fallback);
-  const avanceManual = leerAvanceManualDesmarque(sol?.documentos || []);
-  const actualOrden = ORDEN_ESTADO_DESMARQUE_LINEA[actual.key] ?? 0;
-  if (avanceManual[6] === true && actualOrden < ORDEN_ESTADO_DESMARQUE_LINEA.SOLICITUD_EN_DOM) {
-    return { key: "SOLICITUD_EN_DOM", label: "Memo recibido DOM", bg: "#F5F3FF", color: "#7C3AED" };
-  }
-  return actual;
-};
+const estadoActualLineaDesmarqueConManual = (sol = {}, fallback = "") => estadoActualLineaDesmarque(sol, fallback);
 const estadoActualDesmarqueSolicitud = (sol = {}, persona = {}) =>
   estadoActualLineaDesmarqueConManual(
     aplicarEstadoDirectoDesmarqueSolicitud(sol),
@@ -1563,7 +1558,7 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
   if (st.calificacion.estado === "NO_CALIFICA") {
     pasos.push(paso(3, "NO CALIFICA", "stop-red", st.calificacion.detalle));
   } else {
-    pasos.push(paso(3, "Califica para visita", st.calificacion.estado === "CALIFICA" ? "done" : "pending", "Acción manual del usuario"));
+    pasos.push(paso(3, "Listo para visita", st.calificacion.estado === "CALIFICA" ? "done" : "pending", "Acción manual del usuario"));
     pasos.push(paso(5, "Fecha de visita", st.visitado ? "done" : "pending"));
     pasos.push(paso(6, "Memo recibido DOM", st.solicitudDom ? "done" : "pending", "Subir memo recibido"));
     if (st.informeRechazado) pasos.push(paso(7, "RECHAZADO DOM", "stop-red", st.informeDetalle));
@@ -1583,9 +1578,6 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
     "stop-red": { bg: "#FEF2F2", border: "#DC2626", color: "#B91C1C" },
     "final-green": { bg: "#E0F7FA", border: "#0891B2", color: "#0E7490" },
   };
-  function stylesForEstado(estado) {
-    return styles[estado] || styles.pending;
-  }
 
   // Paso 9 (Respuesta SERVIU) solo avanza por VB automatico, no por marcado manual
   const PASOS_SOLO_AUTOMATICOS = [9];
@@ -1597,15 +1589,7 @@ function LineaAvanceDesmarque({ sol, onTogglePaso }) {
   });
 
   const pasoActualIdx = pasos.reduce((ultimo, p, idx) => p.estado !== "pending" ? idx : ultimo, -1);
-  const pasoActual = pasoActualIdx >= 0 ? pasos[pasoActualIdx] : null;
-  const tieneAjusteManual = Object.keys(avanceManual).length > 0;
-  const estadoActual = tieneAjusteManual && pasoActual
-    ? {
-        label: pasoActual.label,
-        bg: stylesForEstado(pasoActual.estado).bg,
-        color: stylesForEstado(pasoActual.estado).color,
-      }
-    : estadoActualLineaDesmarqueConManual(sol);
+  const estadoActual = estadoActualLineaDesmarqueConManual(sol);
 
   return <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, border: "1px solid #dbeafe", background: "#f8fbff" }}>
     <div style={{ fontSize: 12, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Línea de avance Desmarque de Vivienda</div>
