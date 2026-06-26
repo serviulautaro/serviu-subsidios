@@ -3182,6 +3182,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [showModalComprobante, setShowModalComprobante] = useState(false);
   const [showDesbloquearRespuesta, setShowDesbloquearRespuesta] = useState(false);
   const [solsEditando, setSolsEditando] = useState({}); // {solId: true} para habilitar edición
+  const [cuentaAhorroDrafts, setCuentaAhorroDrafts] = useState({});
   const [showModalEmigrar, setShowModalEmigrar] = useState(false);
   const [programaEmigrar, setProgramaEmigrar] = useState("");
   const [showDesbloquearPrograma, setShowDesbloquearPrograma] = useState(false);
@@ -6279,12 +6280,11 @@ const datosSolicitud = {
                                 {archivoOk ? "✓ Comprobante encontrado en carpeta" : "📁 Subir comprobante en Carpeta de documentos"}
                               </div>
                               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                <input value={valObj.numeroCuenta || ""} placeholder="N° de cuenta de ahorro"
+                                <input value={valObj.numeroCuenta || ""} placeholder="N° de cuenta de ahorro" inputMode="numeric" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}
                                   onChange={async e => {
-                                    const numeroCuenta = e.target.value;
+                                    const numeroCuenta = e.target.value.replace(/[^0-9]/g, "");
                                     const nuevo = JSON.stringify({ ...valObj, numeroCuenta });
                                     await guardarValorYFicha(nuevo, "numero_cuenta_ahorro", numeroCuenta);
-                                    if (numeroCuenta.trim()) await marcarVB();
                                   }}
                                   style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 12 }} />
                                 {!(valObj.numeroCuenta||"").trim() && <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Ingresa N° de cuenta</div>}
@@ -6577,6 +6577,20 @@ const datosSolicitud = {
                 const cuentaBancoRaw = cuentaValorInvalido ? "" : (cuentaPartes[1] || "");
                 const cuentaBanco = bancosCuentaAhorroPermitidos.includes(cuentaBancoRaw) ? cuentaBancoRaw : "";
                 const tieneArchivoCuenta = esCuentaAhorro && (cuentaPartes[2] === "ok" || docTieneArchivo || archivos.some(a => { const al = a.toLowerCase(); return al.includes("ahorro") || al.includes("cuenta") || al.includes("cartola"); }));
+                const cuentaDraftKey = `${sol.id}:${docIdx}`;
+                const cuentaDraft = cuentaAhorroDrafts[cuentaDraftKey] || {};
+                const cuentaNumActual = cuentaDraft.numero !== undefined ? cuentaDraft.numero : cuentaNum;
+                const cuentaBancoActual = cuentaDraft.banco !== undefined ? cuentaDraft.banco : cuentaBanco;
+                const guardarCuentaAhorroSolicitud = async (numero, banco) => {
+                  const newValor = `${numero || ""}|${banco || ""}${tieneArchivoCuenta ? "|ok" : ""}`;
+                  const nuevasSols = solicitudes.map(s => String(s.id) !== String(sol.id) ? s : {
+                    ...s,
+                    documentos: (s.documentos || []).map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor })
+                  });
+                  onSaveSolicitudes(nuevasSols);
+                  const solActualizada = nuevasSols.find(s => String(s.id) === String(sol.id));
+                  if (solActualizada) await actualizarSolicitudEnDb(sol.id, { documentos: solActualizada.documentos });
+                };
 
                 // Valores RSH: "pct|comuna|estadoCivil|integrantes|subsidio|credencialDiscapacidad|movilidadReducida|dormitorios|integrantesNucleo"
                 const rshPartes = esRsh ? (doc.valor || "").split("|") : [];
@@ -6665,7 +6679,7 @@ const datosSolicitud = {
                   (esFechaNac && !(doc.valor || "").trim() && !doc.entregado) ||
                   (esConArranque && !aprCompleto && !doc.entregado) ||
                   (esConDiscapacidad && !discCompleto && !doc.entregado) ||
-                  (esCuentaAhorro && (!cuentaNum.trim() || !cuentaBanco.trim()) && !doc.entregado);
+                  (esCuentaAhorro && (!cuentaNumActual.trim() || !cuentaBancoActual.trim()) && !doc.entregado);
 
                 const bordeColor = doc.entregado ? "#BBF7D0" : sinOpcion ? "#FDE68A" : doc.obligatorio ? "#FED7D7" : "#E5E7EB";
                 const bgColor = doc.entregado ? "#F0FDF4" : sinOpcion ? "#FFFBEB" : doc.obligatorio ? "#FFF5F5" : "#FAFAFA";
@@ -6964,39 +6978,46 @@ const datosSolicitud = {
                     {/* Cuenta de ahorro — archivo + número + banco */}
                     {esCuentaAhorro && !doc.entregado && (
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
-                        <input type="text" placeholder="N° cuenta de ahorro" value={cuentaNum} onClick={e => e.stopPropagation()}
-                          onChange={async e => {
-                            const newValor = e.target.value + "|" + cuentaBanco;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
-                            if (e.target.value.trim()) await syncPersona({ cuentaAhorro: e.target.value.trim() });
+                        <input type="text" inputMode="numeric" placeholder="N° cuenta de ahorro" value={cuentaNumActual} onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}
+                          onChange={e => {
+                            const numero = e.target.value.replace(/[^0-9]/g, "");
+                            const newValor = `${numero}|${cuentaBancoActual}${tieneArchivoCuenta ? "|ok" : ""}`;
+                            setCuentaAhorroDrafts(prev => ({ ...prev, [cuentaDraftKey]: { ...(prev[cuentaDraftKey] || {}), numero } }));
+                            onSaveSolicitudes(solicitudes.map(s => String(s.id) !== String(sol.id) ? s : { ...s, documentos: (s.documentos || []).map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                           }}
-                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaNum.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        <select value={cuentaBanco} onClick={e => e.stopPropagation()}
-                          onChange={async e => {
-                            const newValor = cuentaNum + "|" + e.target.value;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
-                            if (e.target.value) await syncPersona({ banco: e.target.value });
+                          onBlur={async () => {
+                            const numero = (cuentaAhorroDrafts[cuentaDraftKey]?.numero ?? cuentaNumActual).trim();
+                            await guardarCuentaAhorroSolicitud(numero, cuentaBancoActual);
+                            if (numero) await syncPersona({ cuentaAhorro: numero });
                           }}
-                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaBanco.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaNumActual.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                        <select value={cuentaBancoActual} onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}
+                          onChange={async e => {
+                            const banco = e.target.value;
+                            setCuentaAhorroDrafts(prev => ({ ...prev, [cuentaDraftKey]: { ...(prev[cuentaDraftKey] || {}), banco } }));
+                            await guardarCuentaAhorroSolicitud(cuentaNumActual, banco);
+                            if (banco) await syncPersona({ banco });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaBancoActual.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
                           <option value="">Seleccionar banco…</option>
                           {["Banco Estado","Banco de Chile","Banco Santander","BCI","Scotiabank","Itaú","BICE","Banco Falabella","Banco Ripley","Banco Security","Coopeuch","Tenpo"].map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                         <div style={{ fontSize: 10, color: tieneArchivoCuenta ? "#059669" : "#B45309", fontWeight: 600 }}>
                           {tieneArchivoCuenta ? "✓ Archivo encontrado en Carpeta de documentos" : "📁 Subir cartola/certificado en Carpeta de documentos"}
                         </div>
-                        {cuentaNum.trim() && cuentaBanco.trim() && (
+                        {cuentaNumActual.trim() && cuentaBancoActual.trim() && (
                           <button onClick={() => marcarDocEntregado(sol.id, docIdx, true, doc)}
                             style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", marginTop: 2 }}>
                             Marcar VB ✓
                           </button>
                         )}
-                        {(!cuentaNum.trim() || !cuentaBanco.trim()) && (
+                        {(!cuentaNumActual.trim() || !cuentaBancoActual.trim()) && (
                           <div style={{ fontSize: 10, color: "#B45309" }}>⚠ Completa N° cuenta y banco para marcar VB</div>
                         )}
                       </div>
                     )}
                     {esCuentaAhorro && doc.entregado && (
-                      <div style={{ fontSize: 11, color: "#059669", marginTop: 4 }}>✓ Cuenta: {cuentaNum} — {cuentaBanco}</div>
+                      <div style={{ fontSize: 11, color: "#059669", marginTop: 4 }}>✓ Cuenta: {cuentaNumActual} - {cuentaBancoActual}</div>
                     )}
 
                     {/* Campos N°+Fecha para Informe DOM, Memo DOM, Carta SERVIU (Desmarque) */}
