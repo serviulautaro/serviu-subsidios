@@ -413,6 +413,37 @@ const ORDEN_ESTADO_DESMARQUE_LINEA = {
   RESPUESTA_SERVIU: 10,
 };
 
+const aplicarEstadoDirectoDesmarqueSolicitud = (sol = {}) => {
+  if (!sol || (sol.programaId || sol.programa_id) !== "habitabilidad") return sol;
+  const respuestaEstado = String(sol.respuesta_serviu_estado || sol.respuestaServiuEstado || "").trim();
+  if (!respuestaEstado) return sol;
+  const docsBase = Array.isArray(sol.documentos) ? sol.documentos : [];
+  let encontroRespuesta = false;
+  const documentos = docsBase.map(d => {
+    if (!docNombreNorm(d).includes("respuesta serviu")) return d;
+    encontroRespuesta = true;
+    return {
+      ...d,
+      valor: d.valor || respuestaEstado,
+      entregado: true,
+      vb: true,
+      docKey: d.docKey || "respuesta_serviu",
+      nombreOriginal: d.nombreOriginal || "Respuesta SERVIU",
+    };
+  });
+  if (!encontroRespuesta) {
+    documentos.push({
+      nombre: "Respuesta SERVIU",
+      docKey: "respuesta_serviu",
+      nombreOriginal: "Respuesta SERVIU",
+      obligatorio: false,
+      valor: respuestaEstado,
+      entregado: true,
+      vb: true,
+    });
+  }
+  return { ...sol, documentos };
+};
 const estadoActualLineaDesmarqueConManual = (sol = {}, fallback = "") => {
   const actual = estadoActualLineaDesmarque(sol, fallback);
   const avanceManual = leerAvanceManualDesmarque(sol?.documentos || []);
@@ -5911,7 +5942,8 @@ const datosSolicitud = {
       {solicitudesActivasVista.map(sol => {
         const prog = todosProgramas.find(p => p.id === sol.programaId);
         const documentosVista = completarDocumentosDesdePrograma(sol.documentos || [], prog, { incluirExtras: false });
-        const solVista = documentosVista === sol.documentos ? sol : { ...sol, documentos: documentosVista, documentosCargados: true };
+        const solVistaBase = documentosVista === sol.documentos ? sol : { ...sol, documentos: documentosVista, documentosCargados: true };
+        const solVista = aplicarEstadoDirectoDesmarqueSolicitud(solVistaBase);
         const p = pct(solVista.documentos, solVista.programaId);
         const conteoSol = conteoDocumentosSolicitud(solVista.documentos, solVista.programaId);
         const ok = conteoSol.completos;
@@ -5921,6 +5953,8 @@ const datosSolicitud = {
         const esProgramaEspecialVivienda = esMave || esAmpliacion;
         const esCsp = solVista.programaId === "csp_rural" || solVista.programaId === "csp_urbano" || esProgramaEspecialVivienda;
         const esCustom = !!(prog && prog.esCustom && !esProgramaEspecialVivienda);
+        const estadoDesmarqueSolicitud = solVista.programaId === "habitabilidad" ? estadoActualLineaDesmarqueConManual(solVista, persona.estado_desmarque || persona.estadoDesmarque || "") : null;
+        const solicitudDesmarcada = estadoDesmarqueSolicitud?.key === "DESMARCADO";
         const prioridadActual = prioridadSolicitud(solVista);
         return (
           <div key={sol.id} style={{ background: "#fff", borderRadius: 14, padding: "22px 26px", marginBottom: 16, border: "1px solid #e8e3de" }}>
@@ -5933,7 +5967,7 @@ const datosSolicitud = {
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ background: statusBg(p), color: statusColor(p), borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>{statusLabel(p)}</div>
+                <div style={{ background: solicitudDesmarcada ? "#E0F7FA" : statusBg(p), color: solicitudDesmarcada ? "#0E7490" : statusColor(p), borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>{solicitudDesmarcada ? "Desmarcado" : statusLabel(p)}</div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: statusColor(p) }}>{ok}/{conteoSol.total}</div>
                 <button onClick={() => setSolsEditando(prev => ({ ...prev, [sol.id]: !prev[sol.id] }))}
                   style={{ padding: "5px 14px", borderRadius: 8, border: "1.5px solid " + (solsEditando[sol.id] ? "#059669" : "#1e3a5f"), background: solsEditando[sol.id] ? "#059669" : "#1e3a5f", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -11392,7 +11426,7 @@ export default function App() {
       const prog = programasCarga.find(p => p.id === mapped.programaId);
       mapped.documentos = completarDocumentosDesdePrograma(mapped.documentos || [], prog);
     }
-    return mapped;
+    return aplicarEstadoDirectoDesmarqueSolicitud(mapped);
   };
 
   const cargarSolicitudesPorPartes = async () => {
