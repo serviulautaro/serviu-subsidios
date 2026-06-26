@@ -73,6 +73,7 @@ function main() {
   ok("Linea de tiempo CSP requiere confirmacion", contains(app, "¿Está seguro de guardar los cambios de la línea de tiempo"));
   ok("Linea de tiempo CSP se guarda en comites", contains(app, "linea_tiempo") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo\""));
   ok("Linea de tiempo CSP se guarda por solicitante", contains(app, "Línea de tiempo CSP del solicitante") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo_csp\""));
+  ok("Linea de tiempo CSP persiste en Render PostgreSQL", contains(app, "/api/db/personas/update") && contains(app, "linea_tiempo_csp") && contains(app, "guardadoRender"));
   ok("Linea de tiempo CSP usa etapas oficiales nuevas", contains(app, "Solicitud de documentos") && contains(app, "Calificación SERVIU") && contains(app, "Ejecución de las obras"));
   ok("Linea de tiempo CSP permite VB por reuniones", contains(app, "_reunion_") && contains(app, "/5 VB"));
   ok("Linea de tiempo CSP corta avance por no califica", contains(app, "lineaTiempoCspCortada") && contains(app, "Avance cortado por No califica"));
@@ -84,6 +85,7 @@ function main() {
   ok("VB Respuesta SERVIU exige clave y resultado paso 9", contains(app, "Marcar VB Respuesta SERVIU") && contains(app, "abrirResultadoRespuestaServiuConClave") && contains(app, "confirmarClaveVbDesmarque"));
   ok("Renombrar requisito no duplica documento en solicitudes", contains(app, "claveDocumentoPrograma") && contains(app, "fusionarDocumentoPrograma") && contains(app, "documentoProgramaConClave"));
   ok("Cuenta de ahorro no mezcla opciones de discapacidad", contains(app, "esCuentaAhorroNombre ? null") && contains(app, "tipo: null") && contains(app, "bancosCuentaAhorroPermitidos"));
+  ok("Cuenta de ahorro guarda usando indice real del documento", contains(app, "i2 !== docIdx ? d2 : { ...d2, valor: newValor }") && !contains(app, "i2 !== i ? d2 : { ...d2, valor: newValor }"));
   ok("Programas base editados mantienen todos sus requisitos", contains(app, "completarDocumentosProgramaBase") && contains(app, "completarSolicitudActiva"));
   ok("Solicitudes activas muestran documentos completos sin filtro de indices", contains(app, "const solVista = documentosVista === sol.documentos") && contains(app, "const docsVisibles = (solVista.documentos || []).filter((doc) => !doc.interno)") && !contains(app, "visibles.has(i) && !doc.interno"));
   ok("Solicitudes activas muestran solo requisitos oficiales del programa", contains(app, "incluirExtras: false") && contains(app, "informaciones_previas") && contains(app, "antecedentes_vivienda") && contains(app, "indiceDocumentoSolicitud") && contains(app, "candidatos[candidatos.length - 1]"));

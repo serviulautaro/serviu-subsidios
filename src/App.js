@@ -3759,10 +3759,26 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     };
     const dbFields = {};
     for (const [k, v] of Object.entries(fields)) dbFields[snakeMap[k] || k] = v;
+    let guardadoRender = false;
     try {
-      const { error } = await supabase.from("personas").update(dbFields).eq("id", persona.id);
-      if (error) console.warn("[syncPersona] error al actualizar campo(s):", Object.keys(dbFields), error.message);
-    } catch (err) { console.warn("[syncPersona] excepción:", err.message); }
+      const res = await fetch(`${API}/api/db/personas/update`, {
+        method: "PATCH",
+        headers: jsonHeaders(),
+        body: JSON.stringify({
+          filters: [{ col: "id", value: persona.id }],
+          values: dbFields,
+        })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok !== false) guardadoRender = true;
+      else console.warn("[syncPersona Render] error al actualizar campo(s):", Object.keys(dbFields), json.error || res.status);
+    } catch (err) { console.warn("[syncPersona Render] excepcion:", err.message); }
+    if (!guardadoRender) {
+      try {
+        const { error } = await supabase.from("personas").update(dbFields).eq("id", persona.id);
+        if (error) console.warn("[syncPersona] error al actualizar campo(s):", Object.keys(dbFields), error.message);
+      } catch (err) { console.warn("[syncPersona] excepcion:", err.message); }
+    }
     onSavePersonas(personas.map(p => {
       if (p.id !== persona.id) return p;
       const actualizado = { ...p, ...fields };
@@ -6648,7 +6664,7 @@ const datosSolicitud = {
                           onChange={async e => {
                             const val = e.target.value;
                             const newValor = proveedorLuz + "|" + val;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (val.trim()) await syncPersona({ nClienteElectricidad: val.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (nClienteLuz.trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -6657,7 +6673,7 @@ const datosSolicitud = {
                           onChange={async e => {
                             const val = e.target.value;
                             const newValor = val + "|" + nClienteLuz;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (val) await syncPersona({ proveedorElectrico: val });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (proveedorLuz ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
@@ -6805,14 +6821,14 @@ const datosSolicitud = {
                           onChange={async e => {
                             const newValor = e.target.value + "|" + aprServicio;
                             const completo = e.target.value.trim() && aprServicio.trim();
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ sistemaAgua: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (aprNombre.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <input type="text" placeholder="N° de servicio agua" value={aprServicio} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = aprNombre + "|" + e.target.value;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ nServicioAgua: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (aprServicio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -6826,7 +6842,7 @@ const datosSolicitud = {
                         <input type="text" placeholder="N° de folio credencial" value={discFolio} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = e.target.value + "|" + discMovilidad;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ credencialDiscapacidad: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (discFolio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -6835,7 +6851,7 @@ const datosSolicitud = {
                           {["Sí", "No"].map(op => (
                             <button key={op} onClick={async e => { e.stopPropagation();
                               const newValor = discFolio + "|" + op;
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               await syncPersona({ movilidadReducida: op.toLowerCase().startsWith("s") ? "SI" : "NO" });
                             }}
                               style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (discMovilidad === op ? "#7C3AED" : "#ddd"), background: discMovilidad === op ? "#7C3AED" : "#fff", color: discMovilidad === op ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
@@ -6855,7 +6871,7 @@ const datosSolicitud = {
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = e.target.value + "|" + certRuralFecha;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ certRuralidad: e.target.value.trim() + (certRuralFecha ? " — " + certRuralFecha : "") });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (certRuralNum.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -6864,7 +6880,7 @@ const datosSolicitud = {
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = certRuralNum + "|" + e.target.value;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (certRuralFecha ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         {certRuralCompleto
@@ -6879,14 +6895,14 @@ const datosSolicitud = {
                         <input type="text" placeholder="N° cuenta de ahorro" value={cuentaNum} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = e.target.value + "|" + cuentaBanco;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ cuentaAhorro: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaNum.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <select value={cuentaBanco} onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = cuentaNum + "|" + e.target.value;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value) await syncPersona({ banco: e.target.value });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (cuentaBanco.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }}>
@@ -6996,7 +7012,7 @@ const datosSolicitud = {
                             const tipo = e.target.value;
                             const newValor = [tipo, tipo === "Otro" ? tituloDesc : "", tituloFjs, tituloNumero, tituloAnio].join("|");
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                              ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                              ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor })
                             }));
                             if (tipo) await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tipo, tipo === "Otro" ? tituloDesc : "", tituloFjs, tituloNumero, tituloAnio) });
                           }}
@@ -7010,7 +7026,7 @@ const datosSolicitud = {
                             onChange={async e => {
                               const newValor = ["Otro", e.target.value, tituloFjs, tituloNumero, tituloAnio].join("|");
                               onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                                ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor })
                               }));
                               if (e.target.value.trim()) await syncPersona({ dominiopropiedad: resumenDominioPropiedad("Otro", e.target.value, tituloFjs, tituloNumero, tituloAnio) });
                             }}
@@ -7021,7 +7037,7 @@ const datosSolicitud = {
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [tituloTipo, tituloDesc, e.target.value, tituloNumero, tituloAnio].join("|");
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, e.target.value, tituloNumero, tituloAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloFjs.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7029,7 +7045,7 @@ const datosSolicitud = {
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [tituloTipo, tituloDesc, tituloFjs, e.target.value, tituloAnio].join("|");
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, e.target.value, tituloAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7037,7 +7053,7 @@ const datosSolicitud = {
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [tituloTipo, tituloDesc, tituloFjs, tituloNumero, e.target.value].join("|");
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tituloTipo, tituloDesc, tituloFjs, tituloNumero, e.target.value) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (tituloAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7136,7 +7152,7 @@ const datosSolicitud = {
                                 const newValor = formatRut(rut2) + "|" + fechaCedula + "|" + valor;
                                 const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                                   ...s,
-                                  documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                                  documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor })
                                 });
                                 onSaveSolicitudes(nuevasSols);
                                 await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
@@ -7160,7 +7176,7 @@ const datosSolicitud = {
                             const tipo = e.target.value;
                             const newValor = [tipo, tipo === "Otro" ? dominioDesc : "", dominioFjs, dominioNumero, dominioAnio].join("|");
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                              ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                              ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor })
                             }));
                             if (tipo) await syncPersona({ dominiopropiedad: resumenDominioPropiedad(tipo, tipo === "Otro" ? dominioDesc : "", dominioFjs, dominioNumero, dominioAnio) });
                           }}
@@ -7174,7 +7190,7 @@ const datosSolicitud = {
                             onChange={async e => {
                               const newValor = ["Otro", e.target.value, dominioFjs, dominioNumero, dominioAnio].join("|");
                               onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor })
+                                ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor })
                               }));
                               if (e.target.value.trim()) await syncPersona({ dominiopropiedad: resumenDominioPropiedad("Otro", e.target.value, dominioFjs, dominioNumero, dominioAnio) });
                             }}
@@ -7185,7 +7201,7 @@ const datosSolicitud = {
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [dominioTipo, dominioDesc, e.target.value, dominioNumero, dominioAnio].join("|");
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, e.target.value, dominioNumero, dominioAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioFjs.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7193,7 +7209,7 @@ const datosSolicitud = {
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [dominioTipo, dominioDesc, dominioFjs, e.target.value, dominioAnio].join("|");
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, e.target.value, dominioAnio) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7201,7 +7217,7 @@ const datosSolicitud = {
                             onClick={e => e.stopPropagation()}
                             onChange={async e => {
                               const newValor = [dominioTipo, dominioDesc, dominioFjs, dominioNumero, e.target.value].join("|");
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               await syncPersona({ dominiopropiedad: resumenDominioPropiedad(dominioTipo, dominioDesc, dominioFjs, dominioNumero, e.target.value) });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (dominioAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7224,7 +7240,7 @@ const datosSolicitud = {
                             onChange={async e => {
                               const rol = armarRolAvaluo(e.target.value, avaluoRolSegundo);
                               const newValor = rol + "|" + avaluoValor + "|" + avaluoCoordenadas;
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               if (rol) await syncPersona({ rol, rol_propiedad: rol });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoRolPrimero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7233,7 +7249,7 @@ const datosSolicitud = {
                             onChange={async e => {
                               const rol = armarRolAvaluo(avaluoRolPrimero, e.target.value);
                               const newValor = rol + "|" + avaluoValor + "|" + avaluoCoordenadas;
-                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                              onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               if (rol) await syncPersona({ rol, rol_propiedad: rol });
                             }}
                             style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoRolSegundo.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7273,7 +7289,7 @@ const datosSolicitud = {
                           onChange={async e => {
                             const valorFormateado = formatPesosChilenos(e.target.value);
                             const newValor = avaluoRol + "|" + valorFormateado + "|" + avaluoCoordenadas;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (valorFormateado) await syncPersona({ avaluoFiscal: valorFormateado });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoValor.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7281,7 +7297,7 @@ const datosSolicitud = {
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = avaluoRol + "|" + avaluoValor + "|" + e.target.value;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ coordenadas: e.target.value.trim() });
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (avaluoCoordenadas.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
@@ -7298,35 +7314,35 @@ const datosSolicitud = {
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = e.target.value + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + antecM2;
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                             <input type="text" placeholder="Fecha permiso (ej: 01/02/2026)" value={antecAnio}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = antecNumero + "|" + e.target.value + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + antecM2;
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecAnio.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                             <input type="text" placeholder="N° recepción" value={antecRecepcionNumero}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = antecNumero + "|" + antecAnio + "|" + e.target.value + "|" + antecRecepcionFecha + "|" + antecM2;
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecRecepcionNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                             <input type="text" placeholder="Fecha recepción (ej: 01/02/2026)" value={antecRecepcionFecha}
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = antecNumero + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + e.target.value + "|" + antecM2;
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecRecepcionFecha.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                             <input type="text" placeholder="M2 de la vivienda" value={antecM2}
                               onClick={e => e.stopPropagation()}
                               onChange={async e => {
                                 const newValor = antecNumero + "|" + antecAnio + "|" + antecRecepcionNumero + "|" + antecRecepcionFecha + "|" + e.target.value;
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                                 if (antecNumero.trim() && antecAnio.trim() && antecRecepcionNumero.trim() && antecRecepcionFecha.trim() && e.target.value.trim()) {
                                   await syncPersona({ antecedentesVivienda: `Permiso ${antecNumero.trim()} ${antecAnio.trim()} / Recepción ${antecRecepcionNumero.trim()} ${antecRecepcionFecha.trim()} / ${e.target.value.trim()} m2` });
                                 }
@@ -7366,14 +7382,14 @@ const datosSolicitud = {
                               onClick={e => e.stopPropagation()}
                               onChange={e => {
                                 const newValor = e.target.value + "|" + antecAnio;
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                               }}
                               style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (antecNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                             <input type="date" value={normalizarFechaInput(antecAnio)}
                               onClick={e => e.stopPropagation()}
                               onChange={async e => {
                                 const newValor = antecNumeroVisible + "|" + e.target.value;
-                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                                onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                                 if (antecNumeroVisible.trim() && e.target.value.trim()) {
                                   await syncPersona({ antecedentesVivienda: "Certificado N° " + antecNumeroVisible.trim() + " Fecha " + fmtFecha(e.target.value.trim()) });
                                 }
@@ -7395,14 +7411,14 @@ const datosSolicitud = {
                           onClick={e => e.stopPropagation()}
                           onChange={e => {
                             const newValor = e.target.value + "|" + infoAnio;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                           }}
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (infoNumero.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <input type="text" placeholder="Fecha (ej: 01/02/2026)" value={infoAnio}
                           onClick={e => e.stopPropagation()}
                           onChange={async e => {
                             const newValor = infoNumero + "|" + e.target.value;
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor }) }));
+                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (infoNumero.trim() && e.target.value.trim()) {
                               const formatted = infoNumero.trim() + "/" + e.target.value.trim();
                               await syncPersona({ informacionesPrevias: formatted });
