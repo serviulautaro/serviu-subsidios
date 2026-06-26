@@ -175,7 +175,7 @@ const statusBg = (p) => p === 100 ? "#ECFDF5" : p >= 50 ? "#FFFBEB" : "#FEF2F2";
 const API = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
   ? window.location.origin
   : "http://localhost:3001";
-const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,fecha_visita,comite,codigo_comite,tipo_comite,profesional_comite";
+const SOLICITUDES_SELECT_BASE = "id,persona_id,persona_nombre,programa_id,fecha,fecha_visita,comite,codigo_comite,tipo_comite,profesional_comite,calificacion_desmarque,respuesta_serviu_estado";
 const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
 const encodePathPart = (value) => encodeURIComponent(String(value || ""));
 const encodeRoutePath = (value) => String(value || "").split("/").filter(Boolean).map(encodePathPart).join("/");
@@ -306,7 +306,8 @@ const documentosConFechaVisita = (docs = [], fecha = "") => {
 const docConVb = (doc) => !!doc?.entregado;
 const docCalificacionDesmarque = (docs = []) => docs.find(d => docNombreNorm(d).includes("calificacion para visita"));
 const leerCalificacionDesmarque = (sol) => {
-  const raw = String(docCalificacionDesmarque(sol?.documentos || [])?.valor || "");
+  const rawDirecto = String(sol?.calificacion_desmarque || sol?.calificacionDesmarque || "");
+  const raw = rawDirecto || String(docCalificacionDesmarque(sol?.documentos || [])?.valor || "");
   const [estado, ...detalle] = raw.split("|");
   return { estado: estado || "", detalle: detalle.join("|") || "" };
 };
@@ -355,9 +356,10 @@ const estadoLineaDesmarque = (sol = {}) => {
   const cartaServiu = buscarDocDesmarque(docs, ["carta", "serviu"]);
   const ingresadoServiu = docConVb(cartaServiu);
   const respuestaServiu = buscarDocDesmarque(docs, ["respuesta", "serviu"]);
-  const respuestaTexto = valorDocTexto(respuestaServiu);
+  const respuestaDirecta = String(sol.respuesta_serviu_estado || sol.respuestaServiuEstado || "").toUpperCase();
+  const respuestaTexto = respuestaDirecta || valorDocTexto(respuestaServiu);
   const respuestaDetalle = detalleResultadoDoc(respuestaServiu);
-  const respuestaIngresada = docConVb(respuestaServiu) && !!respuestaTexto;
+  const respuestaIngresada = !!respuestaDirecta || (docConVb(respuestaServiu) && !!respuestaTexto);
   const desmarcado = respuestaIngresada && (respuestaTexto.includes("DESMARCADO") || respuestaTexto.includes("APROBADO"));
   const serviuRechazadoApelable = respuestaTexto.includes("APELAR") || respuestaTexto.includes("APELABLE");
   const serviuRechazado = respuestaTexto.includes("RECHAZADO") && !serviuRechazadoApelable;
@@ -4619,9 +4621,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           },
         ];
       }
-      const guardoSolicitud = await actualizarSolicitudEnDb(solActual.id, { documentos: docsActualizados });
+      const guardoSolicitud = await actualizarSolicitudEnDb(solActual.id, { documentos: docsActualizados, respuesta_serviu_estado: etiqueta });
       if (!guardoSolicitud) throw new Error("No se pudo guardar la solicitud en PostgreSQL.");
-      onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(solActual.id) ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solActual, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
+      onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(solActual.id) ? { ...s, documentos: docsActualizados, respuesta_serviu_estado: etiqueta, respuestaServiuEstado: etiqueta, fecha_visita: fechaVisitaSolicitud({ ...solActual, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
       await syncPersona({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones });
       setShowModalRespuestaServiu(false);
       setResultadoRespuestaServiu("");
@@ -4796,13 +4798,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       ? sol.documentos.map(d => docNombreNorm(d).includes("calificacion para visita") ? { ...d, valor, entregado: true } : d)
       : [...(sol.documentos || []), { nombre: DOC_CALIFICACION_DESMARQUE, obligatorio: false, valor, entregado: true, interno: true }];
     const nuevoEstado = estado === "NO_CALIFICA" ? "NO CALIFICA" : (persona.estado_desmarque || "NO VISITADO");
-    const guardoSolicitud = await actualizarSolicitudEnDb(sol.id, { documentos });
+    const guardoSolicitud = await actualizarSolicitudEnDb(sol.id, { documentos, calificacion_desmarque: valor });
     if (!guardoSolicitud) {
       alert("No se pudo guardar la calificacion en la solicitud. Revise conexion e intente nuevamente.");
       return;
     }
     await syncPersona({ estado_desmarque: nuevoEstado });
-    onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(sol.id) ? { ...s, documentos } : s));
+    onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(sol.id) ? { ...s, documentos, calificacion_desmarque: valor, calificacionDesmarque: valor } : s));
     await registrarAuditoria?.("calificar_desmarque", "solicitudes", sol.id, { solicitante: persona.nombre, resultado: estado, detalle });
   };
 

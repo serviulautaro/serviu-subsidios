@@ -43,7 +43,7 @@ if (pgPool) {
 }
 let cacheBootstrap = null;
 let cacheSolicitudes = null;
-const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita';
+const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita,calificacion_desmarque,respuesta_serviu_estado';
 const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
 const TABLAS_PERMITIDAS = new Set(['comites', 'personas', 'solicitudes', 'programas_custom', 'archivos_solicitante', 'visitas', 'audit_log', 'app_users']);
 const ADMIN_KEY = process.env.ADMIN_KEY || Buffer.from('MTk2NTYw', 'base64').toString('utf8');
@@ -226,6 +226,8 @@ async function ensureRuntimeSchema() {
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "linea_tiempo" jsonb DEFAULT '{}'::jsonb;
       ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "linea_tiempo_csp" jsonb DEFAULT '{}'::jsonb;
       ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "pendiente_calificar" boolean DEFAULT false;
+      ALTER TABLE "solicitudes" ADD COLUMN IF NOT EXISTS "calificacion_desmarque" text DEFAULT '';
+      ALTER TABLE "solicitudes" ADD COLUMN IF NOT EXISTS "respuesta_serviu_estado" text DEFAULT '';
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "data_url" text;
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "mime_type" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "siguiente_paso" text;
