@@ -83,6 +83,9 @@ function main() {
   ok("Comite desmarque incluye solicitudes habitabilidad aunque falte comite_id", contains(app, "esComiteDesmarqueRef") && contains(app, "(s.programaId || s.programa_id) === \"habitabilidad\""));
   ok("Nuevo solicitante con comite crea solicitud desde flujo unico", contains(app, "crear_solicitud_automatica") && !contains(app, "programaComite && [\"csp_rural\", \"csp_urbano\"].includes(programaComite.id)"));
   ok("VB Respuesta SERVIU exige clave y resultado paso 9", contains(app, "Marcar VB Respuesta SERVIU") && contains(app, "abrirResultadoRespuestaServiuConClave") && contains(app, "confirmarClaveVbDesmarque"));
+  ok("Califica para visita persiste en Render", contains(app, "guardarCalificacionDesmarque") && contains(app, "actualizarSolicitudEnDb(sol.id, { documentos })") && contains(app, "syncPersona({ estado_desmarque: nuevoEstado })"));
+  ok("VB de documentos persiste solicitudes en Render", contains(app, "const marcarDocEntregado") && contains(app, "actualizarDocumentoSolicitud(solId, idx, { entregado })") && contains(app, "/api/db/solicitudes/update"));
+  ok("Respuesta SERVIU guarda ordinario y fecha en documento real", contains(app, "abrirResultadoRespuestaServiuConClave(sol.id)") && contains(app, "{ num_ord: e.target.value }") && contains(app, "{ fecha_resp: e.target.value }") && !contains(app, "i2!==i") && !contains(app, "i2 !== i"));
   ok("Renombrar requisito no duplica documento en solicitudes", contains(app, "claveDocumentoPrograma") && contains(app, "fusionarDocumentoPrograma") && contains(app, "documentoProgramaConClave"));
   ok("Cuenta de ahorro no mezcla opciones de discapacidad", contains(app, "esCuentaAhorroNombre ? null") && contains(app, "tipo: null") && contains(app, "bancosCuentaAhorroPermitidos"));
   ok("Cuenta de ahorro guarda usando indice real del documento", contains(app, "i2 !== docIdx ? d2 : { ...d2, valor: newValor }") && !contains(app, "i2 !== i ? d2 : { ...d2, valor: newValor }"));

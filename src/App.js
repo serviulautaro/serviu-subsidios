@@ -3178,6 +3178,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [showClaveRut, setShowClaveRut] = useState(false);
   const [showClaveVbDesmarque, setShowClaveVbDesmarque] = useState(false);
   const [pendingVbDesmarque, setPendingVbDesmarque] = useState(null);
+  const [respuestaServiuSolicitudId, setRespuestaServiuSolicitudId] = useState(null);
   const [showModalMemo, setShowModalMemo] = useState(false);
   const [showModalCarta, setShowModalCarta] = useState(false);
   const [showModalSolicitud, setShowModalSolicitud] = useState(false);
@@ -3789,6 +3790,32 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     }));
   };
 
+  const actualizarSolicitudEnDb = async (solId, values) => {
+    if (!solId || !values || Object.keys(values).length === 0) return false;
+    let guardadoRender = false;
+    try {
+      const res = await fetch(`${API}/api/db/solicitudes/update`, {
+        method: "PATCH",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ filters: [{ col: "id", value: solId }], values })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok !== false) guardadoRender = true;
+      else console.warn("[solicitudes Render] error al actualizar:", solId, json.error || res.status);
+    } catch (err) { console.warn("[solicitudes Render] excepcion:", err.message); }
+    if (guardadoRender) return true;
+    try {
+      const { error } = await supabase.from("solicitudes").update(values).eq("id", solId);
+      if (error) {
+        console.warn("[solicitudes Supabase] error al actualizar:", solId, error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn("[solicitudes Supabase] excepcion:", err.message);
+      return false;
+    }
+  };
   const guardarLineaTiempoPersonaCsp = async () => {
     if (!persona) return;
     const faltaNota = LINEA_TIEMPO_CSP.find(etapa =>
@@ -4563,50 +4590,50 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     else if (res === "RECHAZADO_APELABLE") nuevoEstado = "RECHAZADO APELABLE";
     else if (res === "RECHAZADO_SIN_APELACION") nuevoEstado = "DESMARQUE RECHAZADO";
     try {
-      const { data: solsDb } = await supabase.from("solicitudes").select("*").eq("persona_id", persona.id).eq("programa_id", "habitabilidad");
-      const solDb = solsDb && solsDb[0];
-      if (!solDb) throw new Error("No se encontro la solicitud de Habitabilidad/Desmarque.");
-      if (solDb) {
-        const etiqueta = res === "APROBADO" ? "DESMARCADO"
-          : res === "RECHAZADO_APELABLE" ? "RECHAZADO APELABLE"
-          : "DESMARQUE RECHAZADO";
-        const docsBase = Array.isArray(solDb.documentos) ? solDb.documentos : [];
-        let encontroRespuesta = false;
-        let docsActualizados = docsBase.map(d => {
-          if (!(d.nombre && d.nombre.includes("Respuesta SERVIU"))) return d;
-          encontroRespuesta = true;
-          return { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true, vb: true };
+      const solActual = solicitudes.find(s => respuestaServiuSolicitudId && s.id === respuestaServiuSolicitudId)
+        || solicitudes.find(s => {
+          const esHabitabilidad = s.programaId === "habitabilidad" || s.programa_id === "habitabilidad";
+          const esPersona = String(s.persona_id || s.personaId || "") === String(persona.id || "");
+          return esHabitabilidad && esPersona;
         });
-        if (!encontroRespuesta) {
-          docsActualizados = [
-            ...docsActualizados,
-            {
-              nombre: "Respuesta SERVIU",
-              obligatorio: false,
-              valor: etiqueta + (nota ? " - " + nota : ""),
-              entregado: true,
-              vb: true,
-            },
-          ];
-        }
-        const { error: solError } = await supabase.from("solicitudes").update({ documentos: docsActualizados }).eq("id", solDb.id);
-        if (solError) throw solError;
-        onSaveSolicitudes(solicitudes.map(s => s.id === solDb.id ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solDb, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
+      if (!solActual) throw new Error("No se encontro la solicitud de Habitabilidad/Desmarque.");
+      const etiqueta = res === "APROBADO" ? "DESMARCADO"
+        : res === "RECHAZADO_APELABLE" ? "RECHAZADO APELABLE"
+        : "DESMARQUE RECHAZADO";
+      const docsBase = Array.isArray(solActual.documentos) ? solActual.documentos : [];
+      let encontroRespuesta = false;
+      let docsActualizados = docsBase.map(d => {
+        if (!(d.nombre && d.nombre.includes("Respuesta SERVIU"))) return d;
+        encontroRespuesta = true;
+        return { ...d, valor: etiqueta + (nota ? " - " + nota : ""), entregado: true, vb: true };
+      });
+      if (!encontroRespuesta) {
+        docsActualizados = [
+          ...docsActualizados,
+          {
+            nombre: "Respuesta SERVIU",
+            obligatorio: false,
+            valor: etiqueta + (nota ? " - " + nota : ""),
+            entregado: true,
+            vb: true,
+          },
+        ];
       }
-      const { error: personaError } = await supabase.from("personas").update({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones }).eq("id", persona.id);
-      if (personaError) throw personaError;
-      onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
+      const guardoSolicitud = await actualizarSolicitudEnDb(solActual.id, { documentos: docsActualizados });
+      if (!guardoSolicitud) throw new Error("No se pudo guardar la solicitud en PostgreSQL.");
+      onSaveSolicitudes(solicitudes.map(s => s.id === solActual.id ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solActual, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
+      await syncPersona({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones });
       setShowModalRespuestaServiu(false);
       setResultadoRespuestaServiu("");
       setNotaResultado("");
+      setRespuestaServiuSolicitudId(null);
     } catch(e) {
       console.warn("[guardarRespuestaServiu]", e.message);
       alert("No se pudo guardar el resultado de Respuesta SERVIU: " + (e.message || "error desconocido"));
     }
   };
-
-  const abrirResultadoRespuestaServiuConClave = () => {
-    setPendingVbDesmarque({ tipo: "respuesta_serviu" });
+  const abrirResultadoRespuestaServiuConClave = (solId = null) => {
+    setPendingVbDesmarque({ tipo: "respuesta_serviu", solId });
     setShowClaveVbDesmarque(true);
   };
 
@@ -4617,6 +4644,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (pendiente?.tipo === "respuesta_serviu") {
       setResultadoRespuestaServiu("");
       setNotaResultado("");
+      setRespuestaServiuSolicitudId(pendiente.solId || null);
       setShowModalRespuestaServiu(true);
     }
   };
@@ -4768,10 +4796,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       ? sol.documentos.map(d => docNombreNorm(d).includes("calificacion para visita") ? { ...d, valor, entregado: true } : d)
       : [...(sol.documentos || []), { nombre: DOC_CALIFICACION_DESMARQUE, obligatorio: false, valor, entregado: true, interno: true }];
     const nuevoEstado = estado === "NO_CALIFICA" ? "NO CALIFICA" : (persona.estado_desmarque || "NO VISITADO");
-    await supabase.from("solicitudes").update({ documentos }).eq("id", sol.id);
-    await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
+    const guardoSolicitud = await actualizarSolicitudEnDb(sol.id, { documentos });
+    if (!guardoSolicitud) {
+      alert("No se pudo guardar la calificacion en la solicitud. Revise conexion e intente nuevamente.");
+      return;
+    }
+    await syncPersona({ estado_desmarque: nuevoEstado });
     onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? { ...s, documentos } : s));
-    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
     await registrarAuditoria?.("calificar_desmarque", "solicitudes", sol.id, { solicitante: persona.nombre, resultado: estado, detalle });
   };
 
@@ -4989,21 +5020,24 @@ const datosSolicitud = {
     if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
   };
 
-  const marcarDocEntregado = async (solId, idx, entregado = true) => {
+  const actualizarDocumentoSolicitud = async (solId, idx, patch) => {
     const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s,
-      documentos: s.documentos.map((d, i) => i === idx ? { ...d, entregado } : d)
+      documentos: (s.documentos || []).map((d, i) => i === idx ? { ...d, ...patch } : d)
     });
     onSaveSolicitudes(nuevasSols);
     const solActualizada = nuevasSols.find(s => s.id === solId);
-    if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
+    if (solActualizada) await actualizarSolicitudEnDb(solId, { documentos: solActualizada.documentos });
+    return solActualizada;
   };
-
+  const marcarDocEntregado = async (solId, idx, entregado = true) => {
+    await actualizarDocumentoSolicitud(solId, idx, { entregado });
+  };
   const setDocValor = async (solId, idx, valor) => {
     const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
       ...s, documentos: s.documentos.map((d, i) => {
         if (i !== idx) return d;
-        // Memo, Carta e Informe DOM: requiere N° Y fecha (separados por |)
+        // Memo, Carta e Informe DOM: requiere N y fecha (separados por |)
         const necesitaNumYFecha = d.nombre && (d.nombre.includes('Memo DOM') || d.nombre.includes('Carta SERVIU') || d.nombre.includes('Informe DOM'));
         const partes = valor.split("|").map(p => p.trim()).filter(Boolean);
         const completo = necesitaNumYFecha ? partes.length >= 2 && partes[0] && partes[1] : valor.trim() !== '';
@@ -5011,17 +5045,14 @@ const datosSolicitud = {
       })
     });
     onSaveSolicitudes(nuevasSols);
-    // Actualizar estado automático si es desmarque
+    const solActualizada = nuevasSols.find(s => s.id === solId);
+    if (solActualizada) await actualizarSolicitudEnDb(solId, { documentos: solActualizada.documentos });
+    // Actualizar estado automatico si es desmarque
     if (persona.comiteId === "comite_desmarque" && !["NO CALIFICA","APELAR SERVIU","RECHAZADO APELABLE","RECHAZADO DOM","DESMARQUE RECHAZADO","DESMARCADO","Informe DOM aprobado","INFORME DOM APROBADO"].includes(persona.estado_desmarque)) {
-      const sol = nuevasSols.find(s => s.id === solId);
-      const nuevoEstado = calcularEstadoDesmarque(sol, persona.estado_desmarque);
-      if (nuevoEstado !== persona.estado_desmarque) {
-        await supabase.from("personas").update({ estado_desmarque: nuevoEstado }).eq("id", persona.id);
-        onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, estado_desmarque: nuevoEstado } : p));
-      }
+      const nuevoEstado = calcularEstadoDesmarque(solActualizada, persona.estado_desmarque);
+      if (nuevoEstado !== persona.estado_desmarque) await syncPersona({ estado_desmarque: nuevoEstado });
     }
   };
-
   const guardarPrioridadSolicitud = async (solId, valor) => {
     const solActual = solicitudes.find(s => s.id === solId);
     if (solActual && prioridadSolicitud(solActual) === valor) return;
@@ -6538,7 +6569,7 @@ const datosSolicitud = {
                     ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta
                     : p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
                   const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                    ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor, entregado: !!completo })
+                    ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor, entregado: !!completo })
                   });
                   onSaveSolicitudes(nuevasSols);
                   const solActualizada = nuevasSols.find(s => s.id === sol.id);
@@ -6555,7 +6586,7 @@ const datosSolicitud = {
                     ? p[0].trim() && p[2].trim() && p[3].trim() && discCompleta
                     : p[0].trim() && p[1].trim() && p[2].trim() && p[3].trim() && p[4].trim() && discCompleta;
                   const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                    ...s, documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: newValor, entregado: !!completo })
+                    ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor, entregado: !!completo })
                   });
                   onSaveSolicitudes(nuevasSols);
                   const solActualizada = nuevasSols.find(s => s.id === sol.id);
@@ -6959,21 +6990,17 @@ const datosSolicitud = {
                             <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>N° Ordinario (opcional)</div>
                             <input type="text" placeholder="Ej: 1234/2026" value={doc.num_ord || ""}
                               onClick={e => e.stopPropagation()}
-                              onChange={e => onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, num_ord: e.target.value})
-                              }))}
+                              onChange={async e => { await actualizarDocumentoSolicitud(sol.id, docIdx, { num_ord: e.target.value }); }}
                               style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, boxSizing:"border-box" }} />
                             <div style={{ fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase" }}>Fecha Respuesta (opcional)</div>
                             <input type="date" value={doc.fecha_resp || ""}
                               onClick={e => e.stopPropagation()}
-                              onChange={e => onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, fecha_resp: e.target.value})
-                              }))}
+                              onChange={async e => { await actualizarDocumentoSolicitud(sol.id, docIdx, { fecha_resp: e.target.value }); }}
                               style={{ width:"100%", padding:"5px 8px", borderRadius:6, border:"1.5px solid #ddd", fontSize:12, boxSizing:"border-box" }} />
                             <div style={{ fontSize: 11, color: "#B45309", fontWeight: 600, marginTop: 2 }}>
                               ⚠ Use el botón "Subir Respuesta SERVIU" para registrar el resultado
                             </div>
-                            <button type="button" onClick={abrirResultadoRespuestaServiuConClave}
+                            <button type="button" onClick={() => abrirResultadoRespuestaServiuConClave(sol.id)}
                               style={{ marginTop: 4, justifySelf: "start", background: "#059669", color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                               Marcar VB Respuesta SERVIU
                             </button>
@@ -6991,11 +7018,7 @@ const datosSolicitud = {
                               </div>
                             )}
                             <button onClick={async () => {
-                                const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
-                                  ...s, documentos: s.documentos.map((d2, i2) => i2 === i ? { ...d2, entregado: false, valor: "" } : d2)
-                                });
-                                onSaveSolicitudes(nuevasSols);
-                                await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s2=>s2.id===sol.id).documentos }).eq("id", sol.id);
+                                await actualizarDocumentoSolicitud(sol.id, docIdx, { entregado: false, valor: "" });
                               }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "#DC2626", color: "#fff", border: "none", cursor: "pointer", marginTop: 4 }}>
                                 Modificar resultado
                               </button>
@@ -7073,7 +7096,7 @@ const datosSolicitud = {
                             const completo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
                             const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                               ...s,
-                              documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: val, entregado: completo })
+                              documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: val, entregado: completo })
                             });
                             onSaveSolicitudes(nuevasSols);
                             await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
@@ -7094,7 +7117,7 @@ const datosSolicitud = {
                             const val = e.target.value.replace(/[^\d+ ]/g, "");
                             const nuevasSols = solicitudes.map(s => s.id !== sol.id ? s : {
                               ...s,
-                              documentos: s.documentos.map((d2, i2) => i2 !== i ? d2 : { ...d2, valor: val, entregado: !!val.trim() })
+                              documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: val, entregado: !!val.trim() })
                             });
                             onSaveSolicitudes(nuevasSols);
                             await supabase.from("solicitudes").update({ documentos: nuevasSols.find(s => s.id === sol.id).documentos }).eq("id", sol.id);
@@ -7117,7 +7140,7 @@ const datosSolicitud = {
                         const rutOk = rutFormatoChilenoValido(rut);
                         const rutFinal = rutOk ? formatRut(rut) : rut;
                         const newValor = rutFinal + "|" + fechaCompleta + "|" + tipoRut2;
-                        onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : { ...d2, valor: newValor, entregado: !!(rutOk && fechaCompleta.length===10) }) }));
+                        onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2,i2) => i2!==docIdx ? d2 : { ...d2, valor: newValor, entregado: !!(rutOk && fechaCompleta.length===10) }) }));
                         if (fechaCompleta.length===10) {
                           const am = textoAdultoMayor(fechaCompleta);
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
@@ -7359,12 +7382,12 @@ const datosSolicitud = {
                                   e.stopPropagation();
                                   if (op === "NA") {
                                     onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"N/A", entregado:true})
+                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==docIdx ? d2 : {...d2, valor:"N/A", entregado:true})
                                     }));
                                     syncPersona({ antecedentesVivienda: "N/A" });
                                   } else {
                                     onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : {
-                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==i ? d2 : {...d2, valor:"__SI__|", entregado:false})
+                                      ...s, documentos: s.documentos.map((d2,i2) => i2!==docIdx ? d2 : {...d2, valor:"__SI__|", entregado:false})
                                     }));
                                   }
                                 }}
@@ -7947,7 +7970,7 @@ const datosSolicitud = {
       )}
 
       {showModalRespuestaServiu && (
-        <Modal title="Resultado Respuesta SERVIU" onClose={() => { setShowModalRespuestaServiu(false); setResultadoRespuestaServiu(""); setNotaResultado(""); }}>
+        <Modal title="Resultado Respuesta SERVIU" onClose={() => { setShowModalRespuestaServiu(false); setResultadoRespuestaServiu(""); setNotaResultado(""); setRespuestaServiuSolicitudId(null); }}>
           <div style={{ fontSize: 14, color: "#444", marginBottom: 16 }}>¿Cuál es el resultado de la <strong>Respuesta SERVIU</strong>?</div>
           <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
             {[
@@ -7971,7 +7994,7 @@ const datosSolicitud = {
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-            <button onClick={() => { setShowModalRespuestaServiu(false); setResultadoRespuestaServiu(""); setNotaResultado(""); }}
+            <button onClick={() => { setShowModalRespuestaServiu(false); setResultadoRespuestaServiu(""); setNotaResultado(""); setRespuestaServiuSolicitudId(null); }}
               style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
             <button onClick={guardarResultadoRespuestaServiu} disabled={!resultadoRespuestaServiu}
               style={{ padding: "9px 20px", borderRadius: 8, background: resultadoRespuestaServiu ? "#1e3a5f" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: resultadoRespuestaServiu ? "pointer" : "not-allowed" }}>Guardar</button>
