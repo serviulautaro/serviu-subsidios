@@ -1130,7 +1130,7 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null, opci
     }
   });
 
-  const extras = incluirExtras ? base.filter((_, i) => !usados.has(i)) : [];
+  const extras = incluirExtras ? base.filter((_, i) => !usados.has(i)) : base.filter((d, i) => !usados.has(i) && d?.interno);
   const resultado = [...base.filter((_, i) => retenidos.has(i)), ...extras];
   return cambio || !incluirExtras ? resultado : documentos || [];
 };
@@ -3771,7 +3771,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         })
       });
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok !== false) guardadoRender = true;
+      if (res.ok && json.ok !== false && (!Array.isArray(json.data) || json.data.length > 0)) guardadoRender = true;
       else console.warn("[syncPersona Render] error al actualizar campo(s):", Object.keys(dbFields), json.error || res.status);
     } catch (err) { console.warn("[syncPersona Render] excepcion:", err.message); }
     if (!guardadoRender) {
@@ -3800,7 +3800,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         body: JSON.stringify({ filters: [{ col: "id", value: solId }], values })
       });
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok !== false) guardadoRender = true;
+      if (res.ok && json.ok !== false && (!Array.isArray(json.data) || json.data.length > 0)) guardadoRender = true;
       else console.warn("[solicitudes Render] error al actualizar:", solId, json.error || res.status);
     } catch (err) { console.warn("[solicitudes Render] excepcion:", err.message); }
     if (guardadoRender) return true;
@@ -4621,7 +4621,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }
       const guardoSolicitud = await actualizarSolicitudEnDb(solActual.id, { documentos: docsActualizados });
       if (!guardoSolicitud) throw new Error("No se pudo guardar la solicitud en PostgreSQL.");
-      onSaveSolicitudes(solicitudes.map(s => s.id === solActual.id ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solActual, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
+      onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(solActual.id) ? { ...s, documentos: docsActualizados, fecha_visita: fechaVisitaSolicitud({ ...solActual, documentos: docsActualizados }) || s.fecha_visita || "" } : s));
       await syncPersona({ estado_desmarque: nuevoEstado, observaciones: nota || persona.observaciones });
       setShowModalRespuestaServiu(false);
       setResultadoRespuestaServiu("");
@@ -4802,7 +4802,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return;
     }
     await syncPersona({ estado_desmarque: nuevoEstado });
-    onSaveSolicitudes(solicitudes.map(s => s.id === sol.id ? { ...s, documentos } : s));
+    onSaveSolicitudes(solicitudes.map(s => String(s.id) === String(sol.id) ? { ...s, documentos } : s));
     await registrarAuditoria?.("calificar_desmarque", "solicitudes", sol.id, { solicitante: persona.nombre, resultado: estado, detalle });
   };
 
@@ -5065,26 +5065,26 @@ const datosSolicitud = {
     }
   };
   const guardarPrioridadSolicitud = async (solId, valor) => {
-    const solActual = solicitudes.find(s => s.id === solId);
+    const solActual = solicitudes.find(s => String(s.id) === String(solId));
     if (solActual && prioridadSolicitud(solActual) === valor) return;
     const clave = window.prompt("Ingrese clave del administrador para cambiar prioridad:");
     if (clave !== "196560") {
       if (clave !== null) alert("Clave de administrador incorrecta.");
       return;
     }
-    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
+    const nuevasSols = solicitudes.map(s => String(s.id) !== String(solId) ? s : {
       ...s,
       documentos: documentosConPrioridad(s.documentos, valor)
     });
     onSaveSolicitudes(nuevasSols);
-    const solActualizada = nuevasSols.find(s => s.id === solId);
+    const solActualizada = nuevasSols.find(s => String(s.id) === String(solId));
     if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
     await registrarAuditoria?.("actualizar_prioridad", "solicitudes", solId, { persona: persona?.nombre || "", prioridad: valor });
   };
 
   // Setea la opción especial de un documento (luz/agua/discapacidad)
   const setDocOpcion = async (solId, idx, opcion, tipoReal) => {
-    const nuevasSols = solicitudes.map(s => s.id !== solId ? s : {
+    const nuevasSols = solicitudes.map(s => String(s.id) !== String(solId) ? s : {
       ...s, documentos: s.documentos.map((d, i) => {
         if (i !== idx) return d;
         const autoMarcar = (
@@ -5104,7 +5104,7 @@ const datosSolicitud = {
       })
     });
     onSaveSolicitudes(nuevasSols);
-    const solActualizada = nuevasSols.find(s => s.id === solId);
+    const solActualizada = nuevasSols.find(s => String(s.id) === String(solId));
     if (solActualizada) await supabase.from("solicitudes").update({ documentos: solActualizada.documentos }).eq("id", solId);
   };
 
