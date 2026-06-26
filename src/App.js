@@ -11442,14 +11442,14 @@ export default function App() {
       if (!silencioso) setCargando(false);
       if (!silencioso) setErrorCargaDatos("");
       let respaldoActivo = false;
-      if (!silencioso && !datosBaseListos) {
+      if (false && !silencioso && !datosBaseListos) {
         try {
           const respaldo = await cargarBaseRespaldoEstatico();
           if (secuencia === cargaDatosSeqRef.current) {
             const programasRespaldo = aplicarDatosBase(respaldo, false);
             setSolicitudes((respaldo.solicitudes || []).map(sol => mapearSolicitudDb(sol, programasRespaldo)));
             setUltimaRecargaDatos("respaldo emergencia");
-            setErrorCargaDatos(`Supabase está demorando. Se muestran datos desde ${respaldo.fuente}; no se borró información. El sistema intentará reconectar.`);
+            setErrorCargaDatos(`Render esta demorando. Se muestran datos desde ${respaldo.fuente}; no se borro informacion. El sistema intentara reconectar.`);
             respaldoActivo = true;
           }
         } catch (respaldoErr) {
@@ -11475,7 +11475,7 @@ export default function App() {
         const programasCarga = aplicarDatosBase(base);
         setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
         setErrorCargaDatos(usandoRespaldo
-          ? `Supabase no responde. Se muestran datos desde ${base.fuente}; no se borró información. Presione Actualizar datos para reconectar.`
+          ? `Render no responde. Se muestran datos desde ${base.fuente}; no se borro informacion. Presione Actualizar datos para reconectar.`
           : "");
         if (!silencioso) setCargando(false);
 
@@ -11495,14 +11495,14 @@ export default function App() {
           })
           .catch(solErr => {
             console.error("Error cargando solicitudes:", solErr);
-            setErrorCargaDatos("Se cargaron solicitantes y comités, pero no se pudieron cargar las solicitudes/documentos. Presione Actualizar datos.");
+            setErrorCargaDatos("Se cargaron solicitantes y comites, pero no se pudieron cargar las solicitudes/documentos desde Render. Presione Actualizar datos.");
           });
       } catch (err) {
         console.error("Error cargando datos:", err);
         if (respaldoActivo) {
-          setErrorCargaDatos("Supabase no responde. Se mantiene el respaldo de emergencia; no se borró información. Presione Actualizar datos para reconectar.");
+          setErrorCargaDatos("Render no responde. Se mantiene el respaldo de emergencia; no se borro informacion. Presione Actualizar datos para reconectar.");
         } else {
-          setErrorCargaDatos(err?.message || "No se pudieron cargar los datos desde Supabase.");
+          setErrorCargaDatos(err?.message || "No se pudieron cargar los datos desde Render.");
         }
       } finally {
         if (!silencioso) setCargando(false);
@@ -11997,7 +11997,7 @@ export default function App() {
         </div>
         {errorCargaDatos && (
           <div style={{ marginBottom: 14, background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 700 }}>
-            No se pudieron cargar los datos desde Supabase. No se borró información; revise la conexión y presione “Actualizar datos”.
+            No se pudieron cargar los datos desde Render. No se borro informacion; revise la conexion y presione "Actualizar datos".
             <div style={{ marginTop: 4, fontSize: 11, fontWeight: 500, color: "#B91C1C" }}>{errorCargaDatos}</div>
           </div>
         )}

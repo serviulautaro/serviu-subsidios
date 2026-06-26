@@ -74,6 +74,8 @@ function main() {
   ok("Linea de tiempo CSP se guarda en comites", contains(app, "linea_tiempo") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo\""));
   ok("Linea de tiempo CSP se guarda por solicitante", contains(app, "Línea de tiempo CSP del solicitante") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo_csp\""));
   ok("Linea de tiempo CSP persiste en Render PostgreSQL", contains(app, "/api/db/personas/update") && contains(app, "linea_tiempo_csp") && contains(app, "guardadoRender"));
+  ok("Carga principal usa Render antes de respaldo local", contains(app, "fetch(API + \"/api/bootstrap\"") && contains(app, "fetch(API + \"/api/solicitudes\"") && contains(app, "if (false && !silencioso && !datosBaseListos)"));
+  ok("Mensaje de carga no culpa Supabase como base principal", !contains(app, "No se pudieron cargar los datos desde Supabase") && !contains(app, "Supabase no responde. Se muestran datos"));
   ok("Linea de tiempo CSP usa etapas oficiales nuevas", contains(app, "Solicitud de documentos") && contains(app, "Calificación SERVIU") && contains(app, "Ejecución de las obras"));
   ok("Linea de tiempo CSP permite VB por reuniones", contains(app, "_reunion_") && contains(app, "/5 VB"));
   ok("Linea de tiempo CSP corta avance por no califica", contains(app, "lineaTiempoCspCortada") && contains(app, "Avance cortado por No califica"));
