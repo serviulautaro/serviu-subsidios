@@ -11073,6 +11073,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const lastActivityRef = useRef(Date.now());
   const cargaDatosSeqRef = useRef(0);
+  const reparacionSolicitudesActivasRef = useRef({ ejecutando: false, ultimaFirma: "" });
 
   const limpiarSesionNavegador = () => {
     DB.set("serviu_user", null);
@@ -11465,6 +11466,130 @@ export default function App() {
     return aplicarEstadoDirectoDesmarqueSolicitud(mapped);
   };
 
+  const comitesNormalizadosCarga = (lista = []) => (lista || []).map(c => ({
+    ...c,
+    programaId: c.programaId || c.programa_id || "",
+    fechaCreacion: c.fechaCreacion || c.fecha_creacion,
+  }));
+
+  const solicitudActivaEsperada = (persona = {}, programasCarga = combinarProgramas(programasCustom), comitesCarga = comites) => {
+    const personaComiteId = String(persona.comiteId || persona.comite_id || "");
+    if (!persona?.id || !personaComiteId) return null;
+    if (personaComiteId === "comite_desmarque") {
+      const programa = (programasCarga || []).find(p => p.id === "habitabilidad");
+      return programa ? { programa, comite: buscarComitePersona(comitesCarga, { ...persona, comiteId: "comite_desmarque" }) || COMITES_HABITABILIDAD[0] } : null;
+    }
+    const comitePersona = buscarComitePersona(comitesCarga, persona);
+    const programaId = comitePersona?.programaId || comitePersona?.programa_id || "";
+    if (!programaId) return null;
+    const programa = (programasCarga || []).find(p => p.id === programaId);
+    return programa ? { programa, comite: comitePersona } : null;
+  };
+
+  const construirSolicitudActivaFaltante = (persona = {}, esperado = {}) => {
+    const programa = esperado.programa;
+    const comiteRef = esperado.comite || {};
+    if (!persona?.id || !programa?.id) return null;
+    return {
+      id: uid(),
+      personaId: persona.id,
+      personaNombre: persona.nombre || persona.nombre_completo || "",
+      programaId: programa.id,
+      fecha: today(),
+      comite: comiteRef.nombre || persona.comite || null,
+      codigoComite: comiteRef.id || comiteRef.codigo || persona.comiteId || persona.comite_id || null,
+      tipoComite: comiteRef.tipo || persona.tipo_comite || null,
+      documentos: (programa.documentos || []).map((d, idx) => documentoSolicitudDesdePrograma(d, idx)),
+      documentosCargados: true,
+    };
+  };
+
+  const payloadSolicitudDb = (s = {}) => ({
+    id: s.id,
+    persona_id: s.personaId,
+    persona_nombre: s.personaNombre,
+    programa_id: s.programaId,
+    fecha: s.fecha,
+    comite: s.comite || null,
+    codigo_comite: s.codigoComite || null,
+    tipo_comite: s.tipoComite || null,
+    documentos: s.documentos || [],
+  });
+
+  const repararSolicitudesActivasFaltantes = async ({ personasLista = personas, solicitudesLista = solicitudes, comitesLista = comites, programasLista = combinarProgramas(programasCustom), persistir = true, motivo = "carga" } = {}) => {
+    if (reparacionSolicitudesActivasRef.current.ejecutando) return solicitudesLista || [];
+    const personasNorm = (personasLista || []).map(p => p.comiteId !== undefined ? p : mapearPersonaDb(p));
+    const comitesNorm = comitesNormalizadosCarga(comitesLista || []);
+    const programasNorm = programasLista || combinarProgramas(programasCustom);
+    const solicitudesBase = Array.isArray(solicitudesLista) ? solicitudesLista : [];
+    const firma = [
+      motivo,
+      personasNorm.map(p => `${p.id}:${p.comiteId || p.comite_id || ""}`).sort().join("|"),
+      solicitudesBase.map(s => `${solicitudPersonaId(s)}:${solicitudProgramaId(s)}`).sort().join("|"),
+      programasNorm.map(p => `${p.id}:${(p.documentos || []).length}`).sort().join("|"),
+    ].join("@@");
+    if (persistir && reparacionSolicitudesActivasRef.current.ultimaFirma === firma) return solicitudesBase;
+
+    const faltantes = [];
+    for (const persona of personasNorm) {
+      const esperado = solicitudActivaEsperada(persona, programasNorm, comitesNorm);
+      if (!esperado?.programa?.id) continue;
+      const programaId = esperado.programa.id;
+      const yaExistePrograma = solicitudesBase.some(s => esSolicitudDePersona(s, persona.id) && solicitudProgramaId(s) === programaId);
+      if (yaExistePrograma) continue;
+      const normalExistente = solicitudesBase.some(s => esSolicitudDePersona(s, persona.id) && solicitudProgramaId(s) && solicitudProgramaId(s) !== "habitabilidad");
+      if (programaId !== "habitabilidad" && normalExistente) continue;
+      const nueva = construirSolicitudActivaFaltante(persona, esperado);
+      if (nueva) faltantes.push(nueva);
+    }
+    if (!faltantes.length) {
+      if (persistir) reparacionSolicitudesActivasRef.current.ultimaFirma = firma;
+      return solicitudesBase;
+    }
+
+    reparacionSolicitudesActivasRef.current.ejecutando = true;
+    const insertadas = [];
+    try {
+      for (const nueva of faltantes) {
+        if (persistir) {
+          try {
+            const res = await fetch(`${API}/api/db/solicitudes/insert`, {
+              method: "POST",
+              headers: jsonHeaders(),
+              body: JSON.stringify([payloadSolicitudDb(nueva)]),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || json.ok === false) {
+              console.warn("[reparar solicitudes activas]", nueva.personaNombre, nueva.programaId, json.error || res.status);
+              continue;
+            }
+          } catch (e) {
+            console.warn("[reparar solicitudes activas fetch]", e.message);
+            continue;
+          }
+        }
+        insertadas.push(nueva);
+      }
+    } finally {
+      reparacionSolicitudesActivasRef.current.ejecutando = false;
+    }
+    if (!insertadas.length) return solicitudesBase;
+    reparacionSolicitudesActivasRef.current.ultimaFirma = "";
+    const actualizadas = [...solicitudesBase, ...insertadas];
+    if (persistir) {
+      setSolicitudes(prev => {
+        const ids = new Set((prev || []).map(s => s.id));
+        const nuevas = insertadas.filter(s => !ids.has(s.id));
+        return nuevas.length ? [...(prev || []), ...nuevas] : prev;
+      });
+      await registrarAuditoria("crear_solicitud_automatica", "solicitudes", "reparacion_solicitudes_activas", {
+        cantidad: insertadas.length,
+        motivo,
+        programas: [...new Set(insertadas.map(s => s.programaId))].join(", "),
+      });
+    }
+    return actualizadas;
+  };
   const cargarSolicitudesPorPartes = async () => {
     const pageSizeRender = 100;
     const solicitudesRender = [];
@@ -11565,11 +11690,21 @@ export default function App() {
         }
 
         cargarSolicitudesPorPartes()
-          .then(s => {
+          .then(async s => {
             if (secuencia !== cargaDatosSeqRef.current) return;
             const solicitudesMapeadas = (s || []).map(sol => mapearSolicitudDb(sol, programasCarga));
-            setSolicitudes(solicitudesMapeadas);
-            setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesMapeadas); }, 1500);
+            const personasCarga = (base.personas || []).map(mapearPersonaDb);
+            const comitesCarga = comitesNormalizadosCarga(base.comites || []);
+            const solicitudesReparadas = await repararSolicitudesActivasFaltantes({
+              personasLista: personasCarga,
+              solicitudesLista: solicitudesMapeadas,
+              comitesLista: comitesCarga,
+              programasLista: programasCarga,
+              persistir: true,
+              motivo: "carga_principal",
+            });
+            setSolicitudes(solicitudesReparadas);
+            setTimeout(() => { aligerarSolicitudesEnSegundoPlano(solicitudesReparadas); }, 1500);
             setUltimaRecargaDatos(new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }));
             setErrorCargaDatos("");
           })
@@ -11625,6 +11760,25 @@ export default function App() {
     };
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    if (!currentUser || !datosBaseListos || !personas.length || !solicitudes.length) return;
+    const firma = [
+      personas.map(p => `${p.id}:${p.comiteId || p.comite_id || ""}`).sort().join("|"),
+      solicitudes.map(s => `${solicitudPersonaId(s)}:${solicitudProgramaId(s)}`).sort().join("|"),
+      comites.length,
+      programasCustom.length,
+    ].join("@@");
+    if (reparacionSolicitudesActivasRef.current.ultimaFirma === firma) return;
+    reparacionSolicitudesActivasRef.current.ultimaFirma = firma;
+    repararSolicitudesActivasFaltantes({
+      personasLista: personas,
+      solicitudesLista: solicitudes,
+      comitesLista: comites,
+      programasLista: combinarProgramas(programasCustom),
+      persistir: true,
+      motivo: "revision_estado",
+    }).catch(e => console.warn("[revision solicitudes activas]", e.message));
+  }, [currentUser?.id, datosBaseListos, personas.length, solicitudes.length, comites.length, programasCustom.length]); // eslint-disable-line react-hooks/exhaustive-deps
   // Guardar personas en Supabase
   const savePersonas = async (lista) => {
     if (IS_DEMO_MODE) {

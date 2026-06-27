@@ -86,6 +86,7 @@ function main() {
   ok("Editar ficha desmarque actualiza nombre en solicitudes activas", contains(app, "solicitudesRenombradas") && contains(app, "persona_nombre: nombreNormalizado"));
   ok("Comite desmarque incluye solicitudes habitabilidad aunque falte comite_id", contains(app, "esComiteDesmarqueRef") && contains(app, "(s.programaId || s.programa_id) === \"habitabilidad\""));
   ok("Nuevo solicitante con comite crea solicitud desde flujo unico", contains(app, "crear_solicitud_automatica") && !contains(app, "programaComite && [\"csp_rural\", \"csp_urbano\"].includes(programaComite.id)"));
+  ok("Repara solicitudes activas faltantes sin borrar existentes", contains(app, "repararSolicitudesActivasFaltantes") && contains(app, "solicitudActivaEsperada") && contains(app, "/api/db/solicitudes/insert") && contains(app, "normalExistente"));
   ok("VB Respuesta SERVIU exige clave y resultado paso 9", contains(app, "Marcar VB Respuesta SERVIU") && contains(app, "abrirResultadoRespuestaServiuConClave") && contains(app, "confirmarClaveVbDesmarque"));
   ok("Califica para visita persiste en Render", contains(app, "guardarCalificacionDesmarque") && contains(app, "actualizarSolicitudEnDb(sol.id, { documentos, calificacion_desmarque: valor })") && contains(app, "syncPersona({ estado_desmarque: nuevoEstado, estadoDesmarque: nuevoEstado })"));
   ok("Califica para visita no se filtra de la linea", contains(app, "!usados.has(i) && d?.interno") && contains(app, "docCalificacionDesmarque"));
