@@ -5933,20 +5933,21 @@ const datosSolicitud = {
       {misSols.length === 0 && <div style={{ background: "#fff", borderRadius: 14, padding: 40, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>No tiene programas asignados aun.</div>}
 
       {solicitudesActivasVista.map(sol => {
-        const prog = todosProgramas.find(p => p.id === sol.programaId);
+        const solProgramaId = solicitudProgramaId(sol);
+        const prog = todosProgramas.find(p => p.id === solProgramaId);
         const documentosVista = completarDocumentosDesdePrograma(sol.documentos || [], prog, { incluirExtras: false });
-        const solVistaBase = documentosVista === sol.documentos ? sol : { ...sol, documentos: documentosVista, documentosCargados: true };
+        const solVistaBase = documentosVista === sol.documentos ? { ...sol, programaId: solProgramaId } : { ...sol, programaId: solProgramaId, documentos: documentosVista, documentosCargados: true };
         const solVista = aplicarEstadoDirectoDesmarqueSolicitud(solVistaBase);
-        const p = pct(solVista.documentos, solVista.programaId);
-        const conteoSol = conteoDocumentosSolicitud(solVista.documentos, solVista.programaId);
+        const p = pct(solVista.documentos, solProgramaId);
+        const conteoSol = conteoDocumentosSolicitud(solVista.documentos, solProgramaId);
         const ok = conteoSol.completos;
         const progNombreNorm = (prog?.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const esMave = solVista.programaId === "mave_rural" || progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
-        const esAmpliacion = solVista.programaId === "ampliacion_vivienda" || progNombreNorm.includes("ampliacion de la vivienda");
+        const esMave = solProgramaId === "mave_rural" || progNombreNorm.includes("mejoramiento de vivienda") || progNombreNorm.includes("mave");
+        const esAmpliacion = solProgramaId === "ampliacion_vivienda" || progNombreNorm.includes("ampliacion de la vivienda");
         const esProgramaEspecialVivienda = esMave || esAmpliacion;
-        const esCsp = solVista.programaId === "csp_rural" || solVista.programaId === "csp_urbano" || esProgramaEspecialVivienda;
+        const esCsp = solProgramaId === "csp_rural" || solProgramaId === "csp_urbano" || esProgramaEspecialVivienda;
         const esCustom = !!(prog && prog.esCustom && !esProgramaEspecialVivienda);
-        const estadoDesmarqueSolicitud = solVista.programaId === "habitabilidad" ? estadoActualLineaDesmarqueConManual(solVista, persona.estado_desmarque || persona.estadoDesmarque || "") : null;
+        const estadoDesmarqueSolicitud = solProgramaId === "habitabilidad" ? estadoActualLineaDesmarqueConManual(solVista, persona.estado_desmarque || persona.estadoDesmarque || "") : null;
         const solicitudDesmarcada = estadoDesmarqueSolicitud?.key === "DESMARCADO";
         const prioridadActual = prioridadSolicitud(solVista);
         return (
@@ -5955,7 +5956,7 @@ const datosSolicitud = {
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 18, background: prog ? prog.colorLight : "#eee", color: prog ? prog.color : "#666", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16 }}>{prog ? prog.icon : "?"}</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: "#1e3a5f" }}>{prog ? prog.nombre : sol.programaId}</div>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: "#1e3a5f" }}>{prog ? prog.nombre : solProgramaId}</div>
                   <div style={{ fontSize: 12, color: "#888" }}>Ingresada: {sol.fecha}</div>
                 </div>
               </div>
@@ -6366,11 +6367,11 @@ const datosSolicitud = {
                 // ── FIN PROGRAMA PERSONALIZADO ────────────────────────────────
 
                 // Ocultar documentos obsoletos o duplicados (preservando índice original para updates)
-                if (solVista.programaId === "csp_urbano") {
+                if (solProgramaId === "csp_urbano") {
                   const n = (doc.nombre || "").toLowerCase();
                   if (n.includes("fecha de nacimiento")) return null;
                 }
-                if (solVista.programaId === "csp_rural") {
+                if (solProgramaId === "csp_rural") {
                   const n = (doc.nombre||"").toLowerCase();
                   if (n.includes("fecha de nacimiento")) return null;
                   if (n.includes("titulo de dominio") || n.includes("título de dominio")) return null;
@@ -6699,7 +6700,7 @@ const datosSolicitud = {
                           toggleDoc(sol.id, docIdx, doc);
                         }
                         if (esDocArchivo && !doc.entregado) {
-                          if (solVista.programaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
+                          if (solProgramaId === "csp_urbano") return; // CSP Urbano: VB solo via botón "Marcar VB ✓"
                           marcarDocEntregado(sol.id, docIdx, true, doc);
                         }
                         if (esCsp && esEspecial && !doc.entregado && (!esLuz || !!nClienteLuz.trim())) marcarDocEntregado(sol.id, docIdx, true, doc);
