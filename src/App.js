@@ -523,6 +523,18 @@ const DOCUMENTOS_COLECTOR_SOLAR = [
   { nombre: "Boleta del agua potable", obligatorio: true, tipo: "agua", opciones: ["Aguas Araucania", "Aguas San Isidro", "APR", "Pozo"] }
 ];
 
+const REQUISITOS_CSP_RURAL_OFICIALES = [
+  { nombre: "Cedula de identidad", obligatorio: true, requiereArchivo: true, requiereTexto: true },
+  { nombre: "Correo del solicitante", obligatorio: true, etiquetaTexto: "Correo electrónico", requiereTexto: true, requiereArchivo: false },
+  { nombre: "Dominio de la propiedad", obligatorio: true, requiereArchivo: true, requiereTexto: false },
+  { nombre: "Registro Social de Hogares en la comuna (REVISADO ENTIDAD PATROCINANTE)", obligatorio: true, requiereTexto: true, requiereArchivo: false, nombreOriginal: "Registro Social de Hogares en la comuna" },
+  { nombre: "Certificado de ruralidad (SOLICITAR EN DIRECCION DE OBRAS MUNICIPALES)", obligatorio: true, requiereArchivo: true, requiereTexto: false, nombreOriginal: "Certificado de ruralidad" },
+  { nombre: "Certificado de avaluo detallado de la propiedad (SOLICITAR EN DIRECCION DE OBRAS MUNICIPALES)", obligatorio: true, requiereArchivo: true, requiereTexto: false, nombreOriginal: "Certificado de avaluo detallado de la propiedad" },
+  { nombre: "Boleta de luz", obligatorio: true, tipo: "luz", opciones: ["Con empalme", "Sin empalme"] },
+  { nombre: "Boleta de agua (APR o Pozo)", obligatorio: true, tipo: "agua", opciones: ["Con arranque", "Pozo"] },
+  { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true, requiereArchivo: true, requiereTexto: false }
+];
+
 const PROGRAMAS = [
   {
     id: "habitabilidad",
@@ -565,17 +577,7 @@ const PROGRAMAS = [
     nombre: "Construccion Sitio Propio Rural",
     descripcion: "Subsidio de construccion en sitio propio - zona rural",
     color: "#D97706", colorLight: "#FFFBEB", icon: "R",
-    documentos: [
-      { nombre: "Cedula de identidad", obligatorio: true },
-      { ...DOC_CORREO_SOLICITANTE },
-      { nombre: "Dominio de la propiedad", obligatorio: true },
-      { nombre: "Registro Social de Hogares en la comuna", obligatorio: true },
-      { nombre: "Certificado de ruralidad", obligatorio: true },
-      { nombre: "Certificado de avaluo detallado de la propiedad", obligatorio: true },
-      { nombre: "Boleta de luz", obligatorio: true, tipo: "luz", opciones: ["Con empalme", "Sin empalme"] },
-      { nombre: "Boleta de agua (APR o Pozo)", obligatorio: true, tipo: "agua", opciones: ["Con arranque", "Pozo"] },
-      { nombre: "Cuenta de ahorro para la vivienda", obligatorio: true }
-    ]
+    documentos: REQUISITOS_CSP_RURAL_OFICIALES
   },
   {
     id: "mave_rural",
@@ -640,7 +642,7 @@ function combinarProgramas(programasCustom = []) {
       porId.set(p.id, { ...normalizado, esCustom: true, esBase: false });
     }
   });
-  return Array.from(porId.values());
+  return Array.from(porId.values()).map(normalizarProgramaBaseParaSolicitudes);
 }
 
 const COMITES_FIJOS = [
@@ -1021,6 +1023,13 @@ const completarDocumentosProgramaBase = (documentosBase = [], documentosEditados
   return resultado;
 };
 
+const normalizarProgramaBaseParaSolicitudes = (programa = {}) => {
+  if (programa?.id !== "csp_rural") return programa;
+  return {
+    ...programa,
+    documentos: completarDocumentosProgramaBase(REQUISITOS_CSP_RURAL_OFICIALES, programa.documentos || REQUISITOS_CSP_RURAL_OFICIALES)
+  };
+};
 const documentoTieneDatosUsuario = (doc = {}) =>
   !!(doc.entregado || doc.vb || doc.valor || doc.archivo || doc.storagePath || doc.archivoData || doc.dataUrl || doc.num_ord || doc.fecha_resp || doc.opcionSeleccionada || doc.etiqueta);
 
