@@ -90,7 +90,7 @@ const prioridadSolicitud = (sol = {}) => {
   return doc?.valor === "prioridad" ? "prioridad" : "normal";
 };
 const solicitantePrioritario = (personaId, solicitudes = []) => (solicitudes || []).some(s =>
-  s.personaId === personaId && prioridadSolicitud(s) === "prioridad"
+  esSolicitudDePersona(s, personaId) && prioridadSolicitud(s) === "prioridad"
 );
 const documentosConPrioridad = (docs = [], valor = "normal") => {
   const base = Array.isArray(docs) ? docs : [];
@@ -183,6 +183,9 @@ const apiPath = (prefix, routePath = "", fileName = "") =>
   API + prefix + encodeRoutePath(routePath) + (fileName ? "/" + encodePathPart(fileName) : "");
 const archivoRegistroId = (personaId = "", carpeta = "", nombre = "") =>
   [personaId, carpeta, nombre].map(v => String(v || "").trim()).join("__");
+const solicitudPersonaId = (sol = {}) => String(sol.personaId || sol.persona_id || "");
+const solicitudProgramaId = (sol = {}) => String(sol.programaId || sol.programa_id || "");
+const esSolicitudDePersona = (sol = {}, personaId = "") => solicitudPersonaId(sol) === String(personaId || "");
 const usuarioAuditoriaHeaders = () => {
   try {
     const raw = sessionStorage.getItem("serviu_user") || localStorage.getItem("serviu_user");
@@ -1522,7 +1525,7 @@ const carpetaPrograma = (persona, solicitudes) => {
     else if (tipo === "URBANO") prog = "CSP_Urbano";
     else {
       // 3) Último recurso: solicitudes (si ya están cargadas)
-      const sol = (solicitudes || []).find(s => s.personaId === persona.id || s.persona_id === persona.id);
+      const sol = (solicitudes || []).find(s => esSolicitudDePersona(s, persona.id));
       const pid = sol?.programaId || sol?.programa_id || "";
       const map = { habitabilidad: "Desmarque", csp_rural: "CSP_Rural", csp_urbano: "CSP_Urbano" };
       prog = map[pid] || "SinPrograma";
@@ -2101,7 +2104,7 @@ function PersonasView({ personas, solicitudes, comites, onSave, onDetail, progra
       ? (searchRutValido ? personas.filter(p => limpiarRut(p.rut || "") === searchRut) : [])
       : personas.filter(p => normalizarBusqueda(p.nombre || "").includes(normalizarBusqueda(searchTexto)));
 
-  const getSols = (id) => solicitudes.filter(s => s.personaId === id);
+  const getSols = (id) => solicitudes.filter(s => esSolicitudDePersona(s, id));
   const getDocPct = (id) => {
     const sols = getSols(id);
     if (!sols.length) return null;
@@ -3265,7 +3268,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const persona = personas.find(p => p.id === personaId);
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
-  const misSols = solicitudes.filter(s => s.personaId === personaId);
+  const misSols = solicitudes.filter(s => esSolicitudDePersona(s, personaId));
   const completarSolicitudActiva = (sol = {}) => {
     const programaId = sol.programaId || sol.programa_id;
     const prog = todosProgramas.find(p => p.id === programaId);
@@ -3280,7 +3283,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     if (!misSols.length) return;
     let cambio = false;
     const actualizadas = solicitudes.map(s => {
-      if ((s.personaId || s.persona_id) !== personaId) return s;
+      if (!esSolicitudDePersona(s, personaId)) return s;
       const completa = completarSolicitudActiva(s);
       if (completa !== s && JSON.stringify(completa.documentos || []) !== JSON.stringify(s.documentos || [])) {
         cambio = true;
@@ -3932,7 +3935,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   // Auto-poblar N/A en Ficha Rural para CSP rural (debe ir antes del return null)
   useEffect(() => {
     if (!persona) return;
-    const tieneRuralCsp = solicitudes.some(s => s.personaId === personaId && s.programaId === "csp_rural");
+    const tieneRuralCsp = solicitudes.some(s => esSolicitudDePersona(s, personaId) && solicitudProgramaId(s) === "csp_rural");
     if (!tieneRuralCsp) return;
     const updates = {};
     if (!persona.infPrevias) updates.infPrevias = "N/A";
@@ -3944,7 +3947,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!personaId || misSols.length === 0) return;
     let cambio = false;
     const actualizadas = solicitudes.map(s => {
-      if (s.personaId !== personaId) return s;
+      if (!esSolicitudDePersona(s, personaId)) return s;
       if (!Array.isArray(s.documentos) || s.documentos.length < 2) return s;
       const docs = asegurarCorreoSolicitante(s.documentos);
       if (docs === s.documentos) return s;
@@ -3954,7 +3957,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!cambio) return;
     onSaveSolicitudes(actualizadas);
     actualizadas
-      .filter(s => s.personaId === personaId)
+      .filter(s => esSolicitudDePersona(s, personaId))
       .forEach(s => {
         supabase.from("solicitudes").update({ documentos: s.documentos }).eq("id", s.id)
           .then(({ error }) => { if (error) console.warn("[correo solicitante]", error.message); });
@@ -4244,7 +4247,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const fsFiles = [...new Set([...fsNuevos, ...fsViejos])];
 
     (solicitudes || [])
-      .filter(s => s.personaId === personaId)
+      .filter(s => esSolicitudDePersona(s, personaId))
       .flatMap(s => s.documentos || [])
       .filter(d => d.archivo && (d.archivoData || d.storagePath))
       .forEach(d => {
@@ -4272,7 +4275,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return al.includes("avaluo") || al.includes("avalúo");
     });
     const actualizadas = solicitudes.map(s => {
-      if (s.personaId !== personaId || !Array.isArray(s.documentos)) return s;
+      if (!esSolicitudDePersona(s, personaId) || !Array.isArray(s.documentos)) return s;
       let cambio = false;
       const documentos = s.documentos.map(d => {
         const dn = (d.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -4460,7 +4463,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!borradoDePG) errores.push("No se pudo borrar de la base de datos");
     try {
       const actualizadas = solicitudes.map(s => {
-        if (s.personaId !== persona.id || !Array.isArray(s.documentos)) return s;
+        if (!esSolicitudDePersona(s, persona.id) || !Array.isArray(s.documentos)) return s;
         let cambio = false;
         const documentos = s.documentos
           .filter(d => {
@@ -4698,7 +4701,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     onSavePersonas(personas.map(p => p.id === persona.id ? p2 : p));
     let solicitudesBaseActualizadas = solicitudes;
     if (nombreNormalizado && nombreNormalizado !== persona.nombre) {
-      const solicitudesRenombradas = solicitudes.map(s => (s.personaId || s.persona_id) === persona.id ? { ...s, personaNombre: nombreNormalizado, persona_nombre: nombreNormalizado } : s);
+      const solicitudesRenombradas = solicitudes.map(s => esSolicitudDePersona(s, persona.id) ? { ...s, personaNombre: nombreNormalizado, persona_nombre: nombreNormalizado } : s);
       solicitudesBaseActualizadas = solicitudesRenombradas;
       onSaveSolicitudes(solicitudesRenombradas);
     }
@@ -8745,10 +8748,10 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     const nombres = comitesPersonaPorCedula(p);
     return nombres.length ? nombres.map(nombre => `Comité: ${nombre}`).join(" | ") : "SIN COMITE";
   };
-  const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => s.personaId === personaId && s.programaId === "habitabilidad");
-  const solicitudDesmarquePersona = (personaId) => solicitudes.find(s => s.personaId === personaId && s.programaId === "habitabilidad");
+  const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => esSolicitudDePersona(s, personaId) && solicitudProgramaId(s) === "habitabilidad");
+  const solicitudDesmarquePersona = (personaId) => solicitudes.find(s => esSolicitudDePersona(s, personaId) && solicitudProgramaId(s) === "habitabilidad");
   const estadoDesmarquePersona = (p) => {
-    const sol = solicitudes.find(s => s.personaId === p.id && s.programaId === "habitabilidad");
+    const sol = solicitudes.find(s => esSolicitudDePersona(s, p.id) && solicitudProgramaId(s) === "habitabilidad");
     const estado = estadoActualDesmarqueSolicitud(sol, p);
     return estado;
   };
@@ -8861,7 +8864,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
         const nuevasSols = [...solicitudes];
         for (const id of seleccionados) {
           const persona = personas.find(p2 => p2.id === id);
-          const yaExiste = solicitudes.find(s => s.personaId === id && s.programaId === prog.id);
+          const yaExiste = solicitudes.find(s => esSolicitudDePersona(s, id) && solicitudProgramaId(s) === prog.id);
           if (!yaExiste && persona) {
             const nuevaSol = {
               id: uid(), personaId: id, personaNombre: persona.nombre,
@@ -8959,7 +8962,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
       <div style={{ display: "grid", gap: 8 }}>
         {filtered.map(p => {
           const sel = seleccionados.includes(p.id);
-          const misSols = solicitudes.filter(s => s.personaId === p.id);
+          const misSols = solicitudes.filter(s => esSolicitudDePersona(s, p.id));
           const solHabitabilidad = solicitudDesmarquePersona(p.id);
           const estadoDesmarqueVisible = solHabitabilidad ? estadoActualDesmarqueSolicitud(solHabitabilidad, p) : null;
           return (
@@ -9421,7 +9424,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
       const idsPersona = miembros.map(p => p.id).filter(Boolean);
       if (!idsPersona.length) return;
       const pendientes = solicitudes
-        .filter(s => idsPersona.includes(s.personaId || s.persona_id) && s.documentosCargados !== true && !solicitudesCompletasComite[s.id])
+        .filter(s => idsPersona.map(String).includes(solicitudPersonaId(s)) && s.documentosCargados !== true && !solicitudesCompletasComite[s.id])
         .slice(0, 80);
       if (!pendientes.length) return;
       setCargandoDocsComite(true);
@@ -9670,7 +9673,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     setTimeout(() => win.print(), 300);
   };
 
-  const getSols = (id) => solicitudesVista.filter(s => (s.personaId || s.persona_id) === id);
+  const getSols = (id) => solicitudesVista.filter(s => esSolicitudDePersona(s, id));
   const getDocPct = (id) => {
     const sols = getSols(id);
     if (!sols.length) return null;
@@ -10525,7 +10528,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
           const completas = totalSols.filter(s => pct(s.documentos, s.programaId) === 100).length;
           const pctComite = miembros.length > 0
             ? Math.round(miembros.filter(p => {
-              const sols = solicitudes.filter(s => s.personaId === p.id);
+              const sols = solicitudes.filter(s => esSolicitudDePersona(s, p.id));
               return sols.length > 0 && sols.every(s => pct(s.documentos, s.programaId) === 100);
             }).length / miembros.length * 100)
             : 0;
@@ -11440,21 +11443,24 @@ export default function App() {
   };
 
   const cargarSolicitudesPorPartes = async () => {
-    // Intentar servidor Render con timeout generoso (puede estar despertando)
-    for (let intento = 0; intento < 3; intento++) {
-      if (intento > 0) await new Promise(r => setTimeout(r, 3000));
-      try {
+    const pageSizeRender = 100;
+    const solicitudesRender = [];
+    try {
+      for (let inicio = 0; ; inicio += pageSizeRender) {
+        const params = new URLSearchParams({ from: String(inicio), to: String(inicio + pageSizeRender - 1) });
         const res = await conTiempoMaximo(
-          fetch(API + "/api/solicitudes", { cache: "no-store" }),
-          25000,
-          "Tiempo agotado cargando solicitudes desde Render."
+          fetch(API + "/api/solicitudes?" + params.toString(), { cache: "no-store" }),
+          12000,
+          "Tiempo agotado cargando pagina de solicitudes desde Render."
         );
         const json = await res.json().catch(() => ({}));
-        if (res.ok && json.ok !== false) return json.solicitudes || [];
-        console.warn("[solicitudes render intento " + (intento+1) + "]", json.error || res.status);
-      } catch (err) {
-        console.warn("[solicitudes render intento " + (intento+1) + "]", err.message);
+        if (!res.ok || json.ok === false) throw new Error(json.error || `Render solicitudes ${res.status}`);
+        const pagina = json.solicitudes || [];
+        solicitudesRender.push(...pagina);
+        if (pagina.length < pageSizeRender) return solicitudesRender;
       }
+    } catch (err) {
+      console.warn("[solicitudes render paginado]", err.message);
     }
     const pageSize = 100;
     const todas = [];
@@ -11658,7 +11664,7 @@ export default function App() {
       // Si es comité desmarque → crear solicitud Habitabilidad automáticamente
       if (ultima.comiteId === "comite_desmarque") {
         const progHab = combinarProgramas(programasCustom).find(p => p.id === "habitabilidad");
-        const solExistente = solicitudes.find(s => s.personaId === ultima.id && s.programaId === "habitabilidad");
+        const solExistente = solicitudes.find(s => esSolicitudDePersona(s, ultima.id) && solicitudProgramaId(s) === "habitabilidad");
         if (progHab && !solExistente) {
           const nuevaSol = {
             id: uid(),
@@ -11871,7 +11877,7 @@ export default function App() {
         const porId = new Map((prev || []).map(sol => [sol.id, sol]));
         const idsActualizados = new Set(solicitudesConFechas.map(sol => sol.id));
         const otrasPersonas = (prev || []).filter(sol =>
-          (sol.personaId || sol.persona_id) !== personaId || idsActualizados.has(sol.id)
+          !esSolicitudDePersona(sol, personaId) || idsActualizados.has(sol.id)
         );
         const solicitudesPersona = solicitudesConFechas.map(sol => ({
           ...(porId.get(sol.id) || {}),

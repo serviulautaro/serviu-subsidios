@@ -74,7 +74,7 @@ function main() {
   ok("Linea de tiempo CSP se guarda en comites", contains(app, "linea_tiempo") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo\""));
   ok("Linea de tiempo CSP se guarda por solicitante", contains(app, "Línea de tiempo CSP del solicitante") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo_csp\""));
   ok("Linea de tiempo CSP persiste en Render PostgreSQL", contains(app, "/api/db/personas/update") && contains(app, "linea_tiempo_csp") && contains(app, "guardadoRender"));
-  ok("Carga principal usa Render antes de respaldo local", contains(app, "fetch(API + \"/api/bootstrap\"") && contains(app, "fetch(API + \"/api/solicitudes\"") && contains(app, "if (false && !silencioso && !datosBaseListos)"));
+  ok("Carga principal usa Render antes de respaldo local", contains(app, "fetch(API + \"/api/bootstrap\"") && contains(app, "fetch(API + \"/api/solicitudes") && contains(app, "if (false && !silencioso && !datosBaseListos)"));
   ok("Mensaje de carga no culpa Supabase como base principal", !contains(app, "No se pudieron cargar los datos desde Supabase") && !contains(app, "Supabase no responde. Se muestran datos"));
   ok("Linea de tiempo CSP usa etapas oficiales nuevas", contains(app, "Solicitud de documentos") && contains(app, "Calificación SERVIU") && contains(app, "Ejecución de las obras"));
   ok("Linea de tiempo CSP permite VB por reuniones", contains(app, "_reunion_") && contains(app, "/5 VB"));
@@ -102,6 +102,8 @@ function main() {
   ok("Programas base editados mantienen todos sus requisitos", contains(app, "completarDocumentosProgramaBase") && contains(app, "completarSolicitudActiva"));
   ok("Solicitudes activas muestran documentos completos sin filtro de indices", contains(app, "const solVistaBase = documentosVista === sol.documentos") && contains(app, "const solVista = aplicarEstadoDirectoDesmarqueSolicitud(solVistaBase)") && contains(app, "const docsVisibles = (solVista.documentos || []).filter((doc) => !doc.interno)") && !contains(app, "visibles.has(i) && !doc.interno"));
   ok("Solicitudes activas muestran solo requisitos oficiales del programa", contains(app, "incluirExtras: false") && contains(app, "informaciones_previas") && contains(app, "antecedentes_vivienda") && contains(app, "indiceDocumentoSolicitud") && contains(app, "candidatos[candidatos.length - 1]"));
+  ok("Solicitudes activas comparan persona_id y personaId de forma robusta", contains(app, "const esSolicitudDePersona") && contains(app, "const misSols = solicitudes.filter(s => esSolicitudDePersona(s, personaId));") && !contains(app, "const misSols = solicitudes.filter(s => s.personaId === personaId);"));
+  ok("Solicitudes Render cargan por paginas para evitar 504", contains(app, "pageSizeRender") && contains(app, "/api/solicitudes?") && contains(server, "paginado: tieneRango") && contains(server, "LIMIT $1 OFFSET $2"));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
 

@@ -419,8 +419,10 @@ async function pgSelect(table, query = {}) {
   return rows;
 }
 
-async function pgSelectSolicitudesListado() {
+async function pgSelectSolicitudesListado({ from = null, to = null } = {}) {
   const columnas = SOLICITUDES_SELECT_BASE.split(',').map(c => c.trim()).filter(Boolean);
+  const values = [];
+  const tieneRango = from !== null && to !== null && Number.isFinite(Number(from)) && Number.isFinite(Number(to));
   const sql = `
     SELECT ${columnas.map(quoteIdent).join(', ')},
       COALESCE((
@@ -428,8 +430,15 @@ async function pgSelectSolicitudesListado() {
         FROM jsonb_array_elements(COALESCE("documentos", '[]'::jsonb)) AS doc
       ), '[]'::jsonb) AS documentos
     FROM "solicitudes"
+    ORDER BY "fecha" DESC NULLS LAST, "id" ASC
+    ${tieneRango ? (() => {
+      const inicio = Math.max(0, Number(from));
+      const fin = Math.max(inicio, Number(to));
+      values.push(fin - inicio + 1, inicio);
+      return `LIMIT $1 OFFSET $2`;
+    })() : ''}
   `;
-  const { rows } = await requirePg().query(sql);
+  const { rows } = await requirePg().query(sql, values);
   return rows;
 }
 
@@ -496,9 +505,9 @@ async function pgDelete(table, filtros = []) {
   return rows;
 }
 
-async function cargarSolicitudesServidor() {
+async function cargarSolicitudesServidor(opts = {}) {
   if (pgPool) {
-    return pgSelectSolicitudesListado();
+    return pgSelectSolicitudesListado(opts);
   }
   const pageSize = 100;
   const todas = [];
@@ -641,9 +650,14 @@ app.get('/api/bootstrap', async (req, res) => {
 
 app.get('/api/solicitudes', async (req, res) => {
   try {
-    const solicitudes = await cargarSolicitudesServidor();
-    cacheSolicitudes = { solicitudes, actualizado: new Date().toISOString() };
-    res.json({ ok: true, ...cacheSolicitudes });
+    const tieneRango = req.query.from !== undefined && req.query.to !== undefined;
+    const solicitudes = await cargarSolicitudesServidor({
+      from: tieneRango ? req.query.from : null,
+      to: tieneRango ? req.query.to : null,
+    });
+    const payload = { solicitudes, actualizado: new Date().toISOString() };
+    if (!tieneRango) cacheSolicitudes = payload;
+    res.json({ ok: true, paginado: tieneRango, ...payload });
   } catch (e) {
     if (cacheSolicitudes) return res.json({ ok: true, cache: true, ...cacheSolicitudes });
     res.status(504).json({ ok: false, error: e.message });
