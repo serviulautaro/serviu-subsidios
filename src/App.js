@@ -3268,6 +3268,10 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const persona = personas.find(p => p.id === personaId);
   const carpetaVieja = persona ? carpetaNombre(persona.nombre, persona.rut) : "";
   const carpeta = persona ? carpetaPrograma(persona, solicitudes) : "";
+  const carpetasDocumentosPersona = (...extras) => [...new Set([carpeta, carpetaVieja, ...extras]
+    .filter(Boolean)
+    .map(c => String(c || "").trim())
+    .filter(Boolean))];
   const misSols = solicitudes.filter(s => esSolicitudDePersona(s, personaId));
   const completarSolicitudActiva = (sol = {}) => {
     const programaId = sol.programaId || sol.programa_id;
@@ -4209,8 +4213,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     // FUENTE PRINCIPAL: PostgreSQL via servidor Render
     // Trae nombre + carpeta de todos los archivos de esta persona
     let pgNames = [];
+    const carpetasRegistradas = new Set();
     try {
-      const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type&soloDisponibles=true`;
+      const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type,data_url`;
       const r = await fetch(urlPG);
       const json = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -4220,6 +4225,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         console.log('[cargarArchivos] PG:', filas.length, 'archivos — persona:', persona.id);
         filas.forEach(sf => {
           if (!sf.nombre) return;
+          if (sf.carpeta) carpetasRegistradas.add(sf.carpeta);
           pgNames.push(sf.nombre);
           rutasMap[sf.nombre] = sf.carpeta || carpeta;
           if (!datosMap[sf.nombre])
@@ -4228,6 +4234,10 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }
     } catch(e) { console.error("[cargarArchivos PG exception]", e.message); }
 
+    (solicitudes || [])
+      .filter(s => esSolicitudDePersona(s, personaId))
+      .flatMap(s => s.documentos || [])
+      .forEach(d => { if (d?.carpeta) carpetasRegistradas.add(d.carpeta); });
     // FUENTE SECUNDARIA: lista de archivos físicos en el servidor (repo git + recientes)
     const fetchLista = async (p) => {
       if (!p) return [];
@@ -4238,13 +4248,15 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         return Array.isArray(data) ? data : [];
       } catch { return []; }
     };
-    const [fsNuevos, fsViejos] = await Promise.all([
-      fetchLista(carpeta),
-      carpeta !== carpetaVieja ? fetchLista(carpetaVieja) : Promise.resolve([])
-    ]);
-    fsNuevos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpeta; });
-    fsViejos.forEach(f => { if (!rutasMap[f]) rutasMap[f] = carpetaVieja; });
-    const fsFiles = [...new Set([...fsNuevos, ...fsViejos])];
+    const carpetasBusqueda = carpetasDocumentosPersona(...Array.from(carpetasRegistradas));
+    const listasFs = await Promise.all(carpetasBusqueda.map(async carp => ({ carp, archivos: await fetchLista(carp) })));
+    const fsFiles = [];
+    listasFs.forEach(({ carp, archivos: lista }) => {
+      (lista || []).forEach(f => {
+        if (!fsFiles.includes(f)) fsFiles.push(f);
+        if (!rutasMap[f]) rutasMap[f] = carp;
+      });
+    });
 
     (solicitudes || [])
       .filter(s => esSolicitudDePersona(s, personaId))
@@ -4252,6 +4264,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       .filter(d => d.archivo && (d.archivoData || d.storagePath))
       .forEach(d => {
         if (!pgNames.includes(d.archivo)) pgNames.push(d.archivo);
+        if (d.carpeta) carpetasRegistradas.add(d.carpeta);
         rutasMap[d.archivo] = d.carpeta || rutasMap[d.archivo] || carpeta;
         datosMap[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "" };
       });
@@ -4340,7 +4353,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       const urlBD = `${API}/archivo-generado/${encodeURIComponent(persona.id)}/${encodeURIComponent(nombre)}`;
       if (await urlSirveDocumento(urlBD)) return urlBD;
     }
-    const rutasLocales = [...new Set([rutaLocal, carpeta, carpetaVieja].filter(Boolean))];
+    const rutasLocales = [...new Set([rutaLocal, ...carpetasDocumentosPersona(...Object.values(archivosRutas || {}))].filter(Boolean))];
     for (const ruta of rutasLocales) {
       const url = apiPath("/files/", ruta, nombre);
       if (await urlSirveDocumento(url)) return url;
