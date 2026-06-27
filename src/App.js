@@ -4261,7 +4261,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     (solicitudes || [])
       .filter(s => esSolicitudDePersona(s, personaId))
       .flatMap(s => s.documentos || [])
-      .filter(d => d.archivo && (d.archivoData || d.storagePath))
+      .filter(d => d.archivo)
       .forEach(d => {
         if (!pgNames.includes(d.archivo)) pgNames.push(d.archivo);
         if (d.carpeta) carpetasRegistradas.add(d.carpeta);
