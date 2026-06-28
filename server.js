@@ -430,7 +430,7 @@ async function pgSelectSolicitudesListado({ from = null, to = null } = {}) {
         FROM jsonb_array_elements(COALESCE("documentos", '[]'::jsonb)) AS doc
       ), '[]'::jsonb) AS documentos
     FROM "solicitudes"
-    ORDER BY "fecha" DESC NULLS LAST, "id" ASC
+    ORDER BY "id" ASC
     ${tieneRango ? (() => {
       const inicio = Math.max(0, Number(from));
       const fin = Math.max(inicio, Number(to));
