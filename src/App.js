@@ -142,24 +142,8 @@ const docCompletoEquivalente = (doc, docs = []) => {
   }
   return false;
 };
-const esDocConteoHabitabilidad = (doc = {}) => {
-  if (doc.interno) return false;
-  const n = docNombreNorm(doc);
-  if (n.includes("memo") || n.includes("carta") || n.includes("informe dom") || n.includes("respuesta serviu")) return false;
-  if (n.includes("calificacion") || n.includes("fecha de visita")) return false;
-  return n.includes("cedula") ||
-    n.includes("titulo") || n.includes("dominio") || n.includes("derecho real") || n.includes("usufructo") || n.includes("goce") ||
-    n.includes("avaluo") ||
-    (n.includes("correo") && n.includes("solicitante"));
-};
-const docsParaConteoSolicitud = (docs = [], programaId = "") => {
-  if (programaId === "habitabilidad") return (docs || []).filter(esDocConteoHabitabilidad);
-  return (docs || []).filter(d => {
-  if (d.interno) return false;
-  if (d.obligatorio === false) return false;
-  return true;
-  });
-};
+const docsParaConteoSolicitud = (docs = [], programaId = "") =>
+  (docs || []).filter(d => !d.interno);
 const conteoDocumentosSolicitud = (docs = [], programaId = "") => {
   const visibles = docsParaConteoSolicitud(docs, programaId);
   const completos = visibles.filter(d => docCompletoEquivalente(d, visibles)).length;
