@@ -959,6 +959,9 @@ const fusionarDocumentoPrograma = (actual = {}, docPrograma = {}, idx = 0) => ({
   requiereTexto: docPrograma.requiereTexto || false,
   etiquetaTexto: docPrograma.etiquetaTexto || actual.etiquetaTexto || "",
   subopciones: docPrograma.subopciones || actual.subopciones || null,
+  interno: false,
+  ocultoPorPrograma: false,
+  duplicadoFusionado: false,
 });
 
 const completarDocumentosProgramaBase = (documentosBase = [], documentosEditados = []) => {
@@ -1116,6 +1119,7 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null, opci
   const base = Array.isArray(documentos) ? documentos.map(d => ({ ...d })) : [];
   const usados = new Set();
   const retenidos = new Set();
+  const preservadosInternos = [];
   let cambio = false;
 
   (programa.documentos || []).forEach((docRaw, idx) => {
@@ -1147,7 +1151,12 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null, opci
       let fusionado = fusionarDocumentoPrograma(base[principalIdx], docProg, idx);
       candidatos
         .filter(i => i !== principalIdx)
-        .forEach(i => { fusionado = combinarDatosDocumentoSolicitud(fusionado, base[i]); });
+        .forEach(i => {
+          fusionado = combinarDatosDocumentoSolicitud(fusionado, base[i]);
+          if (opciones.conservarExtrasComoInternos) {
+            preservadosInternos.push(base[i]?.interno ? base[i] : { ...base[i], interno: true, ocultoPorPrograma: true, duplicadoFusionado: true });
+          }
+        });
       fusionado = sanitizarDocumentoPorTipo(fusionado);
       if (JSON.stringify(fusionado) !== JSON.stringify(base[principalIdx]) || candidatos.length > 1) cambio = true;
       base[principalIdx] = fusionado;
@@ -1161,8 +1170,13 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null, opci
     }
   });
 
-  const extras = incluirExtras ? base.filter((_, i) => !usados.has(i)) : base.filter((d, i) => !usados.has(i) && d?.interno);
-  const resultado = [...base.filter((_, i) => retenidos.has(i)), ...extras];
+  const extrasFueraPrograma = base.filter((_, i) => !usados.has(i));
+  const extras = incluirExtras
+    ? extrasFueraPrograma
+    : opciones.conservarExtrasComoInternos
+      ? extrasFueraPrograma.map(d => d?.interno ? d : { ...d, interno: true, ocultoPorPrograma: true })
+      : extrasFueraPrograma.filter(d => d?.interno);
+  const resultado = [...base.filter((_, i) => retenidos.has(i)), ...extras, ...preservadosInternos];
   return cambio || !incluirExtras ? resultado : documentos || [];
 };
 
@@ -11508,36 +11522,76 @@ export default function App() {
     const solicitudesBase = Array.isArray(solicitudesLista) ? solicitudesLista : [];
     const firma = [
       motivo,
-      personasNorm.map(p => `${p.id}:${p.comiteId || p.comite_id || ""}`).sort().join("|"),
-      solicitudesBase.map(s => `${solicitudPersonaId(s)}:${solicitudProgramaId(s)}`).sort().join("|"),
-      programasNorm.map(p => `${p.id}:${(p.documentos || []).length}`).sort().join("|"),
+      personasNorm.map(p => String(p.id) + ":" + String(p.comiteId || p.comite_id || "")).sort().join("|"),
+      solicitudesBase.map(s => String(solicitudPersonaId(s)) + ":" + String(solicitudProgramaId(s)) + ":" + String((s.documentos || []).filter(d => !d?.interno).length)).sort().join("|"),
+      programasNorm.map(p => String(p.id) + ":" + (p.documentos || []).map(d => d?.docKey || d?.nombre || "").join("~")).sort().join("|"),
     ].join("@@");
     if (persistir && reparacionSolicitudesActivasRef.current.ultimaFirma === firma) return solicitudesBase;
+
+    const solicitudesConDocsActualizados = [];
+    const solicitudesReparadas = solicitudesBase.map(s => {
+      const programaId = solicitudProgramaId(s);
+      const programa = programasNorm.find(p => p.id === programaId);
+      if (!programa || !Array.isArray(s.documentos) || s.documentosCargados === false) return s;
+      const documentos = completarDocumentosDesdePrograma(s.documentos || [], programa, {
+        incluirExtras: false,
+        conservarExtrasComoInternos: true,
+      });
+      if (JSON.stringify(documentos || []) === JSON.stringify(s.documentos || [])) return s;
+      const actualizada = { ...s, documentos, documentosCargados: true };
+      solicitudesConDocsActualizados.push(actualizada);
+      return actualizada;
+    });
 
     const faltantes = [];
     for (const persona of personasNorm) {
       const esperado = solicitudActivaEsperada(persona, programasNorm, comitesNorm);
       if (!esperado?.programa?.id) continue;
       const programaId = esperado.programa.id;
-      const yaExistePrograma = solicitudesBase.some(s => esSolicitudDePersona(s, persona.id) && solicitudProgramaId(s) === programaId);
+      const yaExistePrograma = solicitudesReparadas.some(s => esSolicitudDePersona(s, persona.id) && solicitudProgramaId(s) === programaId);
       if (yaExistePrograma) continue;
-      const normalExistente = solicitudesBase.some(s => esSolicitudDePersona(s, persona.id) && solicitudProgramaId(s) && solicitudProgramaId(s) !== "habitabilidad");
+      const normalExistente = solicitudesReparadas.some(s => esSolicitudDePersona(s, persona.id) && solicitudProgramaId(s) && solicitudProgramaId(s) !== "habitabilidad");
       if (programaId !== "habitabilidad" && normalExistente) continue;
       const nueva = construirSolicitudActivaFaltante(persona, esperado);
       if (nueva) faltantes.push(nueva);
     }
-    if (!faltantes.length) {
+    if (!faltantes.length && !solicitudesConDocsActualizados.length) {
       if (persistir) reparacionSolicitudesActivasRef.current.ultimaFirma = firma;
       return solicitudesBase;
     }
 
     reparacionSolicitudesActivasRef.current.ejecutando = true;
     const insertadas = [];
+    const docsPersistidos = [];
     try {
+      for (const actualizada of solicitudesConDocsActualizados) {
+        if (persistir) {
+          try {
+            const res = await fetch(API + "/api/db/solicitudes/update", {
+              method: "POST",
+              headers: jsonHeaders(),
+              body: JSON.stringify({
+                filters: [{ col: "id", value: actualizada.id }],
+                values: { documentos: actualizada.documentos },
+              }),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || json.ok === false) {
+              console.warn("[reparar documentos solicitudes activas]", actualizada.id, json.error || res.status);
+              continue;
+            }
+          } catch (e) {
+            console.warn("[reparar documentos solicitudes activas fetch]", e.message);
+            continue;
+          }
+        }
+        docsPersistidos.push(actualizada);
+      }
+
       for (const nueva of faltantes) {
         if (persistir) {
           try {
-            const res = await fetch(`${API}/api/db/solicitudes/insert`, {
+            const res = await fetch(API + "/api/db/solicitudes/insert", {
               method: "POST",
               headers: jsonHeaders(),
               body: JSON.stringify([payloadSolicitudDb(nueva)]),
@@ -11557,19 +11611,23 @@ export default function App() {
     } finally {
       reparacionSolicitudesActivasRef.current.ejecutando = false;
     }
-    if (!insertadas.length) return solicitudesBase;
+    if (!insertadas.length && !docsPersistidos.length) return solicitudesBase;
     reparacionSolicitudesActivasRef.current.ultimaFirma = "";
-    const actualizadas = [...solicitudesBase, ...insertadas];
+    const docsPorId = new Map(docsPersistidos.map(s => [s.id, s]));
+    const baseConDocs = solicitudesBase.map(s => docsPorId.get(s.id) || s);
+    const actualizadas = [...baseConDocs, ...insertadas];
     if (persistir) {
       setSolicitudes(prev => {
         const ids = new Set((prev || []).map(s => s.id));
+        const conDocs = (prev || []).map(s => docsPorId.get(s.id) || s);
         const nuevas = insertadas.filter(s => !ids.has(s.id));
-        return nuevas.length ? [...(prev || []), ...nuevas] : prev;
+        return docsPersistidos.length || nuevas.length ? [...conDocs, ...nuevas] : prev;
       });
-      await registrarAuditoria("crear_solicitud_automatica", "solicitudes", "reparacion_solicitudes_activas", {
-        cantidad: insertadas.length,
+      await registrarAuditoria("reparar_requisitos_solicitudes_activas", "solicitudes", "reparacion_solicitudes_activas", {
+        documentos_actualizados: docsPersistidos.length,
+        solicitudes_creadas: insertadas.length,
         motivo,
-        programas: [...new Set(insertadas.map(s => s.programaId))].join(", "),
+        programas: [...new Set([...docsPersistidos.map(s => solicitudProgramaId(s)), ...insertadas.map(s => s.programaId)])].join(", "),
       });
     }
     return actualizadas;
