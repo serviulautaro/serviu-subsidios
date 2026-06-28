@@ -1137,7 +1137,7 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null, opci
       const matchDirecto = (dKey && dKey === docKey) ||
         (nombreKey && dNombre === nombreKey) ||
         (nombreOriginalKey && (dNombre === nombreOriginalKey || dOriginal === nombreOriginalKey));
-      if ((matchDirecto && compatible) || compatible) {
+      if (matchDirecto || compatible) {
         agregarCandidato(i);
       }
     });
