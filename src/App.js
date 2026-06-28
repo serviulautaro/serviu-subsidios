@@ -11568,7 +11568,7 @@ export default function App() {
         if (persistir) {
           try {
             const res = await fetch(API + "/api/db/solicitudes/update", {
-              method: "POST",
+              method: "PATCH",
               headers: jsonHeaders(),
               body: JSON.stringify({
                 filters: [{ col: "id", value: actualizada.id }],
