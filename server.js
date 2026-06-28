@@ -1732,8 +1732,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('Servidor SERVIU corriendo en puerto ' + PORT);
   console.log('Base de datos: ' + (pgPool ? 'PostgreSQL Render' : 'serviu.db local'));
   console.log('Acceso en red: http://' + ip + ':' + PORT);
-  // Migrar archivos del repositorio git a PostgreSQL (archivos históricos)
-  setTimeout(() => migrarArchivosGitAPG().catch(e => console.warn('[migrar-git startup]', e.message)), 3000);
-  // Migrar archivos de Supabase Storage a PostgreSQL
-  setTimeout(() => migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar-supa startup]', e.message)), 8000);
+  if (process.env.RUN_DOC_MIGRATIONS_ON_STARTUP === 'true') {
+    // Migraciones pesadas: ejecutar solo bajo demanda para no saturar Render/PostgreSQL.
+    setTimeout(() => migrarArchivosGitAPG().catch(e => console.warn('[migrar-git startup]', e.message)), 3000);
+    setTimeout(() => migrarArchivosSuapabaseAPG().catch(e => console.warn('[migrar-supa startup]', e.message)), 8000);
+  }
 });

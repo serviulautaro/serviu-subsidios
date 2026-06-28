@@ -112,6 +112,7 @@ function main() {
   ok("CSP Rural se normaliza a requisitos oficiales en solicitudes", contains(app, "REQUISITOS_CSP_RURAL_OFICIALES") && contains(app, "normalizarProgramaBaseParaSolicitudes") && contains(app, "completarDocumentosProgramaBase(REQUISITOS_CSP_RURAL_OFICIALES"));
   ok("Solicitudes Render cargan por paginas para evitar 504", contains(app, "pageSizeRender") && contains(app, "/api/solicitudes?") && contains(server, "paginado: tieneRango") && contains(server, "LIMIT $1 OFFSET $2"));
   ok("Solicitudes paginadas evitan ordenamiento pesado por fecha", contains(server, "WITH pagina AS") && contains(server, "FROM pagina") && contains(server, "ORDER BY \"id\" ASC") && !contains(server, "ORDER BY \"fecha\" DESC NULLS LAST, \"id\" ASC"));
+  ok("Migraciones de documentos no corren automaticamente en startup", contains(server, "RUN_DOC_MIGRATIONS_ON_STARTUP") && contains(server, "Migraciones pesadas: ejecutar solo bajo demanda"));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
 
