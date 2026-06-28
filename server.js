@@ -423,20 +423,26 @@ async function pgSelectSolicitudesListado({ from = null, to = null } = {}) {
   const columnas = SOLICITUDES_SELECT_BASE.split(',').map(c => c.trim()).filter(Boolean);
   const values = [];
   const tieneRango = from !== null && to !== null && Number.isFinite(Number(from)) && Number.isFinite(Number(to));
+  const rangoSql = tieneRango ? (() => {
+    const inicio = Math.max(0, Number(from));
+    const fin = Math.max(inicio, Number(to));
+    values.push(fin - inicio + 1, inicio);
+    return `LIMIT $1 OFFSET $2`;
+  })() : '';
   const sql = `
+    WITH pagina AS (
+      SELECT ${[...columnas, 'documentos'].map(quoteIdent).join(', ')}
+      FROM "solicitudes"
+      ORDER BY "id" ASC
+      ${rangoSql}
+    )
     SELECT ${columnas.map(quoteIdent).join(', ')},
       COALESCE((
         SELECT jsonb_agg(doc - 'archivoData' - 'data' - 'base64' - 'contenido' - 'buffer')
-        FROM jsonb_array_elements(COALESCE("documentos", '[]'::jsonb)) AS doc
+        FROM jsonb_array_elements(COALESCE(pagina."documentos", '[]'::jsonb)) AS doc
       ), '[]'::jsonb) AS documentos
-    FROM "solicitudes"
+    FROM pagina
     ORDER BY "id" ASC
-    ${tieneRango ? (() => {
-      const inicio = Math.max(0, Number(from));
-      const fin = Math.max(inicio, Number(to));
-      values.push(fin - inicio + 1, inicio);
-      return `LIMIT $1 OFFSET $2`;
-    })() : ''}
   `;
   const { rows } = await requirePg().query(sql, values);
   return rows;
