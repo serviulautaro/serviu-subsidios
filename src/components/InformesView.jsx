@@ -290,13 +290,31 @@ function estadisticasDocs(sols) {
   return { total, completos, faltanObligatorios, opcionalesPendientes };
 }
 
-function solicitudesActivasPersona(persona, solicitudes = [], personas = []) {
-  return solPersonasRelacionadas(persona, solicitudes, personas).filter(sol => docsSolicitud(sol).some(doc => !doc?.interno));
+function solicitudCorrespondeAComite(sol, comite) {
+  if (!comite) return true;
+  const programa = programaComite(comite);
+  if (programa && programaId(sol) !== programa) return false;
+
+  const refs = [comite?.codigo, comite?.id].filter(Boolean).map(String);
+  const codigo = String(sol?.codigoComite || sol?.codigo_comite || "");
+  if (codigo) return refs.includes(codigo);
+
+  const nombreComite = norm(comite?.nombre);
+  const nombreSol = norm(sol?.comite);
+  if (nombreSol) return nombreComite && nombreSol === nombreComite;
+
+  return true;
 }
 
-function resumenDocumentosRevision(persona, solicitudes = [], personas = []) {
+function solicitudesActivasPersona(persona, solicitudes = [], personas = [], comite = null) {
+  return solPersonasRelacionadas(persona, solicitudes, personas)
+    .filter(sol => solicitudCorrespondeAComite(sol, comite))
+    .filter(sol => docsSolicitud(sol).some(doc => !doc?.interno));
+}
+
+function resumenDocumentosRevision(persona, solicitudes = [], personas = [], comite = null) {
   const pendientes = new Map();
-  solicitudesActivasPersona(persona, solicitudes, personas).forEach(sol => {
+  solicitudesActivasPersona(persona, solicitudes, personas, comite).forEach(sol => {
     const docs = docsSolicitud(sol);
     docsSolicitud(sol).filter(doc => !doc?.interno).forEach(doc => {
       if (doc?.entregado || doc?.vb) return;
@@ -334,7 +352,7 @@ function informeRevisionSolicitantesHtml(comitesSeleccionados, personas, solicit
   return (comitesSeleccionados || []).map(comite => {
     const miembros = miembrosComite(comite, personas, solicitudes);
     const filas = miembros.map((p, i) => {
-      const pendientes = resumenDocumentosRevision(p, solicitudes, personas);
+      const pendientes = resumenDocumentosRevision(p, solicitudes, personas, comite);
       const condicion = descripcionCondicional(p);
       const proximo = proximoPasoRevision(pendientes, condicion);
       return `<tr>
