@@ -295,21 +295,21 @@ function solicitudesActivasPersona(persona, solicitudes = [], personas = []) {
 }
 
 function resumenDocumentosRevision(persona, solicitudes = [], personas = []) {
-  const pendientes = [];
+  const pendientes = new Map();
   solicitudesActivasPersona(persona, solicitudes, personas).forEach(sol => {
-    const programa = programaNombre(programaId(sol));
+    const docs = docsSolicitud(sol);
     docsSolicitud(sol).filter(doc => !doc?.interno).forEach(doc => {
-      const nombre = doc?.nombre || "Documento sin nombre";
-      const opcional = doc?.obligatorio === false ? " (opcional)" : "";
-      const contexto = `${programa}: ${nombre}${opcional}`;
-      if (!documentoCompleto({ ...doc, _docsContext: docsSolicitud(sol) })) {
-        pendientes.push(`Falta ${contexto}`);
-      } else if (!doc?.vb) {
-        pendientes.push(`Sin VB ${contexto}`);
+      if (doc?.vb) return;
+      const nombre = (doc?.nombre || "Documento sin nombre").toString().trim().toUpperCase();
+      if (!nombre) return;
+      const falta = !documentoCompleto({ ...doc, _docsContext: docs });
+      const anterior = pendientes.get(nombre);
+      if (!anterior || falta) {
+        pendientes.set(nombre, { nombre, falta });
       }
     });
   });
-  return pendientes;
+  return [...pendientes.values()];
 }
 
 function descripcionCondicional(persona = {}) {
@@ -325,8 +325,8 @@ function descripcionCondicional(persona = {}) {
 
 function proximoPasoRevision(pendientes = [], condicion = "") {
   if (condicion) return `Resolver condicion: ${condicion}`;
-  if (pendientes.some(p => /^Falta /i.test(p))) return "Solicitar o cargar documentos faltantes";
-  if (pendientes.some(p => /^Sin VB /i.test(p))) return "Revisar documentos y marcar VB";
+  if (pendientes.some(p => p.falta)) return "Solicitar o cargar documentos faltantes";
+  if (pendientes.length) return "Revisar documentos y marcar VB";
   return "Sin pendientes";
 }
 
@@ -345,7 +345,7 @@ function informeRevisionSolicitantesHtml(comitesSeleccionados, personas, solicit
         <td>${v(p.direccion)}</td>
         <td>${v(p.coordenadas)}</td>
         <td>${v(proximo)}</td>
-        <td>${pendientes.length ? pendientes.map(item => v(item)).join("<br>") : "Sin documentos pendientes"}</td>
+        <td>${pendientes.length ? pendientes.map(item => v(item.nombre)).join(", ") : "Sin documentos pendientes"}</td>
         <td>${condicion ? `CONDICIONAL: ${v(condicion)}` : "No"}</td>
       </tr>`;
     }).join("");
@@ -353,7 +353,7 @@ function informeRevisionSolicitantesHtml(comitesSeleccionados, personas, solicit
       <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>INFORME PARA REVISAR SOLICITANTES</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div>
       <div class="bar"><span>${v(comite.nombre)}</span><span>${miembros.length} integrantes</span></div>
       <div class="section"><h2>Integrantes</h2>
-        <table class="tabla-revision"><thead><tr><th>#</th><th>Nombre</th><th>Cedula</th><th>Telefono</th><th>Direccion</th><th>Coordenadas</th><th>Proximo paso</th><th>Documentos faltantes o sin VB</th><th>Solicitante condicional</th></tr></thead><tbody>${filas}</tbody></table>
+        <table class="tabla-revision"><thead><tr><th>#</th><th>Nombre</th><th>Cedula</th><th>Telefono</th><th>Direccion</th><th>Coordenadas</th><th>Proximo paso</th><th>Documentos sin VB</th><th>Solicitante condicional</th></tr></thead><tbody>${filas}</tbody></table>
       </div>
     </div>`;
   }).join("");
