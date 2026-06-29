@@ -299,7 +299,7 @@ function resumenDocumentosRevision(persona, solicitudes = [], personas = []) {
   solicitudesActivasPersona(persona, solicitudes, personas).forEach(sol => {
     const docs = docsSolicitud(sol);
     docsSolicitud(sol).filter(doc => !doc?.interno).forEach(doc => {
-      if (doc?.vb) return;
+      if (doc?.entregado || doc?.vb) return;
       const nombre = (doc?.nombre || "Documento sin nombre").toString().trim().toUpperCase();
       if (!nombre) return;
       const falta = !documentoCompleto({ ...doc, _docsContext: docs });
