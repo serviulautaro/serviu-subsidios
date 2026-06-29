@@ -1028,12 +1028,30 @@ function PanelInformePrograma({ programa, comites, personas, solicitudes }) {
 
 function PanelRevisionSolicitantes({ comites, personas, solicitudes }) {
   const [comiteId, setComiteId] = useState("todos");
+  const [generando, setGenerando] = useState(false);
   const seleccionados = comiteId === "todos" ? comites : comites.filter(c => (c.id || c.codigo) === comiteId || c.codigo === comiteId);
   const totalPersonas = seleccionados.reduce((acc, c) => acc + miembrosComite(c, personas, solicitudes).length, 0);
 
-  const imprimir = () => {
+  const imprimir = async () => {
     if (!seleccionados.length) return;
-    imprimirVentana("INFORME PARA REVISAR SOLICITANTES", informeRevisionSolicitantesHtml(seleccionados, personas, solicitudes));
+    setGenerando(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/db/solicitudes?select=*`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      const completas = res.ok && json.ok !== false && Array.isArray(json.data) ? json.data.map(s => ({
+        ...s,
+        personaId: s.persona_id,
+        programaId: s.programa_id,
+        codigoComite: s.codigo_comite,
+        tipoComite: s.tipo_comite,
+      })) : solicitudes;
+      imprimirVentana("INFORME PARA REVISAR SOLICITANTES", informeRevisionSolicitantesHtml(seleccionados, personas, completas));
+    } catch (err) {
+      console.warn("[informe revision] No se pudieron recargar solicitudes completas:", err?.message || err);
+      imprimirVentana("INFORME PARA REVISAR SOLICITANTES", informeRevisionSolicitantesHtml(seleccionados, personas, solicitudes));
+    } finally {
+      setGenerando(false);
+    }
   };
 
   return <div>
@@ -1044,8 +1062,8 @@ function PanelRevisionSolicitantes({ comites, personas, solicitudes }) {
     </select>
     <div style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>{seleccionados.length} comites seleccionados - {totalPersonas} solicitantes en total</div>
 
-    <button onClick={imprimir} disabled={!seleccionados.length} style={{ width: "100%", marginTop: 18, padding: "14px 18px", border: "none", borderRadius: 8, background: seleccionados.length ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: seleccionados.length ? "pointer" : "not-allowed" }}>
-      Generar INFORME PARA REVISAR SOLICITANTES
+    <button onClick={imprimir} disabled={!seleccionados.length || generando} style={{ width: "100%", marginTop: 18, padding: "14px 18px", border: "none", borderRadius: 8, background: seleccionados.length && !generando ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: seleccionados.length && !generando ? "pointer" : "not-allowed" }}>
+      {generando ? "Generando informe..." : "Generar INFORME PARA REVISAR SOLICITANTES"}
     </button>
   </div>;
 }
