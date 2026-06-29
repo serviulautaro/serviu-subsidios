@@ -290,6 +290,75 @@ function estadisticasDocs(sols) {
   return { total, completos, faltanObligatorios, opcionalesPendientes };
 }
 
+function solicitudesActivasPersona(persona, solicitudes = [], personas = []) {
+  return solPersonasRelacionadas(persona, solicitudes, personas).filter(sol => docsSolicitud(sol).some(doc => !doc?.interno));
+}
+
+function resumenDocumentosRevision(persona, solicitudes = [], personas = []) {
+  const pendientes = [];
+  solicitudesActivasPersona(persona, solicitudes, personas).forEach(sol => {
+    const programa = programaNombre(programaId(sol));
+    docsSolicitud(sol).filter(doc => !doc?.interno).forEach(doc => {
+      const nombre = doc?.nombre || "Documento sin nombre";
+      const opcional = doc?.obligatorio === false ? " (opcional)" : "";
+      const contexto = `${programa}: ${nombre}${opcional}`;
+      if (!documentoCompleto({ ...doc, _docsContext: docsSolicitud(sol) })) {
+        pendientes.push(`Falta ${contexto}`);
+      } else if (!doc?.vb) {
+        pendientes.push(`Sin VB ${contexto}`);
+      }
+    });
+  });
+  return pendientes;
+}
+
+function descripcionCondicional(persona = {}) {
+  const lineas = String(persona.observaciones || "")
+    .split(/\n+/)
+    .map(linea => linea.trim())
+    .filter(Boolean);
+  const activas = lineas.filter(linea => /\[CONDICIONAL ACTIVA\]/i.test(linea));
+  const ultima = activas[activas.length - 1] || "";
+  if (!ultima) return "";
+  return ultima.replace(/\[CONDICIONAL ACTIVA\]/ig, "").replace(/^[-:\s]+/, "").trim() || "Condicional activa sin detalle registrado";
+}
+
+function proximoPasoRevision(pendientes = [], condicion = "") {
+  if (condicion) return `Resolver condicion: ${condicion}`;
+  if (pendientes.some(p => /^Falta /i.test(p))) return "Solicitar o cargar documentos faltantes";
+  if (pendientes.some(p => /^Sin VB /i.test(p))) return "Revisar documentos y marcar VB";
+  return "Sin pendientes";
+}
+
+function informeRevisionSolicitantesHtml(comitesSeleccionados, personas, solicitudes) {
+  return (comitesSeleccionados || []).map(comite => {
+    const miembros = miembrosComite(comite, personas, solicitudes);
+    const filas = miembros.map((p, i) => {
+      const pendientes = resumenDocumentosRevision(p, solicitudes, personas);
+      const condicion = descripcionCondicional(p);
+      const proximo = proximoPasoRevision(pendientes, condicion);
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${v(p.nombre)}</td>
+        <td>${v(p.rut)}</td>
+        <td>${v(p.telefono)}</td>
+        <td>${v(p.direccion)}</td>
+        <td>${v(p.coordenadas)}</td>
+        <td>${v(proximo)}</td>
+        <td>${pendientes.length ? pendientes.map(item => v(item)).join("<br>") : "Sin documentos pendientes"}</td>
+        <td>${condicion ? `CONDICIONAL: ${v(condicion)}` : "No"}</td>
+      </tr>`;
+    }).join("");
+    return `<div class="page">
+      <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>INFORME PARA REVISAR SOLICITANTES</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div>
+      <div class="bar"><span>${v(comite.nombre)}</span><span>${miembros.length} integrantes</span></div>
+      <div class="section"><h2>Integrantes</h2>
+        <table class="tabla-revision"><thead><tr><th>#</th><th>Nombre</th><th>Cedula</th><th>Telefono</th><th>Direccion</th><th>Coordenadas</th><th>Proximo paso</th><th>Documentos faltantes o sin VB</th><th>Solicitante condicional</th></tr></thead><tbody>${filas}</tbody></table>
+      </div>
+    </div>`;
+  }).join("");
+}
+
 function imprimirVentana(titulo, html) {
   const w = window.open("", "_blank");
   if (!w) return;
@@ -957,6 +1026,30 @@ function PanelInformePrograma({ programa, comites, personas, solicitudes }) {
   </div>;
 }
 
+function PanelRevisionSolicitantes({ comites, personas, solicitudes }) {
+  const [comiteId, setComiteId] = useState("todos");
+  const seleccionados = comiteId === "todos" ? comites : comites.filter(c => (c.id || c.codigo) === comiteId || c.codigo === comiteId);
+  const totalPersonas = seleccionados.reduce((acc, c) => acc + miembrosComite(c, personas, solicitudes).length, 0);
+
+  const imprimir = () => {
+    if (!seleccionados.length) return;
+    imprimirVentana("INFORME PARA REVISAR SOLICITANTES", informeRevisionSolicitantesHtml(seleccionados, personas, solicitudes));
+  };
+
+  return <div>
+    <div style={{ fontSize: 13, fontWeight: 800, color: "#1f2937", marginBottom: 8 }}>Comite a revisar</div>
+    <select value={comiteId} onChange={e => setComiteId(e.target.value)} style={{ width: "100%", padding: 10, border: "1px solid #0f766e", borderRadius: 8, fontSize: 14 }}>
+      <option value="todos">Todos los comites ({comites.length})</option>
+      {comites.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre} ({miembrosComite(c, personas, solicitudes).length})</option>)}
+    </select>
+    <div style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>{seleccionados.length} comites seleccionados - {totalPersonas} solicitantes en total</div>
+
+    <button onClick={imprimir} disabled={!seleccionados.length} style={{ width: "100%", marginTop: 18, padding: "14px 18px", border: "none", borderRadius: 8, background: seleccionados.length ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: seleccionados.length ? "pointer" : "not-allowed" }}>
+      Generar INFORME PARA REVISAR SOLICITANTES
+    </button>
+  </div>;
+}
+
 function PanelIndividual({ personas, solicitudes, comites, onSavePersonas }) {
   const [busqueda, setBusqueda] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
@@ -1242,6 +1335,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
   const comites = useMemo(() => filtrarComitesValidos(mergeComites(comitesSupa)), [comitesSupa]);
   const programas = useMemo(() => combinarProgramasMeta(programasCustom), [programasCustom]);
   const tarjetas = useMemo(() => ([
+    { id: "revision", nombre: "INFORME PARA REVISAR SOLICITANTES", descripcion: "Revisa comites, pendientes, VB y condicionales", color: "#0f766e", colorLight: "#ccfbf1", icon: "RS" },
     { id: "individual", nombre: "Informe Individual", descripcion: "Informe por persona o por solicitantes de un comite", color: "#2563eb", colorLight: "#eff6ff", icon: "👤" },
     { id: "completo", nombre: "Informe Completo del Comité", descripcion: "Informe general o detallado de un comité", color: "#7c3aed", colorLight: "#f5f3ff", icon: "📋" },
     ...programas,
@@ -1278,6 +1372,10 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
 
       {vistaActiva === "individual" && <Section title="Informe Individual del Solicitante" subtitle="Selecciona uno o mas solicitantes, o agrega todos los solicitantes de un comite" color="#2563eb">
         <PanelIndividual personas={personas} solicitudes={solicitudes} comites={comites} onSavePersonas={onSavePersonas} />
+      </Section>}
+
+      {vistaActiva === "revision" && <Section title="INFORME PARA REVISAR SOLICITANTES" subtitle="Todos los comites juntos o el comite seleccionado, con documentos faltantes, VB y condicionales" color="#0f766e">
+        <PanelRevisionSolicitantes comites={comites} personas={personas} solicitudes={solicitudes} />
       </Section>}
 
       {programaActivo && <Section title={`Informes - ${programaActivo.nombre}`} subtitle="Selecciona comite, contenido del informe o informe detallado por solicitante" color={programaActivo.color || "#2563eb"}>
