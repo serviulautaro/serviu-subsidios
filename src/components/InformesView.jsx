@@ -172,15 +172,26 @@ function filtrarComitesValidos(lista = []) {
   });
 }
 
-function personaEnComite(persona, comite) {
-  return persona?.comiteId === comite.codigo ||
+function personaEnComite(persona, comite, solicitudes = []) {
+  if (persona?.comiteId === comite.codigo ||
     persona?.comiteId === comite.id ||
-    norm(persona?.comite) === norm(comite.nombre);
+    norm(persona?.comite) === norm(comite.nombre)) {
+    return true;
+  }
+
+  const refs = [comite?.codigo, comite?.id].filter(Boolean).map(String);
+  const nombreComite = norm(comite?.nombre);
+  return (solicitudes || []).some(sol => {
+    if ((sol?.personaId || sol?.persona_id) !== persona?.id) return false;
+    const codigo = String(sol?.codigoComite || sol?.codigo_comite || "");
+    if (codigo && refs.includes(codigo)) return true;
+    return nombreComite && norm(sol?.comite) === nombreComite;
+  });
 }
 
-function miembrosComite(comite, personas) {
+function miembrosComite(comite, personas, solicitudes = []) {
   return (personas || [])
-    .filter(p => personaEnComite(p, comite))
+    .filter(p => personaEnComite(p, comite, solicitudes))
     .sort((a, b) => norm(a?.nombre).localeCompare(norm(b?.nombre), "es"));
 }
 
@@ -789,7 +800,7 @@ function imprimirIndividualMultiple(seleccionados, solicitudes, personas, comite
 
 async function imprimirDetalleComite(comite, personas, solicitudes, comites) {
   if (!comite) return;
-  const miembros = miembrosComite(comite, personas);
+  const miembros = miembrosComite(comite, personas, solicitudes);
   if (!miembros.length) {
     imprimirVentana("Informe detallado del comité", `<div class="page"><div class="muted">Sin solicitantes registrados.</div></div>`);
     return;
@@ -823,7 +834,7 @@ async function imprimirDetalleComite(comite, personas, solicitudes, comites) {
 
 function imprimirComite(comite, personas, solicitudes) {
   if (!comite) return;
-  const miembros = miembrosComite(comite, personas);
+  const miembros = miembrosComite(comite, personas, solicitudes);
   const filas = miembros.map((p, i) => {
     const stats = estadisticasDocs(solPersonasRelacionadas(p, solicitudes, personas));
     return `<tr><td>${i + 1}</td><td>${v(p.nombre)}</td><td>${v(p.rut)}</td><td>${v(p.telefono)}</td><td>${v(p.direccion)}</td><td>${v(p.coordenadas)}</td><td>${stats.completos}/${stats.total}</td></tr>`;
@@ -848,15 +859,15 @@ function PanelOpcionesCsp({ tipo, comites, personas, solicitudes, color }) {
   const [comiteId, setComiteId] = useState("todos");
   const [contenido, setContenido] = useState("solo");
   const seleccionados = comiteId === "todos" ? lista : lista.filter(c => (c.id || c.codigo) === comiteId || c.codigo === comiteId);
-  const totalPersonas = seleccionados.reduce((acc, c) => acc + miembrosComite(c, personas).length, 0);
+  const totalPersonas = seleccionados.reduce((acc, c) => acc + miembrosComite(c, personas, solicitudes).length, 0);
   const pluralTipo = tipo === "Rural" ? "rurales" : "urbanos";
 
   const imprimir = () => {
     const html = seleccionados.map(c => {
       if (contenido === "solo") {
-        return `<div class="page"><div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe CSP ${tipo}</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div><div class="bar"><span>${v(c.nombre)}</span><span>${tipo}</span></div><div class="grid">${campoHtml("Constructora", c.constructora)}${campoHtml("Profesional", c.profesional)}${campoHtml("Familias", c.familias || miembrosComite(c, personas).length)}${campoHtml("Personalidad juridica", c.pj)}</div></div>`;
+        return `<div class="page"><div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe CSP ${tipo}</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div><div class="bar"><span>${v(c.nombre)}</span><span>${tipo}</span></div><div class="grid">${campoHtml("Constructora", c.constructora)}${campoHtml("Profesional", c.profesional)}${campoHtml("Familias", c.familias || miembrosComite(c, personas, solicitudes).length)}${campoHtml("Personalidad juridica", c.pj)}</div></div>`;
       }
-      const miembros = miembrosComite(c, personas);
+      const miembros = miembrosComite(c, personas, solicitudes);
       const filas = miembros.map((p, i) => `<tr><td>${i + 1}</td><td>${v(p.nombre)}</td><td>${v(p.rut)}</td><td>${v(p.telefono)}</td><td>${v(p.direccion)}</td></tr>`).join("");
       return `<div class="page"><div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe CSP ${tipo}</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div><div class="bar"><span>${v(c.nombre)}</span><span>${miembros.length} integrantes</span></div><div class="grid">${campoHtml("Constructora", c.constructora)}${campoHtml("Profesional", c.profesional)}${campoHtml("Familias", c.familias || miembros.length)}${campoHtml("Personalidad juridica", c.pj)}</div><div class="section"><h2>Integrantes</h2><table><thead><tr><th>#</th><th>Nombre</th><th>Cédula</th><th>Teléfono</th><th>Dirección</th></tr></thead><tbody>${filas}</tbody></table></div></div>`;
     }).join("");
@@ -890,12 +901,12 @@ function PanelInformePrograma({ programa, comites, personas, solicitudes }) {
   const [contenido, setContenido] = useState("solo");
   const [detalleId, setDetalleId] = useState("");
   const seleccionados = comiteId === "todos" ? lista : lista.filter(c => (c.id || c.codigo) === comiteId || c.codigo === comiteId);
-  const totalPersonas = seleccionados.reduce((acc, c) => acc + miembrosComite(c, personas).length, 0);
+  const totalPersonas = seleccionados.reduce((acc, c) => acc + miembrosComite(c, personas, solicitudes).length, 0);
   const comiteDetalle = lista.find(c => (c.id || c.codigo) === detalleId || c.codigo === detalleId) || null;
 
   const imprimir = () => {
     const html = seleccionados.map(c => {
-      const miembros = miembrosComite(c, personas);
+      const miembros = miembrosComite(c, personas, solicitudes);
       if (contenido === "solo") {
         return `<div class="page"><div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe ${v(programa?.nombre)}</h1><div class="muted">${new Date().toLocaleDateString("es-CL")}</div></div></div><div class="bar"><span>${v(c.nombre)}</span><span>${v(programa?.nombre)}</span></div><div class="grid">${campoHtml("Constructora", c.constructora)}${campoHtml("Profesional", c.profesional)}${campoHtml("Familias", c.familias || miembros.length)}${campoHtml("Personalidad juridica", c.pj)}</div></div>`;
       }
@@ -938,7 +949,7 @@ function PanelInformePrograma({ programa, comites, personas, solicitudes }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
         <select value={detalleId} onChange={e => setDetalleId(e.target.value)} style={{ padding: 10, border: `1px solid ${color}`, borderRadius: 8, fontSize: 14 }}>
           <option value="">Selecciona un comite</option>
-          {lista.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre} ({miembrosComite(c, personas).length})</option>)}
+          {lista.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre} ({miembrosComite(c, personas, solicitudes).length})</option>)}
         </select>
         <button onClick={() => imprimirDetalleComite(comiteDetalle, personas, solicitudes, comites)} disabled={!comiteDetalle} style={{ padding: "10px 18px", border: "none", borderRadius: 8, background: comiteDetalle ? "#1d4ed8" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: comiteDetalle ? "pointer" : "not-allowed" }}>Informe detallado</button>
       </div>
@@ -970,7 +981,7 @@ function PanelIndividual({ personas, solicitudes, comites, onSavePersonas }) {
     const comite = comites.find(c => (c.id || c.codigo) === comiteInformeId || c.codigo === comiteInformeId);
     if (!comite) return;
     const actuales = new Set(seleccionados.map(item => item.persona.id));
-    const nuevos = miembrosComite(comite, personas)
+    const nuevos = miembrosComite(comite, personas, solicitudes)
       .filter(persona => !actuales.has(persona.id))
       .map(persona => ({ persona, programaId: "todos" }));
     setSeleccionados([...seleccionados, ...nuevos]);
@@ -1041,7 +1052,7 @@ function PanelIndividual({ personas, solicitudes, comites, onSavePersonas }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 14 }}>
       <select value={comiteInformeId} onChange={e => setComiteInformeId(e.target.value)} style={{ padding: 10, border: "1px solid #93c5fd", borderRadius: 8, fontSize: 14 }}>
         <option value="">Agregar todos los solicitantes de un comité</option>
-        {comites.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre} ({miembrosComite(c, personas).length})</option>)}
+        {comites.map(c => <option key={c.id || c.codigo} value={c.id || c.codigo}>{c.nombre} ({miembrosComite(c, personas, solicitudes).length})</option>)}
       </select>
       <button onClick={agregarComite} disabled={!comiteInformeId} style={{ padding: "10px 16px", border: "none", borderRadius: 8, background: comiteInformeId ? "#1d4ed8" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: comiteInformeId ? "pointer" : "not-allowed" }}>Agregar comité</button>
     </div>
@@ -1299,7 +1310,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
           <button onClick={() => imprimirComite(comiteSel, personas, solicitudes)} disabled={!comiteSel} style={{ padding: "10px 18px", border: "none", borderRadius: 8, background: comiteSel ? "#7c3aed" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: comiteSel ? "pointer" : "not-allowed" }}>Informe general</button>
           <button onClick={() => imprimirDetalleComite(comiteSel, personas, solicitudes, comites)} disabled={!comiteSel} style={{ padding: "10px 18px", border: "none", borderRadius: 8, background: comiteSel ? "#1d4ed8" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: comiteSel ? "pointer" : "not-allowed" }}>Informe detallado</button>
         </div>
-        {comiteSel && <div style={{ marginTop: 12, color: "#6b7280", fontSize: 13 }}><strong>{comiteSel.nombre}</strong> · {miembrosComite(comiteSel, personas).length} postulantes</div>}
+        {comiteSel && <div style={{ marginTop: 12, color: "#6b7280", fontSize: 13 }}><strong>{comiteSel.nombre}</strong> · {miembrosComite(comiteSel, personas, solicitudes).length} postulantes</div>}
       </Section>}
     </div>
   </div>;
