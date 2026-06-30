@@ -1115,7 +1115,7 @@ const sanitizarDocumentoPorTipo = (doc = {}) => {
 
 const completarDocumentosDesdePrograma = (documentos = [], programa = null, opciones = {}) => {
   if (!programa || !Array.isArray(programa.documentos) || !programa.documentos.length) return documentos || [];
-  const incluirExtras = opciones.incluirExtras !== false;
+  const incluirExtras = opciones.incluirExtras === true;
   const base = Array.isArray(documentos) ? documentos.map(d => ({ ...d })) : [];
   const usados = new Set();
   const retenidos = new Set();
@@ -1153,9 +1153,8 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null, opci
         .filter(i => i !== principalIdx)
         .forEach(i => {
           fusionado = combinarDatosDocumentoSolicitud(fusionado, base[i]);
-          if (opciones.conservarExtrasComoInternos) {
-            preservadosInternos.push(base[i]?.interno ? base[i] : { ...base[i], interno: true, ocultoPorPrograma: true, duplicadoFusionado: true });
-          }
+
+
         });
       fusionado = sanitizarDocumentoPorTipo(fusionado);
       if (JSON.stringify(fusionado) !== JSON.stringify(base[principalIdx]) || candidatos.length > 1) cambio = true;
@@ -1173,9 +1172,7 @@ const completarDocumentosDesdePrograma = (documentos = [], programa = null, opci
   const extrasFueraPrograma = base.filter((_, i) => !usados.has(i));
   const extras = incluirExtras
     ? extrasFueraPrograma
-    : opciones.conservarExtrasComoInternos
-      ? extrasFueraPrograma.map(d => d?.interno ? d : { ...d, interno: true, ocultoPorPrograma: true })
-      : extrasFueraPrograma.filter(d => d?.interno);
+    : extrasFueraPrograma.filter(d => d?.interno && !d?.ocultoPorPrograma && !d?.duplicadoFusionado);
   const resultado = [...base.filter((_, i) => retenidos.has(i)), ...extras, ...preservadosInternos];
   return cambio || !incluirExtras ? resultado : documentos || [];
 };
