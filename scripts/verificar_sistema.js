@@ -59,6 +59,7 @@ function main() {
   ok("Carpeta recarga cuando llegan respaldos completos", contains(app, "firmaArchivosSolicitudes") && contains(app, "[carpeta, firmaArchivosSolicitudes]"));
   ok("Carpeta documentos busca rutas historicas registradas", contains(app, "carpetasDocumentosPersona") && contains(app, "carpetasRegistradas") && contains(app, "select=nombre,carpeta,mime_type,data_url") && contains(app, "carpetasBusqueda"));
   ok("Carpeta documentos muestra referencias historicas sin data_url", contains(app, ".filter(d => d.archivo)") && !contains(app, ".filter(d => d.archivo && (d.archivoData || d.storagePath))"));
+  ok("Carpeta documentos muestra fuente de cada archivo", contains(app, "archivosFuentes") && contains(app, "Fuente: ${fuentes.join") && contains(app, "Referencia historica") && contains(app, "Respaldo solicitud") && contains(app, "Carpeta local"));
 
   ok("Solicitud 2026 usa plantilla oficial", contains(app, "formulario_solicitud_habilitacion_inhabitabilidad_2026.pdf"));
   ok("Carta SERVIU tiene destinatario Marco Seguel", contains(app, "SEÑOR MARCO SEGUEL REYES"));

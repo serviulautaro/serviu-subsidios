@@ -3185,6 +3185,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [archivos, setArchivos] = useState([]);
   const [archivosRutas, setArchivosRutas] = useState({});
   const [archivosDatos, setArchivosDatos] = useState({});
+  const [archivosFuentes, setArchivosFuentes] = useState({});
   const [subiendo, setSubiendo] = useState(false);
   const [showModalComprobante, setShowModalComprobante] = useState(false);
   const [showDesbloquearRespuesta, setShowDesbloquearRespuesta] = useState(false);
@@ -3927,6 +3928,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setArchivos([]);
     setArchivosRutas({});
     setArchivosDatos({});
+    setArchivosFuentes({});
     setShowFichaSolicitante(false);
     if (persona) { cargarVisitas(); }
   }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -4136,6 +4138,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setArchivosDatos(prev => ({ ...prev, [nombre]: { dataUrl: archivoUrl, mimeType, carpeta: carp, storagePath: storagePathFinal } }));
     setArchivos(prev => prev.includes(nombre) ? prev : [nombre, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombre]: carp }));
+    setArchivosFuentes(prev => ({ ...prev, [nombre]: { fuentes: ["Render", "Carpeta local"], detalle: carp } }));
     const solDestino = misSols[0];
     if (!solDestino) return;
     const documentos = [...(solDestino.documentos || [])];
@@ -4205,6 +4208,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl, mimeType, carpeta: carp } }));
     setArchivos(prev => prev.includes(nombreSubido) ? prev : [nombreSubido, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombreSubido]: carp }));
+    setArchivosFuentes(prev => ({ ...prev, [nombreSubido]: { fuentes: ["Render", "Carpeta local"], detalle: carp } }));
     await registrarAuditoria?.("subir_documento", "archivos_solicitante", persona.id, {
       solicitante: persona.nombre, archivo: nombreSubido, carpeta: carp,
     });
@@ -4213,6 +4217,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const cargarArchivos = async () => {
     const datosMap = {};
     const rutasMap = {};
+    const fuentesMap = {};
+    const agregarFuenteArchivo = (nombre, fuente, detalle = "") => {
+      if (!nombre || !fuente) return;
+      const actual = fuentesMap[nombre] || { fuentes: [], detalles: [] };
+      if (!actual.fuentes.includes(fuente)) actual.fuentes.push(fuente);
+      if (detalle && !actual.detalles.includes(detalle)) actual.detalles.push(detalle);
+      fuentesMap[nombre] = actual;
+    };
 
     // FUENTE PRINCIPAL: PostgreSQL via servidor Render
     // Trae nombre + carpeta de todos los archivos de esta persona
@@ -4232,8 +4244,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           if (sf.carpeta) carpetasRegistradas.add(sf.carpeta);
           pgNames.push(sf.nombre);
           rutasMap[sf.nombre] = sf.carpeta || carpeta;
+          agregarFuenteArchivo(sf.nombre, sf.data_url ? "Render" : "Referencia historica", sf.carpeta || carpeta);
           if (!datosMap[sf.nombre])
-            datosMap[sf.nombre] = { mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta };
+            datosMap[sf.nombre] = { dataUrl: sf.data_url || "", mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta };
         });
       }
     } catch(e) { console.error("[cargarArchivos PG exception]", e.message); }
@@ -4259,6 +4272,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       (lista || []).forEach(f => {
         if (!fsFiles.includes(f)) fsFiles.push(f);
         if (!rutasMap[f]) rutasMap[f] = carp;
+        agregarFuenteArchivo(f, "Carpeta local", carp);
       });
     });
 
@@ -4270,6 +4284,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (!pgNames.includes(d.archivo)) pgNames.push(d.archivo);
         if (d.carpeta) carpetasRegistradas.add(d.carpeta);
         rutasMap[d.archivo] = d.carpeta || rutasMap[d.archivo] || carpeta;
+        agregarFuenteArchivo(d.archivo, "Respaldo solicitud", d.carpeta || carpeta);
         datosMap[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "" };
       });
 
@@ -4285,6 +4300,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       setArchivos(archivosValidos);
       setArchivosRutas(rutasMap);
       setArchivosDatos(datosMap);
+      setArchivosFuentes(fuentesMap);
     });
 
     const hayArchivoAvaluo = archivosValidos.some(a => {
@@ -4510,6 +4526,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setArchivos(prev => prev.filter(a => a !== nombre));
     setArchivosDatos(prev => { const next = { ...prev }; delete next[nombre]; return next; });
     setArchivosRutas(prev => { const next = { ...prev }; delete next[nombre]; return next; });
+    setArchivosFuentes(prev => { const next = { ...prev }; delete next[nombre]; return next; });
     setDocMenu(null);
     if (errores.length) {
       console.warn("[eliminarArchivo]", errores.join(" | "));
@@ -5881,13 +5898,22 @@ const datosSolicitud = {
                 const esSolicitud    = arch.startsWith("SOLICITUD_");
                 const esInformeJACC  = arch.startsWith("INFORME_JACC_");
                 const isMenuOpen   = docMenu && docMenu.arch === arch;
+                const fuenteInfo = archivosFuentes[arch] || {};
+                const fuentes = Array.isArray(fuenteInfo.fuentes) ? fuenteInfo.fuentes : [];
+                const detalleFuente = Array.isArray(fuenteInfo.detalles) ? fuenteInfo.detalles.filter(Boolean).join(" | ") : (fuenteInfo.detalle || "");
+                const textoFuente = fuentes.length ? `Fuente: ${fuentes.join(" + ")}` : "Fuente: sin identificar";
                 return (
                   <div key={arch} style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 9, border: "1px solid " + (isMenuOpen ? "#7C3AED" : "#e5e7eb"), background: isMenuOpen ? "#F5F3FF" : "#fafafa" }}>
                     <button
                       onClick={e => { e.stopPropagation(); setDocMenu(isMenuOpen ? null : { arch, x: e.clientX, y: e.clientY }); }}
                       title="Opciones"
-                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, color: "#1e3a5f", flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0 }}>
-                      {arch.endsWith(".html") ? "🌐 " : arch.endsWith(".pdf") ? "📋 " : "📎 "}{arch}
+                      style={{ background: "none", border: "none", cursor: "pointer", flex: 1, textAlign: "left", overflow: "hidden", padding: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: "#1e3a5f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {arch.endsWith(".html") ? "🌐 " : arch.endsWith(".pdf") ? "📋 " : "📎 "}{arch}
+                      </div>
+                      <div title={detalleFuente || textoFuente} style={{ marginTop: 3, fontSize: 10, color: fuentes.includes("Referencia historica") ? "#B45309" : "#6B7280", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {textoFuente}
+                      </div>
                     </button>
                     <button onClick={() => eliminarArchivo(arch)} style={{ background: "transparent", border: "none", color: "#DC2626", cursor: "pointer", marginLeft: 6, fontSize: 13 }}>✕</button>
                     {isMenuOpen && (
