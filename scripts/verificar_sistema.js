@@ -119,6 +119,7 @@ function main() {
   ok("Migraciones de documentos no corren automaticamente en startup", contains(server, "RUN_DOC_MIGRATIONS_ON_STARTUP") && contains(server, "Migraciones pesadas: ejecutar solo bajo demanda"));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
+  ok("Ficha solicitante respeta programa seleccionado", contains(app, "solicitudTrabajoPrincipal") && contains(app, "Mostrara solo la ficha del programa seleccionado") && contains(app, "misSols={solsTrabajo}") && contains(app, "nombreComiteSolicitud"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);
   deleteCalls.forEach((call, index) => {

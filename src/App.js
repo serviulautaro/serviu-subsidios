@@ -3318,6 +3318,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     ...solsTrabajo.map(s => s),
     ...misSolsCompletas.filter(s => !solsTrabajo.some(sel => sel.id === s.id)),
   ];
+  const solicitudTrabajoPrincipal = solsTrabajo[0] || null;
   const tieneSolicitudCsp = solsTrabajo.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
   const [lineaTiempoPersonaCsp, setLineaTiempoPersonaCsp] = useState(() => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
   const [editandoLineaTiempoPersona, setEditandoLineaTiempoPersona] = useState(false);
@@ -4073,6 +4074,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   if (!persona) return null;
 
   const comite = comites.find(c => c.id === persona.comiteId);
+  const nombreComiteSolicitud = (sol = {}) => {
+    const codigo = sol.codigoComite || sol.codigo_comite || "";
+    const encontrado = codigo ? comites.find(c => c.id === codigo || c.codigo === codigo) : null;
+    if (sol.comite) return sol.comite;
+    if (encontrado?.nombre) return encontrado.nombre;
+    if (codigo === "comite_desmarque" || (sol.programaId || sol.programa_id) === "habitabilidad") return "DESMARQUE DE VIVIENDA";
+    return comite?.nombre || persona.comite || "Sin comite";
+  };
 
   // Registra un archivo en Supabase asociado al solicitante
   const _registrarArchivoSupa = async (nombre, carp, extra = {}) => {
@@ -4741,7 +4750,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     }
 
     // Actualizar documentos de la solicitud si se ingresaron valores
-    const sol = misSols[0];
+    const sol = solicitudTrabajoPrincipal;
     if (sol) {
       const docsActualizados = sol.documentos.map(d => {
         if (d.nombre && d.nombre.includes("Memo DOM") && fichaForm.numero_memo_dom)
@@ -4998,7 +5007,7 @@ const datosSolicitud = {
   const generarInformeJACC = async () => {
     const estadoVivienda = informeEstadoVivienda;
     const subsidioTexto  = informeSubsidioTexto;
-    const sol = misSols[0];
+    const sol = solicitudTrabajoPrincipal;
     const fechaVisita = sol ? fmtFecha(fechaVisitaSolicitud(sol)) : "";
     setGenerandoInforme(true);
     try {
@@ -5220,7 +5229,7 @@ const datosSolicitud = {
                 </button>
               </>
             )}
-            {persona.comiteId === "comite_desmarque" && (() => {
+            {solicitudTrabajoPrincipal && (solicitudTrabajoPrincipal.programaId || solicitudTrabajoPrincipal.programa_id) === "habitabilidad" && (() => {
               const solDesmarque = misSols.find(s => (s.programaId || s.programa_id) === "habitabilidad");
               const est = estadoActualDesmarqueSolicitud(solDesmarque, persona);
               return <span style={{ display:"inline-block", marginTop:6, background:est.bg, color:est.color, borderRadius:10, padding:"4px 14px", fontSize:13, fontWeight:800 }}>{est.label}</span>;
@@ -5484,12 +5493,14 @@ const datosSolicitud = {
               const prog = todosProgramas.find(p => p.id === (sol.programaId || sol.programa_id));
               const activo = (sol.programaId || sol.programa_id) === programaSeleccionadoId;
               const conteo = conteoDocumentosSolicitud(sol.documentos || [], sol.programaId || sol.programa_id);
+              const nombreComite = nombreComiteSolicitud(sol);
               return (
                 <button key={sol.id} type="button" onClick={() => setProgramaTrabajoId(sol.programaId || sol.programa_id)}
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 10,
+                    maxWidth: 520,
                     border: "1.5px solid " + (activo ? (prog?.color || "#1e3a5f") : "#CBD5E1"),
                     background: activo ? (prog?.colorLight || "#EFF6FF") : "#F8FAFC",
                     color: activo ? (prog?.color || "#1e3a5f") : "#475569",
@@ -5501,6 +5512,7 @@ const datosSolicitud = {
                   }}>
                   <span>{prog?.icon || "P"}</span>
                   <span>{prog?.nombre || sol.programaId}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, opacity: .78, color: activo ? (prog?.color || "#1e3a5f") : "#64748B" }}>Comite: {nombreComite}</span>
                   <span style={{ fontSize: 11, opacity: .78 }}>{conteo.completos}/{conteo.total}</span>
                 </button>
               );
@@ -5668,7 +5680,7 @@ const datosSolicitud = {
       <div style={{ background: "#fff", borderRadius: 14, padding: "14px 20px", marginBottom: 20, border: "1px solid #e8e3de", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 800, color: "#1e3a5f" }}>Ficha del solicitante</div>
-          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>La ficha permanece oculta hasta que se solicite mostrarla.</div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Mostrara solo la ficha del programa seleccionado.</div>
         </div>
         <button onClick={() => setShowFichaSolicitante(v => !v)}
           style={{ background: showFichaSolicitante ? "#6B7280" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
@@ -5680,9 +5692,9 @@ const datosSolicitud = {
         <>
           {/* FICHA COMPLETA RURAL */}
           {(() => {
-            const tieneRural = misSols.some(s => s.programaId === "csp_rural");
-            const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
-            const tienePrograma = misSols.length > 0;
+            const tieneRural = solsTrabajo.some(s => (s.programaId || s.programa_id) === "csp_rural");
+            const tieneUrbano = solsTrabajo.some(s => (s.programaId || s.programa_id) === "csp_urbano");
+            const tienePrograma = solsTrabajo.length > 0;
             const comiteRural = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
               (persona.tipoComite === "Rural" || persona.tipo_comite === "RURAL" ||
                (comite && comite.nombre && comite.nombre.toUpperCase().includes("RURAL")));
@@ -5691,31 +5703,31 @@ const datosSolicitud = {
             // Si hay programa pero es solo urbano, no mostrar Rural
             if (tienePrograma && !tieneRural) return null;
             return (tieneRural || comiteRural || sinComite) ? (
-              <FichaRural persona={persona} misSols={misSols} comites={comites} esCsp={tieneRural} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+              <FichaRural persona={persona} misSols={solsTrabajo} comites={comites} esCsp={tieneRural} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
             ) : null;
           })()}
 
           {/* FICHA COMPLETA URBANA */}
           {(() => {
-            const tieneUrbano = misSols.some(s => s.programaId === "csp_urbano");
-            const tieneRural = misSols.some(s => s.programaId === "csp_rural");
-            const tienePrograma = misSols.length > 0;
+            const tieneUrbano = solsTrabajo.some(s => (s.programaId || s.programa_id) === "csp_urbano");
+            const tieneRural = solsTrabajo.some(s => (s.programaId || s.programa_id) === "csp_rural");
+            const tienePrograma = solsTrabajo.length > 0;
             const comiteUrbano = persona.comiteId && persona.comiteId !== "comite_desmarque" &&
               (persona.tipoComite === "Urbano" || persona.tipo_comite === "URBANO" ||
                (comite && comite.nombre && comite.nombre.toUpperCase().includes("URBANO")));
             // Si hay programa pero es solo rural, no mostrar Urbana
             if (tienePrograma && !tieneUrbano) return null;
             return (tieneUrbano || comiteUrbano) ? (
-              <FichaUrbana persona={persona} misSols={misSols} comites={comites} esCsp={tieneUrbano} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
+              <FichaUrbana persona={persona} misSols={solsTrabajo} comites={comites} esCsp={tieneUrbano} onSave={(datos) => onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, ...datos } : p))} />
             ) : null;
           })()}
 
           {/* FICHAS PARA PROGRAMAS PERSONALIZADOS Y MAVE */}
           {(() => {
             const fichaGeneralIds = new Set(["mave_rural", "ampliacion_vivienda", ...(programasCustom || []).map(p => p.id)]);
-            const fichas = misSols
-              .filter(s => fichaGeneralIds.has(s.programaId))
-              .map(s => ({ solicitud: s, programa: todosProgramas.find(p => p.id === s.programaId) }))
+            const fichas = solsTrabajo
+              .filter(s => fichaGeneralIds.has(s.programaId || s.programa_id))
+              .map(s => ({ solicitud: s, programa: todosProgramas.find(p => p.id === (s.programaId || s.programa_id)) }))
               .filter(x => x.programa);
 
             if (comite && fichaGeneralIds.has(comite.programaId) && !fichas.some(x => x.programa.id === comite.programaId)) {
@@ -5729,12 +5741,12 @@ const datosSolicitud = {
           })()}
 
           {/* FICHA COMPLETA DESMARQUE */}
-          {persona.comiteId === "comite_desmarque" && (
+          {solicitudTrabajoPrincipal && (solicitudTrabajoPrincipal.programaId || solicitudTrabajoPrincipal.programa_id) === "habitabilidad" && (
         <div style={{ background: "#fff", borderRadius: 14, padding: "20px 24px", marginBottom: 20, border: "1px solid #e8e3de" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1e3a5f" }}>📋 Ficha Desmarque</div>
             <button onClick={() => {
-              const sol = misSols[0];
+              const sol = solicitudTrabajoPrincipal;
               const docs = sol ? sol.documentos : [];
               const memo = docs.find(d => d.nombre && d.nombre.includes("Memo DOM"));
               const carta = docs.find(d => d.nombre && d.nombre.includes("Carta SERVIU"));
@@ -5769,7 +5781,7 @@ const datosSolicitud = {
                 <div style={{ fontSize: 12, color: valor ? "#1e3a5f" : "#DC2626", fontWeight: valor ? 400 : 600 }}>{valor || "⚠ Falta trámite o documento"}</div>
               </div>
             );
-            const sol = misSols[0];
+            const sol = solicitudTrabajoPrincipal;
             const docs = sol ? sol.documentos : [];
             const memo = docs.find(d => d.nombre && d.nombre.includes("Memo DOM"));
             const carta = docs.find(d => d.nombre && d.nombre.includes("Carta SERVIU"));
@@ -5783,7 +5795,7 @@ const datosSolicitud = {
                 {campo("Fecha Recepción", getVal("fecha_recepcion","fechaRecepcion"))}
                 {campo("Nombre", persona.nombre)}
                 {campo("Cédula de identidad", persona.rut)}
-                {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(misSols))}
+                {campo("RUT colores", persona.rutColores || persona.rutcolores || rutColoresDesdeSolicitudes(solsTrabajo))}
                 {campo("Teléfono", persona.telefono)}
                 {campo("U/R", getVal("tipo_comite","tipoComite") || persona.tipo)}
                 {campo("Comunidad/Dirección", persona.direccion)}
