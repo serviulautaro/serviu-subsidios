@@ -11511,6 +11511,22 @@ export default function App() {
     documentos: s.documentos || [],
   });
 
+  const existeSolicitudProgramaEnRender = async (personaId, programaId) => {
+    if (!personaId || !programaId) return null;
+    try {
+      const params = new URLSearchParams({ select: "id,persona_id,programa_id" });
+      params.set("eq[persona_id]", String(personaId));
+      params.set("eq[programa_id]", String(programaId));
+      const res = await fetch(`${API}/api/db/solicitudes?${params.toString()}`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) return null;
+      const filas = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+      return filas[0] || null;
+    } catch (e) {
+      console.warn("[verificar solicitud existente Render]", e.message);
+      return null;
+    }
+  };
   const repararSolicitudesActivasFaltantes = async ({ personasLista = personas, solicitudesLista = solicitudes, comitesLista = comites, programasLista = combinarProgramas(programasCustom), persistir = true, motivo = "carga" } = {}) => {
     if (reparacionSolicitudesActivasRef.current.ejecutando) return solicitudesLista || [];
     const personasNorm = (personasLista || []).map(p => p.comiteId !== undefined ? p : mapearPersonaDb(p));
@@ -11587,6 +11603,11 @@ export default function App() {
 
       for (const nueva of faltantes) {
         if (persistir) {
+          const existenteRender = await existeSolicitudProgramaEnRender(nueva.personaId, nueva.programaId);
+          if (existenteRender?.id) {
+            console.warn("[reparar solicitudes activas] ya existe en Render", nueva.personaNombre, nueva.programaId, existenteRender.id);
+            continue;
+          }
           try {
             const res = await fetch(API + "/api/db/solicitudes/insert", {
               method: "POST",
@@ -11881,20 +11902,26 @@ export default function App() {
       if (ultima.comiteId === "comite_desmarque") {
         const progHab = combinarProgramas(programasCustom).find(p => p.id === "habitabilidad");
         const solExistente = solicitudes.find(s => esSolicitudDePersona(s, ultima.id) && solicitudProgramaId(s) === "habitabilidad");
-        if (progHab && !solExistente) {
+        const solExistenteRender = solExistente ? null : await existeSolicitudProgramaEnRender(ultima.id, "habitabilidad");
+        if (progHab && !solExistente && !solExistenteRender?.id) {
           const nuevaSol = {
             id: uid(),
             personaId: ultima.id,
             personaNombre: ultima.nombre,
             programaId: "habitabilidad",
             fecha: today(),
+            comite: "DESMARQUE DE VIVIENDA",
+            codigoComite: "comite_desmarque",
+            tipoComite: "DESMARQUE",
             documentos: progHab.documentos.map((d, idx) => documentoSolicitudDesdePrograma(d, idx))
           };
           // Insert solicitud via Render
           let solOk = false;
           const solPayload = [{
             id: nuevaSol.id, persona_id: nuevaSol.personaId, persona_nombre: nuevaSol.personaNombre,
-            programa_id: nuevaSol.programaId, fecha: nuevaSol.fecha, documentos: nuevaSol.documentos
+            programa_id: nuevaSol.programaId, fecha: nuevaSol.fecha,
+            comite: nuevaSol.comite, codigo_comite: nuevaSol.codigoComite, tipo_comite: nuevaSol.tipoComite,
+            documentos: nuevaSol.documentos
           }];
           for (let i = 0; i < 3; i++) {
             if (i > 0) await new Promise(r => setTimeout(r, 1500));
@@ -11919,7 +11946,8 @@ export default function App() {
         const programaAsignadoId = comitePersona?.programaId || comitePersona?.programa_id || "";
         const programaAsignado = combinarProgramas(programasCustom).find(p => p.id === programaAsignadoId);
         const solExistente = solicitudes.find(s => (s.personaId || s.persona_id) === ultima.id && (s.programaId || s.programa_id) === programaAsignadoId);
-        if (programaAsignado && programaAsignadoId && !solExistente) {
+        const solExistenteRender = solExistente ? null : await existeSolicitudProgramaEnRender(ultima.id, programaAsignadoId);
+        if (programaAsignado && programaAsignadoId && !solExistente && !solExistenteRender?.id) {
           const nuevaSol = {
             id: uid(),
             personaId: ultima.id,
