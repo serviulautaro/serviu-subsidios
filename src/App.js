@@ -679,7 +679,7 @@ const LINEA_TIEMPO_CSP = [
   { id: "comite_pj", label: "Comité con PJ" },
   { id: "llamado_licitacion", label: "Llamado a licitación" },
   { id: "adjudicacion_empresa", label: "Adjudicación Empresa" },
-  { id: "visita_constructora", label: "Visita de constructora", fecha: "fecha_visita_constructora", observacion: "observacion_visita_constructora" },
+  { id: "visita_constructora", label: "Visita de constructora", fecha: "fecha_visita_constructora", observacion: "observacion_visita_constructora", decision: "visita_constructora" },
   { id: "inicio_actividades_serviu", label: "Inicio actividades SERVIU" },
   { id: "solicitante_califica_serviu", label: "Solicitante califica SERVIU", decision: "solicitante_serviu" },
   { id: "pre_banco", label: "Pre Banco", detalle: "Reuniones Normativas - Área Social", reuniones: true },
@@ -694,7 +694,7 @@ const LINEA_TIEMPO_CSP = [
 ];
 const decisionLineaTiempoCsp = (linea = {}, tipo = "") => linea[`decision_${tipo}`] || "";
 const notaDecisionLineaTiempoCsp = (linea = {}, tipo = "") => String(linea[`nota_${tipo}`] || "").trim();
-const DECISIONES_CSP_CORTAN = new Set(["documentos", "solicitante_serviu", "ahorro_minimo", "serviu", "subsidio_asignado"]);
+const DECISIONES_CSP_CORTAN = new Set(["documentos", "visita_constructora", "solicitante_serviu", "ahorro_minimo", "serviu", "subsidio_asignado"]);
 const corteLineaTiempoCsp = (linea = {}) => {
   const idx = LINEA_TIEMPO_CSP.findIndex(etapa =>
     etapa.decision &&
