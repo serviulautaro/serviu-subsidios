@@ -339,7 +339,21 @@ async function normalizarSolicitudProgramaUnico(row = {}, upsert = false) {
   await validarDesmarqueListoParaSegundoPrograma(row);
   const personaId = row.persona_id || row.personaId;
   const programaId = row.programa_id || row.programaId;
-  if (!personaId || !programaId || programaId === PROGRAMA_DESMARQUE) return row;
+  if (!personaId || !programaId) return row;
+  const { rows: mismoPrograma } = await requirePg().query(
+    `SELECT id FROM "solicitudes"
+     WHERE persona_id=$1 AND programa_id=$2 AND id<>COALESCE($3, '')
+     ORDER BY fecha DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [personaId, programaId, row.id || '']
+  );
+  if (mismoPrograma.length && upsert) return { ...row, id: mismoPrograma[0].id };
+  if (mismoPrograma.length && !upsert) {
+    const err = new Error('El solicitante ya tiene una solicitud activa para este programa.');
+    err.status = 409;
+    throw err;
+  }
+  if (programaId === PROGRAMA_DESMARQUE) return row;
   const { rows } = await requirePg().query(
     `SELECT id FROM "solicitudes"
      WHERE persona_id=$1 AND programa_id<>$2 AND id<>COALESCE($3, '')
