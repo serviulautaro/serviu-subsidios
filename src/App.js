@@ -715,8 +715,10 @@ const normalizarLineaTiempoCsp = (valor = {}) => {
   }
   return valor && typeof valor === "object" && !Array.isArray(valor) ? valor : {};
 };
+const lineaTiempoCspTieneDatos = (valor = {}) => Object.keys(normalizarLineaTiempoCsp(valor)).length > 0;
+const obtenerLineaTiempoCsp = (persona = {}) => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp);
 const estadoNoCalificaCspPersona = (persona = {}) => {
-  const linea = normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp);
+  const linea = obtenerLineaTiempoCsp(persona);
   return corteLineaTiempoCsp(linea);
 };
 const NOMBRES_PROPIOS_COMUNES = new Set([
@@ -3324,7 +3326,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [editandoLineaTiempoPersona, setEditandoLineaTiempoPersona] = useState(false);
   const [guardandoLineaTiempoPersona, setGuardandoLineaTiempoPersona] = useState(false);
   useEffect(() => {
-    setLineaTiempoPersonaCsp(normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
+    setLineaTiempoPersonaCsp(obtenerLineaTiempoCsp(persona));
     setEditandoLineaTiempoPersona(false);
   }, [personaId, persona?.lineaTiempoCsp, persona?.linea_tiempo_csp]);
   const esPrioritario = solicitantePrioritario(personaId, solicitudes);
@@ -3799,7 +3801,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     };
     const dbFields = {};
     for (const [k, v] of Object.entries(fields)) dbFields[snakeMap[k] || k] = v;
-    let guardadoRender = false;
+    let guardadoOk = false;
     try {
       const res = await fetch(`${API}/api/db/personas/update`, {
         method: "PATCH",
@@ -3810,15 +3812,17 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         })
       });
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok !== false && (!Array.isArray(json.data) || json.data.length > 0)) guardadoRender = true;
+      if (res.ok && json.ok !== false && (!Array.isArray(json.data) || json.data.length > 0)) guardadoOk = true;
       else console.warn("[syncPersona Render] error al actualizar campo(s):", Object.keys(dbFields), json.error || res.status);
     } catch (err) { console.warn("[syncPersona Render] excepcion:", err.message); }
-    if (!guardadoRender) {
+    if (!guardadoOk) {
       try {
         const { error } = await supabase.from("personas").update(dbFields).eq("id", persona.id);
         if (error) console.warn("[syncPersona] error al actualizar campo(s):", Object.keys(dbFields), error.message);
+        else guardadoOk = true;
       } catch (err) { console.warn("[syncPersona] excepcion:", err.message); }
     }
+    if (!guardadoOk) throw new Error("No se pudo guardar el cambio en Render ni en respaldo.");
     onSavePersonas(personas.map(p => {
       if (String(p.id) !== String(persona.id)) return p;
       const actualizado = { ...p, ...fields };
@@ -3827,6 +3831,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       }
       return actualizado;
     }));
+    return true;
   };
 
   const actualizarSolicitudEnDb = async (solId, values) => {
@@ -3869,7 +3874,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!window.confirm("¿Está seguro de guardar los cambios de la línea de tiempo de este solicitante?")) return;
     setGuardandoLineaTiempoPersona(true);
     try {
-      await syncPersona({ lineaTiempoCsp: lineaTiempoPersonaCsp, linea_tiempo_csp: lineaTiempoPersonaCsp });
+      const lineaNormalizada = normalizarLineaTiempoCsp(lineaTiempoPersonaCsp);
+      await syncPersona({ lineaTiempoCsp: lineaNormalizada });
+      setLineaTiempoPersonaCsp(lineaNormalizada);
       const corte = corteLineaTiempoCsp(lineaTiempoPersonaCsp);
       const etapasMarcadas = LINEA_TIEMPO_CSP
         .filter(etapa => lineaTiempoPersonaCsp[etapa.id])
@@ -3894,7 +3901,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   const cancelarEdicionLineaTiempoPersona = () => {
-    setLineaTiempoPersonaCsp(normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
+    setLineaTiempoPersonaCsp(obtenerLineaTiempoCsp(persona));
     setEditandoLineaTiempoPersona(false);
   };
 
@@ -11393,7 +11400,7 @@ export default function App() {
     estado_desmarque:     x.estado_desmarque || "",
     pendiente_calificar:  x.pendiente_calificar === true || x.pendiente_calificar === "true",
     observaciones:        x.observaciones || "",
-    lineaTiempoCsp:       normalizarLineaTiempoCsp(x.linea_tiempo_csp),
+    lineaTiempoCsp:       normalizarLineaTiempoCsp(x.linea_tiempo_csp || x.lineaTiempoCsp),
     // Mapeos lowercase DB -> camelCase app (campos de fichas técnicas)
     dominiopropiedad:      x.dominiopropiedad || "",
     nFJS:                  x.nfjs || "",
@@ -11446,7 +11453,18 @@ export default function App() {
       fechaCreacion: x.fecha_creacion,
       lineaTiempo: normalizarLineaTiempoCsp(x.linea_tiempo),
     }));
-    const personasMapeadas = (p || []).map(mapearPersonaDb);
+    const personasActualesPorId = new Map(personas.map(personaActual => [String(personaActual.id), personaActual]));
+    const personasMapeadas = (p || []).map(x => {
+      const mapeada = mapearPersonaDb(x);
+      const anterior = personasActualesPorId.get(String(mapeada.id));
+      const lineaEntrante = obtenerLineaTiempoCsp(mapeada);
+      const lineaAnterior = obtenerLineaTiempoCsp(anterior);
+      if (!lineaTiempoCspTieneDatos(lineaEntrante) && lineaTiempoCspTieneDatos(lineaAnterior)) {
+        mapeada.lineaTiempoCsp = lineaAnterior;
+        mapeada.linea_tiempo_csp = lineaAnterior;
+      }
+      return mapeada;
+    });
     // Actualizar todo en la misma pasada para evitar re-renders múltiples (pestañeo)
     React.startTransition(() => {
       setProgramasCustom(programasCustomCargados);
