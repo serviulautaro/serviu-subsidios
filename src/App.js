@@ -192,6 +192,25 @@ const agregarMarcaDesmarqueTramiteLiberado = (observaciones = "", usuario = "") 
   const linea = `${MARCA_DESMARQUE_TRAMITE_LIBERADO} ${today()} - Marca Desmarque en tramite quitada por administrador.${usuarioTxt}`;
   return [observaciones, linea].filter(Boolean).join("\n");
 };
+
+const MARCA_AHORRO_COMPLETO = "[AHORRO_COMPLETO]";
+const solicitanteConAhorroCompleto = (persona = {}) =>
+  String(persona.observaciones || "").includes(MARCA_AHORRO_COMPLETO);
+const observacionesConMarcaAhorroCompleto = (observaciones = "", marcar = true, usuario = "") => {
+  const lineas = String(observaciones || "")
+    .split(/\r?\n/)
+    .filter(linea => !linea.includes(MARCA_AHORRO_COMPLETO));
+  if (marcar) {
+    const usuarioTxt = usuario ? ` Usuario: ${usuario}` : "";
+    lineas.push(`${MARCA_AHORRO_COMPLETO} ${today()} - Solicitante con ahorro completo.${usuarioTxt}`);
+  }
+  return lineas.filter(linea => String(linea || "").trim()).join("\n");
+};
+const esComiteDesmarque = (persona = {}, comite = null) => {
+  const texto = `${persona.comiteId || persona.comite_id || ""} ${persona.comite || ""} ${comite?.id || ""} ${comite?.codigo || ""} ${comite?.nombre || ""}`;
+  return normComiteComparar(texto).includes("comite desmarque") ||
+    normComiteComparar(texto).includes("desmarque de vivienda");
+};
 const STORAGE_BUCKET = "documentos-solicitantes";
 const safeStorageSegment = (value = "") => {
   const base = String(value || "")
@@ -5237,6 +5256,24 @@ const datosSolicitud = {
     return { completos: acc.completos + c.completos, total: acc.total + c.total };
   }, { completos: 0, total: 0 });
   const noCalificaCspActual = estadoNoCalificaCspPersona(persona);
+  const comiteEsDesmarque = esComiteDesmarque(persona, comite);
+  const ahorroCompletoMarcado = solicitanteConAhorroCompleto(persona);
+  const puedeMarcarAhorroCompleto = Boolean(persona && !comiteEsDesmarque && (persona.comiteId || persona.comite || comite));
+  const toggleAhorroCompleto = async () => {
+    if (!puedeMarcarAhorroCompleto) return;
+    const marcar = !ahorroCompletoMarcado;
+    const ok = window.confirm(marcar
+      ? "Marcar este solicitante como ahorro completo?"
+      : "Quitar la marca de ahorro completo de este solicitante?");
+    if (!ok) return;
+    try {
+      const usuario = currentUser?.nombre || currentUser?.username || currentUser?.usuario || "";
+      const observaciones = observacionesConMarcaAhorroCompleto(persona.observaciones || "", marcar, usuario);
+      await syncPersona({ observaciones });
+    } catch (err) {
+      alert("No se pudo guardar la marca de ahorro completo: " + (err.message || err));
+    }
+  };
 
   return (
     <div>
@@ -5254,6 +5291,13 @@ const datosSolicitud = {
               <div style={{ marginTop: 5, display: "inline-block", background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 900 }}>
                 No califica en {noCalificaCspActual.etapa?.label}: {noCalificaCspActual.nota || "Sin nota registrada"}
               </div>
+            )}
+            {puedeMarcarAhorroCompleto && (
+              <button onClick={toggleAhorroCompleto}
+                title={ahorroCompletoMarcado ? "Quitar marca de ahorro completo" : "Marcar solicitante con ahorro completo"}
+                style={{ marginTop: 6, marginRight: 8, display: "inline-flex", alignItems: "center", gap: 6, background: ahorroCompletoMarcado ? "#DCFCE7" : "#EFF6FF", color: ahorroCompletoMarcado ? "#047857" : "#1D4ED8", border: ahorroCompletoMarcado ? "1px solid #86EFAC" : "1px solid #BFDBFE", borderRadius: 10, padding: "4px 12px", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
+                {ahorroCompletoMarcado ? "Ahorro completo" : "Marcar ahorro completo"}
+              </button>
             )}
             <div style={{ fontSize: 13, color: "#888" }}>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
