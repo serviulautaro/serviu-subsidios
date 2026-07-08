@@ -3267,6 +3267,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [showAsignarComite, setShowAsignarComite] = useState(false);
   const [comiteParaAsignar, setComiteParaAsignar] = useState("");
   const [visitas, setVisitas] = useState([]);
+  const [showTodasVisitas, setShowTodasVisitas] = useState(false);
   const [showFormVisita, setShowFormVisita] = useState(false);
   const [formVisita, setFormVisita] = useState({ fecha: "", profesional: "", compromiso: "", checksDocs: {}, otrosSolicitud: "", checksDocsRecibidos: {}, profesionalRecibio: "", siguientePaso: "", fechaCompromiso: "" });
   const [guardandoVisita, setGuardandoVisita] = useState(false);
@@ -3641,6 +3642,48 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     sincronizarPendientes().catch(() => {});
     respaldarVisitasEnSolicitud(listaFinal).catch(() => {});
     registrarAuditoria?.("registrar_visita", "visitas", nueva.id, { personaId, persona: persona?.nombre || "", fecha: nueva.fecha, profesional: nueva.profesional }).catch(() => {});
+  };
+
+  const editarVisita = async (v) => {
+    if (!v?.id) return;
+    const fecha = window.prompt("Fecha de visita (AAAA-MM-DD):", v.fecha || "");
+    if (fecha === null) return;
+    const profesional = window.prompt("Profesional que atendio:", v.profesional || currentUser?.nombre || "");
+    if (profesional === null) return;
+    const solicitud = window.prompt("Solicitud al postulante:", v.solicitud || "");
+    if (solicitud === null) return;
+    const compromiso = window.prompt("Compromiso del postulante:", v.compromiso || "");
+    if (compromiso === null) return;
+    const docsRecibidos = window.prompt("Documentos recibidos:", v.docs_recibidos || "");
+    if (docsRecibidos === null) return;
+    const profesionalRecibio = window.prompt("Profesional que recibio documentos:", v.profesional_recibio || "");
+    if (profesionalRecibio === null) return;
+    const siguientePaso = window.prompt("Siguiente paso:", v.siguiente_paso || "");
+    if (siguientePaso === null) return;
+    const fechaCompromiso = window.prompt("Fecha compromiso (AAAA-MM-DD):", v.fecha_compromiso || "");
+    if (fechaCompromiso === null) return;
+    const actualizada = { ...v, fecha: fecha.trim(), profesional: profesional.trim(), solicitud: solicitud.trim(), compromiso: compromiso.trim(), docs_recibidos: docsRecibidos.trim(), profesional_recibio: profesionalRecibio.trim(), siguiente_paso: siguientePaso.trim(), fecha_compromiso: fechaCompromiso.trim() };
+    if (!actualizada.fecha || !actualizada.profesional) { alert("Fecha y profesional son obligatorios."); return; }
+    let guardadoOk = false;
+    try {
+      const apiBase = (typeof window !== "undefined" && !["localhost","127.0.0.1"].includes(window.location.hostname)) ? window.location.origin : "http://localhost:3001";
+      const r = await fetch(apiBase + "/api/db/visitas/update", { method: "PATCH", headers: jsonHeaders(), body: JSON.stringify({ filters: [{ col: "id", value: actualizada.id }], values: actualizada }) });
+      const json = await r.json().catch(() => ({}));
+      guardadoOk = r.ok && json.ok !== false;
+      if (!guardadoOk) console.warn("[visitas update]", json.error || r.status);
+    } catch (e) { console.warn("[visitas update]", e.message); }
+    if (!guardadoOk) {
+      try {
+        const { error } = await supabase.from("visitas").update(actualizada).eq("id", actualizada.id);
+        guardadoOk = !error;
+        if (error) console.warn("[visitas update supabase]", error.message);
+      } catch (e) { console.warn("[visitas update supabase]", e.message); }
+    }
+    if (!guardadoOk) { alert("No se pudo guardar la edicion de la visita. Revise la conexion e intente nuevamente."); return; }
+    const listaFinal = fusionarVisitas([actualizada], visitas.filter(item => String(item.id) !== String(actualizada.id)));
+    setVisitas(listaFinal);
+    await respaldarVisitasEnSolicitud(listaFinal);
+    registrarAuditoria?.("editar_visita", "visitas", actualizada.id, { personaId, persona: persona?.nombre || "", fecha: actualizada.fecha, profesional: actualizada.profesional }).catch(() => {});
   };
 
   const asignarComite = async () => {
@@ -5452,6 +5495,15 @@ const datosSolicitud = {
           {visitas.length === 0 ? (
             <div style={{ textAlign: "center", color: "#aaa", fontSize: 13, padding: "24px 0" }}>Sin visitas registradas</div>
           ) : (
+            <>
+            {visitas.length > 1 && (
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                <button type="button" onClick={() => setShowTodasVisitas(v => !v)}
+                  style={{ background: "#fff", color: "#92400E", border: "1.5px solid #F59E0B", borderRadius: 8, padding: "7px 13px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                  {showTodasVisitas ? "Mostrar solo ultima visita" : `Mostrar todas las visitas (${visitas.length})`}
+                </button>
+              </div>
+            )}
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 16 }}>
               <thead>
                 <tr style={{ borderBottom: "2px solid #f0ede8" }}>
@@ -5461,7 +5513,7 @@ const datosSolicitud = {
                 </tr>
               </thead>
               <tbody>
-                {visitas.map(v => (
+                {(showTodasVisitas ? visitas : visitas.slice(0, 1)).map(v => (
                   <tr key={v.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
                     <td style={{ padding: "10px 8px", whiteSpace: "nowrap", color: "#1e3a5f", fontWeight: 600 }}>{fmtFecha(v.fecha)}</td>
                     <td style={{ padding: "10px 8px", color: "#374151" }}>{v.profesional}</td>
@@ -5478,15 +5530,20 @@ const datosSolicitud = {
                       ) : <span style={{ color: "#d1d5db" }}>—</span>}
                     </td>
                     <td style={{ padding: "10px 8px", textAlign: "right" }}>
+                      <button onClick={() => editarVisita(v)}
+                        style={{ background: "#fff7ed", color: "#C2410C", border: "1px solid #FDBA74", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginRight: 6 }}>
+                        Editar
+                      </button>
                       <button onClick={() => imprimirVisita(v)}
                         style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                        🖨 Imprimir
+                        Imprimir
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
       </div>
