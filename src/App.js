@@ -206,6 +206,38 @@ const observacionesConMarcaAhorroCompleto = (observaciones = "", marcar = true, 
   }
   return lineas.filter(linea => String(linea || "").trim()).join("\n");
 };
+
+const MARCA_REVISION_ABOGADO = "[REVISION_ABOGADO]";
+const normalizarEstadoRevisionAbogado = (valor = "") => {
+  const v = String(valor || "").trim().toUpperCase().replace(/\s+/g, " ");
+  if (v === "OK") return "OK";
+  if (v === "REPARA" || v === "REPARAR") return "REPARA";
+  if (v === "NO APLICA" || v === "NO_APLICA" || v === "N/A") return "NO APLICA";
+  return "";
+};
+const revisionAbogadoPersona = (persona = {}) => {
+  const lineas = String(persona.observaciones || "")
+    .split(/\r?\n/)
+    .filter(linea => linea.includes(MARCA_REVISION_ABOGADO));
+  if (!lineas.length) return { estado: "", nota: "", fecha: "", usuario: "" };
+  const ultima = lineas[lineas.length - 1];
+  const json = ultima.slice(ultima.indexOf(MARCA_REVISION_ABOGADO) + MARCA_REVISION_ABOGADO.length).trim();
+  try {
+    const data = JSON.parse(json);
+    return { estado: normalizarEstadoRevisionAbogado(data.estado), nota: String(data.nota || ""), fecha: String(data.fecha || ""), usuario: String(data.usuario || "") };
+  } catch {
+    const partes = json.split("|");
+    return { estado: normalizarEstadoRevisionAbogado(partes[0]), nota: partes.slice(1).join("|").trim(), fecha: "", usuario: "" };
+  }
+};
+const observacionesConRevisionAbogado = (observaciones = "", estado = "", nota = "", usuario = "") => {
+  const data = { estado: normalizarEstadoRevisionAbogado(estado), nota: String(nota || "").trim(), fecha: today(), usuario: String(usuario || "") };
+  const lineas = String(observaciones || "")
+    .split(/\r?\n/)
+    .filter(linea => !linea.includes(MARCA_REVISION_ABOGADO));
+  lineas.push(`${MARCA_REVISION_ABOGADO} ${JSON.stringify(data)}`);
+  return lineas.filter(linea => String(linea || "").trim()).join("\n");
+};
 const esComiteDesmarque = (persona = {}, comite = null) => {
   const texto = `${persona.comiteId || persona.comite_id || ""} ${persona.comite || ""} ${comite?.id || ""} ${comite?.codigo || ""} ${comite?.nombre || ""}`;
   return normComiteComparar(texto).includes("comite desmarque") ||
@@ -5303,12 +5335,37 @@ const datosSolicitud = {
   const noCalificaCspActual = estadoNoCalificaCspPersona(persona);
   const comiteEsDesmarque = esComiteDesmarque(persona, comite);
   const ahorroCompletoMarcado = solicitanteConAhorroCompleto(persona);
+  const revisionAbogado = revisionAbogadoPersona(persona);
+  const revisionAbogadoOk = revisionAbogado.estado === "OK";
+  const revisionAbogadoTexto = revisionAbogado.estado ? `Revision abogado: ${revisionAbogado.estado}` : "Revision abogado";
   const puedeMarcarAhorroCompleto = Boolean(persona && !comiteEsDesmarque && (persona.comiteId || persona.comite || comite));
   const mostrarInfoAguaRural = (solicitudTrabajoPrincipal?.programaId || solicitudTrabajoPrincipal?.programa_id) === "csp_rural";
   const infoAguaRural = mostrarInfoAguaRural ? infoAguaCspRuralSolicitud(solicitudTrabajoPrincipal) : null;
   const estadoResolucionSanitariaRural = estadoDetalleResolucionSanitaria(infoAguaRural?.resolucionSanitaria || "");
   const resolucionSanitariaVerde = estadoResolucionSanitariaRural.tiene;
   const resolucionSanitariaRoja = estadoResolucionSanitariaRural.sin;
+  const cambiarRevisionAbogado = async () => {
+    const opcion = window.prompt("Revision abogado: escriba OK, REPARA o NO APLICA", revisionAbogado.estado || "");
+    if (opcion === null) return;
+    const estado = normalizarEstadoRevisionAbogado(opcion);
+    if (!estado) { alert("Debe escribir OK, REPARA o NO APLICA."); return; }
+    let nota = revisionAbogado.nota || "";
+    if (estado !== "OK") {
+      const textoNota = window.prompt("Ingrese nota de tramites a seguir hasta OK:", nota);
+      if (textoNota === null) return;
+      nota = textoNota.trim();
+      if (!nota) { alert("Debe ingresar una nota para REPARA o NO APLICA."); return; }
+    } else {
+      nota = "";
+    }
+    try {
+      const usuario = currentUser?.nombre || currentUser?.username || currentUser?.usuario || "";
+      const observaciones = observacionesConRevisionAbogado(persona.observaciones || "", estado, nota, usuario);
+      await syncPersona({ observaciones });
+    } catch (err) {
+      alert("No se pudo guardar Revision abogado: " + (err.message || err));
+    }
+  };
   const toggleAhorroCompleto = async () => {
     if (!puedeMarcarAhorroCompleto) return;
     const marcar = !ahorroCompletoMarcado;
@@ -5349,6 +5406,11 @@ const datosSolicitud = {
                 {ahorroCompletoMarcado ? "Ahorro completo" : "Marcar ahorro completo"}
               </button>
             )}
+            <button onClick={cambiarRevisionAbogado}
+              title={revisionAbogado.nota ? `Nota: ${revisionAbogado.nota}` : "Marcar Revision abogado"}
+              style={{ marginTop: 6, marginRight: 8, display: "inline-flex", alignItems: "center", gap: 6, background: revisionAbogadoOk ? "#DCFCE7" : "#FFFBEB", color: revisionAbogadoOk ? "#047857" : "#B45309", border: revisionAbogadoOk ? "1px solid #86EFAC" : "1px solid #F59E0B", borderRadius: 10, padding: "4px 12px", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
+              {revisionAbogadoTexto}
+            </button>
             {mostrarInfoAguaRural && (
               <>
                 <span title="Dato tomado desde Boleta de agua (APR o Pozo) de la solicitud activa"
