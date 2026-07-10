@@ -211,6 +211,26 @@ const esComiteDesmarque = (persona = {}, comite = null) => {
   return normComiteComparar(texto).includes("comite desmarque") ||
     normComiteComparar(texto).includes("desmarque de vivienda");
 };
+const normalizarResolucionSanitaria = (valor = "") => {
+  const v = String(valor || "").trim().toUpperCase();
+  if (["SI", "S"].includes(v)) return "SI";
+  if (["NO", "N"].includes(v)) return "NO";
+  return "";
+};
+const infoAguaCspRuralSolicitud = (sol = {}) => {
+  const doc = (sol.documentos || []).find(d => {
+    const n = String(d.nombre || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return d.tipo === "agua" || (n.includes("boleta") && n.includes("agua")) || n.includes("agua (apr");
+  });
+  if (!doc) return { nombreApr: "", esPozo: false, resolucionSanitaria: "" };
+  const partes = String(doc.valor || "").split("|");
+  const opcion = String(doc.opcionSeleccionada || partes[0] || "").trim();
+  const esPozo = opcion.toLowerCase() === "pozo" || String(partes[0] || "").trim().toLowerCase() === "pozo";
+  const nombreRaw = String(partes[0] || "").trim();
+  const nombreApr = esPozo ? "POZO" : (nombreRaw.toLowerCase() === "con arranque" ? "" : nombreRaw);
+  const resolucionSanitaria = normalizarResolucionSanitaria(esPozo ? (partes[2] || partes[1]) : partes[2]);
+  return { nombreApr, esPozo, resolucionSanitaria };
+};
 const STORAGE_BUCKET = "documentos-solicitantes";
 const safeStorageSegment = (value = "") => {
   const base = String(value || "")
@@ -5241,8 +5261,15 @@ const datosSolicitud = {
         const partes = (d.valor || "").split("|");
         let valor = d.valor || "";
         if (tipoReal === "luz" && opcion !== "Sin empalme") valor = opcion + "|" + (partes[1] || "");
-        if (tipoReal === "agua" && opcion === "Pozo") valor = "Pozo";
-        if (tipoReal === "agua" && opcion !== "Pozo") valor = opcion + "|" + (partes[1] || "");
+        if (tipoReal === "agua" && opcion === "Pozo") {
+          const resolucion = normalizarResolucionSanitaria(partes[2] || partes[1]);
+          valor = ["Pozo", "N/A", resolucion].filter((x, i) => i < 2 || x).join("|");
+        }
+        if (tipoReal === "agua" && opcion !== "Pozo") {
+          const nombreActual = String(partes[0] || "").trim();
+          const nombreBase = nombreActual.toLowerCase() === "pozo" ? "" : (nombreActual || opcion);
+          valor = [nombreBase, partes[1] || "", normalizarResolucionSanitaria(partes[2])].filter((x, i) => i < 2 || x).join("|");
+        }
         return { ...d, valor, opcionSeleccionada: opcion, entregado: autoMarcar, etiqueta, tipo: tipoReal };
       })
     });
@@ -5259,6 +5286,8 @@ const datosSolicitud = {
   const comiteEsDesmarque = esComiteDesmarque(persona, comite);
   const ahorroCompletoMarcado = solicitanteConAhorroCompleto(persona);
   const puedeMarcarAhorroCompleto = Boolean(persona && !comiteEsDesmarque && (persona.comiteId || persona.comite || comite));
+  const mostrarInfoAguaRural = (solicitudTrabajoPrincipal?.programaId || solicitudTrabajoPrincipal?.programa_id) === "csp_rural";
+  const infoAguaRural = mostrarInfoAguaRural ? infoAguaCspRuralSolicitud(solicitudTrabajoPrincipal) : null;
   const toggleAhorroCompleto = async () => {
     if (!puedeMarcarAhorroCompleto) return;
     const marcar = !ahorroCompletoMarcado;
@@ -5298,6 +5327,18 @@ const datosSolicitud = {
                 style={{ marginTop: 6, marginRight: 8, display: "inline-flex", alignItems: "center", gap: 6, background: ahorroCompletoMarcado ? "#DCFCE7" : "#EFF6FF", color: ahorroCompletoMarcado ? "#047857" : "#1D4ED8", border: ahorroCompletoMarcado ? "1px solid #86EFAC" : "1px solid #BFDBFE", borderRadius: 10, padding: "4px 12px", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
                 {ahorroCompletoMarcado ? "Ahorro completo" : "Marcar ahorro completo"}
               </button>
+            )}
+            {mostrarInfoAguaRural && (
+              <>
+                <span title="Dato tomado desde Boleta de agua (APR o Pozo) de la solicitud activa"
+                  style={{ marginTop: 6, marginRight: 8, display: "inline-flex", alignItems: "center", background: infoAguaRural?.esPozo ? "#DCFCE7" : "#EFF6FF", color: infoAguaRural?.esPozo ? "#047857" : "#1D4ED8", border: infoAguaRural?.esPozo ? "1px solid #86EFAC" : "1px solid #BFDBFE", borderRadius: 10, padding: "4px 12px", fontSize: 12, fontWeight: 900 }}>
+                  Nombre APR: {infoAguaRural?.nombreApr || "Pendiente"}
+                </span>
+                <span title="Respuesta registrada en Boleta de agua (APR o Pozo)"
+                  style={{ marginTop: 6, marginRight: 8, display: "inline-flex", alignItems: "center", background: infoAguaRural?.resolucionSanitaria === "SI" ? "#DCFCE7" : infoAguaRural?.resolucionSanitaria === "NO" ? "#FEE2E2" : "#F3F4F6", color: infoAguaRural?.resolucionSanitaria === "SI" ? "#047857" : infoAguaRural?.resolucionSanitaria === "NO" ? "#B91C1C" : "#6B7280", border: infoAguaRural?.resolucionSanitaria === "SI" ? "1px solid #86EFAC" : infoAguaRural?.resolucionSanitaria === "NO" ? "1px solid #FCA5A5" : "1px solid #D1D5DB", borderRadius: 10, padding: "4px 12px", fontSize: 12, fontWeight: 900 }}>
+                  Resolucion sanitaria: {infoAguaRural?.resolucionSanitaria || "Pendiente"}
+                </span>
+              </>
             )}
             <div style={{ fontSize: 13, color: "#888" }}>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
@@ -6726,10 +6767,23 @@ const datosSolicitud = {
                 const tramiteCompleto = !!(tramiteNum.trim() && tramiteFecha.trim());
 
                 // Valores APR: "nombreAPR|nServicio" en doc.valor
-                const aprPartes = esConArranque ? (doc.valor || "").split("|") : [];
+                const aguaPartes = tipoReal === "agua" ? (doc.valor || "").split("|") : [];
+                const aprPartes = esConArranque ? aguaPartes : [];
                 const aprNombre = aprPartes[0] || "";
                 const aprServicio = aprPartes[1] || "";
                 const aprCompleto = !!(aprNombre.trim() && aprServicio.trim());
+                const esAguaCspRural = solProgramaId === "csp_rural" && tipoReal === "agua";
+                const resolucionSanitariaAgua = esAguaCspRural ? normalizarResolucionSanitaria(opSel === "Pozo" ? (aguaPartes[2] || aguaPartes[1]) : aguaPartes[2]) : "";
+                const guardarResolucionSanitariaAgua = async (respuesta) => {
+                  const res = normalizarResolucionSanitaria(respuesta);
+                  const newValor = opSel === "Pozo"
+                    ? ["Pozo", "N/A", res].join("|")
+                    : [aprNombre, aprServicio, res].join("|");
+                  const nuevas = solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) });
+                  onSaveSolicitudes(nuevas);
+                  const solActualizada = nuevas.find(s => s.id === sol.id);
+                  if (solActualizada) await actualizarSolicitudEnDb(sol.id, { documentos: solActualizada.documentos });
+                };
 
                 // Valores discapacidad con folio: "folio|movilidad" en doc.valor
                 const discPartes = esConDiscapacidad ? (doc.valor || "").split("|") : [];
@@ -7072,7 +7126,7 @@ const datosSolicitud = {
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
                         <input type="text" placeholder="Nombre Empresa Sanitaria" value={aprNombre} onClick={e => e.stopPropagation()}
                           onChange={async e => {
-                            const newValor = e.target.value + "|" + aprServicio;
+                            const newValor = [e.target.value, aprServicio, resolucionSanitariaAgua].filter((x, i) => i < 2 || x).join("|");
                             const completo = e.target.value.trim() && aprServicio.trim();
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ sistemaAgua: e.target.value.trim() });
@@ -7080,7 +7134,7 @@ const datosSolicitud = {
                           style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (aprNombre.trim() ? "#059669" : "#ddd"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <input type="text" placeholder="N° de servicio agua" value={aprServicio} onClick={e => e.stopPropagation()}
                           onChange={async e => {
-                            const newValor = aprNombre + "|" + e.target.value;
+                            const newValor = [aprNombre, e.target.value, resolucionSanitariaAgua].filter((x, i) => i < 2 || x).join("|");
                             onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
                             if (e.target.value.trim()) await syncPersona({ nServicioAgua: e.target.value.trim() });
                           }}
@@ -7089,6 +7143,21 @@ const datosSolicitud = {
                       </div>
                     )}
 
+                    {/* Resolucion sanitaria agua CSP Rural */}
+                    {esAguaCspRural && opSel && (
+                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
+                        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2, fontWeight: 700 }}>Tiene resolucion sanitaria?</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {["SI", "NO"].map(op => (
+                            <button key={op} onClick={async e => { e.stopPropagation(); await guardarResolucionSanitariaAgua(op); }}
+                              style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (resolucionSanitariaAgua === op ? (op === "SI" ? "#059669" : "#DC2626") : "#ddd"), background: resolucionSanitariaAgua === op ? (op === "SI" ? "#059669" : "#DC2626") : "#fff", color: resolucionSanitariaAgua === op ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {op}
+                            </button>
+                          ))}
+                        </div>
+                        {!resolucionSanitariaAgua && <div style={{ fontSize: 10, color: "#B45309" }}>Completa la respuesta de resolucion sanitaria</div>}
+                      </div>
+                    )}
                     {/* Inputs discapacidad Con discapacidad */}
                     {esConDiscapacidad && (
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
