@@ -217,6 +217,24 @@ const normalizarResolucionSanitaria = (valor = "") => {
   if (["NO", "N"].includes(v)) return "NO";
   return "";
 };
+const normalizarDetalleResolucionSanitaria = (valor = "") => {
+  const raw = String(valor || "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (upper === "NO" || upper === "N" || upper.includes("SIN R/S") || upper.includes("SIN RS")) return "SIN R/S";
+  if (upper.startsWith("SI:") || upper.startsWith("SI -")) return raw.replace(/^SI\s*[:-]\s*/i, "").trim() || "SI";
+  if (upper === "SI" || upper === "S") return "SI";
+  return raw;
+};
+const estadoDetalleResolucionSanitaria = (valor = "") => {
+  const texto = normalizarDetalleResolucionSanitaria(valor);
+  return {
+    texto,
+    tiene: !!texto && texto !== "SIN R/S" && texto !== "SI",
+    sin: texto === "SIN R/S",
+    pendienteNumero: texto === "SI",
+  };
+};
 const infoAguaCspRuralSolicitud = (sol = {}) => {
   const doc = (sol.documentos || []).find(d => {
     const n = String(d.nombre || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -228,7 +246,7 @@ const infoAguaCspRuralSolicitud = (sol = {}) => {
   const esPozo = opcion.toLowerCase() === "pozo" || String(partes[0] || "").trim().toLowerCase() === "pozo";
   const nombreRaw = String(partes[0] || "").trim();
   const nombreApr = esPozo ? "POZO" : (nombreRaw.toLowerCase() === "con arranque" ? "" : nombreRaw);
-  const resolucionSanitaria = esPozo ? normalizarResolucionSanitaria(partes[2] || partes[1]) : String(partes[2] || "").trim();
+  const resolucionSanitaria = normalizarDetalleResolucionSanitaria(partes[2] || (esPozo ? partes[1] : ""));
   return { nombreApr, esPozo, resolucionSanitaria };
 };
 const STORAGE_BUCKET = "documentos-solicitantes";
@@ -5288,8 +5306,9 @@ const datosSolicitud = {
   const puedeMarcarAhorroCompleto = Boolean(persona && !comiteEsDesmarque && (persona.comiteId || persona.comite || comite));
   const mostrarInfoAguaRural = (solicitudTrabajoPrincipal?.programaId || solicitudTrabajoPrincipal?.programa_id) === "csp_rural";
   const infoAguaRural = mostrarInfoAguaRural ? infoAguaCspRuralSolicitud(solicitudTrabajoPrincipal) : null;
-  const resolucionSanitariaVerde = !!infoAguaRural?.resolucionSanitaria && (!infoAguaRural?.esPozo || infoAguaRural.resolucionSanitaria === "SI");
-  const resolucionSanitariaRoja = !!infoAguaRural?.esPozo && infoAguaRural?.resolucionSanitaria === "NO";
+  const estadoResolucionSanitariaRural = estadoDetalleResolucionSanitaria(infoAguaRural?.resolucionSanitaria || "");
+  const resolucionSanitariaVerde = estadoResolucionSanitariaRural.tiene;
+  const resolucionSanitariaRoja = estadoResolucionSanitariaRural.sin;
   const toggleAhorroCompleto = async () => {
     if (!puedeMarcarAhorroCompleto) return;
     const marcar = !ahorroCompletoMarcado;
@@ -5338,7 +5357,7 @@ const datosSolicitud = {
                 </span>
                 <span title="Respuesta registrada en Boleta de agua (APR o Pozo)"
                   style={{ marginTop: 6, marginRight: 8, display: "inline-flex", alignItems: "center", background: resolucionSanitariaVerde ? "#DCFCE7" : resolucionSanitariaRoja ? "#FEE2E2" : "#F3F4F6", color: resolucionSanitariaVerde ? "#047857" : resolucionSanitariaRoja ? "#B91C1C" : "#6B7280", border: resolucionSanitariaVerde ? "1px solid #86EFAC" : resolucionSanitariaRoja ? "1px solid #FCA5A5" : "1px solid #D1D5DB", borderRadius: 10, padding: "4px 12px", fontSize: 12, fontWeight: 900 }}>
-                  Resolucion sanitaria: {infoAguaRural?.resolucionSanitaria || "Pendiente"}
+                  Resolucion sanitaria: {estadoResolucionSanitariaRural.texto || "Pendiente"}
                 </span>
               </>
             )}
@@ -6776,9 +6795,10 @@ const datosSolicitud = {
                 const aprServicio = aprPartes[1] || "";
                 const aprCompleto = !!(aprNombre.trim() && aprServicio.trim());
                 const esAguaCspRural = solProgramaId === "csp_rural" && tipoReal === "agua";
-                const resolucionSanitariaAgua = esAguaCspRural ? (opSel === "Pozo" ? normalizarResolucionSanitaria(aguaPartes[2] || aguaPartes[1]) : String(aguaPartes[2] || "").trim()) : "";
+                const resolucionSanitariaAgua = esAguaCspRural ? normalizarDetalleResolucionSanitaria(aguaPartes[2] || (opSel === "Pozo" ? aguaPartes[1] : "")) : "";
+                const estadoResolucionSanitariaAgua = estadoDetalleResolucionSanitaria(resolucionSanitariaAgua);
                 const guardarResolucionSanitariaAgua = async (respuesta) => {
-                  const res = opSel === "Pozo" ? normalizarResolucionSanitaria(respuesta) : String(respuesta || "").trim();
+                  const res = normalizarDetalleResolucionSanitaria(respuesta);
                   const newValor = opSel === "Pozo"
                     ? ["Pozo", "N/A", res].join("|")
                     : [aprNombre, aprServicio, res].join("|");
@@ -7147,32 +7167,29 @@ const datosSolicitud = {
                     )}
 
                     {/* Resolucion sanitaria agua CSP Rural */}
-                    {esAguaCspRural && esConArranque && (
+                    {esAguaCspRural && opSel && (
                       <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
-                        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2, fontWeight: 700 }}>Resolucion sanitaria</div>
-                        <input type="text" placeholder="Ej: RES. EXENTA Nro. A20 010135 F. 22-11-2018" value={resolucionSanitariaAgua}
-                          onClick={e => e.stopPropagation()}
-                          onChange={e => {
-                            const newValor = [aprNombre, aprServicio, e.target.value].join("|");
-                            onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2, i2) => i2 !== docIdx ? d2 : { ...d2, valor: newValor }) }));
-                          }}
-                          onBlur={e => guardarResolucionSanitariaAgua(e.target.value)}
-                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid " + (resolucionSanitariaAgua.trim() ? "#059669" : "#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
-                        {!resolucionSanitariaAgua.trim() && <div style={{ fontSize: 10, color: "#B45309" }}>Ingresa numero y fecha de la resolucion sanitaria</div>}
-                      </div>
-                    )}
-                    {esAguaCspRural && opSel === "Pozo" && (
-                      <div style={{ display: "grid", gap: 5, marginBottom: 4 }}>
-                        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2, fontWeight: 700 }}>Tiene resolucion sanitaria?</div>
+                        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2, fontWeight: 700 }}>Tiene resolucion sanitaria de funcionamiento?</div>
                         <div style={{ display: "flex", gap: 6 }}>
-                          {["SI", "NO"].map(op => (
-                            <button key={op} onClick={async e => { e.stopPropagation(); await guardarResolucionSanitariaAgua(op); }}
-                              style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (resolucionSanitariaAgua === op ? (op === "SI" ? "#059669" : "#DC2626") : "#ddd"), background: resolucionSanitariaAgua === op ? (op === "SI" ? "#059669" : "#DC2626") : "#fff", color: resolucionSanitariaAgua === op ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              {op}
-                            </button>
-                          ))}
+                          <button onClick={async e => {
+                            e.stopPropagation();
+                            const actual = estadoResolucionSanitariaAgua.tiene ? resolucionSanitariaAgua : "";
+                            const numero = window.prompt("Ingrese numero y fecha de la resolucion sanitaria de funcionamiento:", actual || "RES. EXENTA Nro. ");
+                            if (numero === null) return;
+                            if (!numero.trim()) { alert("Debe ingresar el numero y fecha de la resolucion sanitaria."); return; }
+                            await guardarResolucionSanitariaAgua(numero.trim());
+                          }}
+                            style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (estadoResolucionSanitariaAgua.tiene ? "#059669" : "#ddd"), background: estadoResolucionSanitariaAgua.tiene ? "#059669" : "#fff", color: estadoResolucionSanitariaAgua.tiene ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            SI
+                          </button>
+                          <button onClick={async e => { e.stopPropagation(); await guardarResolucionSanitariaAgua("SIN R/S"); }}
+                            style={{ flex: 1, padding: "5px 4px", borderRadius: 6, border: "2px solid " + (estadoResolucionSanitariaAgua.sin ? "#DC2626" : "#ddd"), background: estadoResolucionSanitariaAgua.sin ? "#DC2626" : "#fff", color: estadoResolucionSanitariaAgua.sin ? "#fff" : "#555", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            NO
+                          </button>
                         </div>
-                        {!resolucionSanitariaAgua && <div style={{ fontSize: 10, color: "#B45309" }}>Completa la respuesta de resolucion sanitaria</div>}
+                        {estadoResolucionSanitariaAgua.tiene && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>{resolucionSanitariaAgua}</div>}
+                        {estadoResolucionSanitariaAgua.sin && <div style={{ fontSize: 10, color: "#DC2626", fontWeight: 700 }}>SIN R/S</div>}
+                        {!resolucionSanitariaAgua && <div style={{ fontSize: 10, color: "#B45309" }}>Seleccione SI o NO para resolucion sanitaria</div>}
                       </div>
                     )}
                     {/* Inputs discapacidad Con discapacidad */}
