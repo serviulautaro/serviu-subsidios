@@ -103,6 +103,24 @@ function programaNombre(id, programas = PROGRAMAS_META_BASE) {
   return programas.find(p => p.id === id)?.nombre || PROGRAMAS[id] || id || "Programa";
 }
 
+function codigoComitePorConstituir(comite = {}) {
+  const texto = norm(`${comite.id || ""} ${comite.codigo || ""} ${comite.nombre || ""} ${comite.comite || ""} ${comite.tipo || ""} ${comite.programaId || comite.programa_id || ""}`);
+  const esPorConstituir = texto.includes("por constituir") ||
+    texto.includes("falta constituir") ||
+    texto.includes("falta constituirlo") ||
+    texto.includes("constituirlo");
+  if (!esPorConstituir) return "";
+  const esUrbano = texto.includes("urbano") || texto.includes("csp urbano") || texto.includes("csp_urbano") || texto.includes("gru");
+  return esUrbano ? "gr2U" : "gr6R";
+}
+
+function referenciasComite(comite = {}) {
+  const refs = [comite?.codigo, comite?.id].filter(Boolean).map(String);
+  const alias = codigoComitePorConstituir(comite);
+  if (alias) refs.push(alias);
+  return [...new Set(refs)];
+}
+
 function mergeComites(comitesSupa = []) {
   const base = COMITES_BASE.map(c => ({ ...c }));
   const usados = new Set(base.map(c => norm(c.nombre)));
@@ -111,10 +129,16 @@ function mergeComites(comitesSupa = []) {
 
   (comitesSupa || []).forEach(sc => {
     if (!sc?.nombre) return;
-    const existente = base.find(c => norm(c.nombre) === norm(sc.nombre));
+    const alias = codigoComitePorConstituir(sc);
+    const existente = base.find(c =>
+      norm(c.nombre) === norm(sc.nombre) ||
+      (alias && (c.codigo === alias || c.id === alias))
+    );
     if (existente) {
       const directivaSupa = Array.isArray(sc.directiva) ? sc.directiva.filter(d => d?.rol || d?.cargo || d?.nombre) : [];
       existente.id = sc.id || existente.id;
+      existente.codigo = existente.codigo || sc.codigo || alias;
+      existente.nombre = sc.nombre || existente.nombre;
       existente.programaId = sc.programaId || sc.programa_id || existente.programaId;
       existente.familias = Number(sc.familias || sc.cantidad_familias || existente.familias || 0);
       existente.tipo = sc.tipo || existente.tipo;
@@ -133,7 +157,7 @@ function mergeComites(comitesSupa = []) {
       // Mismo inicio (primeras 15 chars) o contiene las mismas palabras clave
       return nsc.startsWith(nb.slice(0, 15)) || nb.startsWith(nsc.slice(0, 15));
     });
-    if (esVarianteBase) return;
+    if (esVarianteBase && !codigoComitePorConstituir(sc)) return;
     const texto = `${sc.programaId || ""} ${sc.programa_id || ""} ${sc.tipo || ""} ${sc.nombre || ""}`.toUpperCase();
     const tipo = texto.includes("URBANO") ? "Urbano" : "Rural";
     const codigo = tipo === "Urbano" ? `gr${nextU++}U` : `gr${nextR++}R`;
@@ -156,6 +180,45 @@ function mergeComites(comitesSupa = []) {
   return base;
 }
 
+function comitesDesdeSolicitudes(solicitudes = []) {
+  const porClave = new Map();
+  (solicitudes || []).forEach(sol => {
+    const nombre = sol?.comite || sol?.nombre_comite || "";
+    const codigo = String(sol?.codigoComite || sol?.codigo_comite || "").trim();
+    if (!nombre && !codigo) return;
+    const programa = programaId(sol);
+    const tipoTexto = `${sol?.tipoComite || sol?.tipo_comite || ""} ${programa} ${nombre}`.toUpperCase();
+    const tipo = tipoTexto.includes("URBANO") || programa === "csp_urbano" ? "Urbano" : "Rural";
+    const alias = codigoComitePorConstituir({ nombre, codigo, tipo, programaId: programa });
+    const clave = alias || codigo || norm(nombre);
+    if (!clave) return;
+    const actual = porClave.get(clave) || {
+      id: alias || codigo || clave,
+      codigo: alias || codigo || clave,
+      nombre: nombre || (alias === "gr2U" ? "Comite de Vivienda Urbano Por Constituir" : "Comite de Vivienda Rural Por Constituir"),
+      programaId: programa,
+      tipo,
+      constructora: "-",
+      profesional: "-",
+      pj: "-",
+      venc: "-",
+      directiva: [],
+      _personas: new Set(),
+    };
+    if (nombre) actual.nombre = nombre;
+    if (programa) actual.programaId = programa;
+    actual.tipo = tipo || actual.tipo;
+    const personaId = sol?.personaId || sol?.persona_id;
+    if (personaId) actual._personas.add(String(personaId));
+    porClave.set(clave, actual);
+  });
+  return [...porClave.values()].map(c => ({
+    ...c,
+    familias: c._personas.size || c.familias || 0,
+    _personas: undefined,
+  }));
+}
+
 // Filtra comités de prueba y duplicados para los selectores de informes
 function filtrarComitesValidos(lista = []) {
   const palabrasExcluir = ["prueba", "test", "demo", "borrar", "eliminar", "temporal"];
@@ -173,19 +236,24 @@ function filtrarComitesValidos(lista = []) {
 }
 
 function personaEnComite(persona, comite, solicitudes = []) {
-  if (persona?.comiteId === comite.codigo ||
-    persona?.comiteId === comite.id ||
-    norm(persona?.comite) === norm(comite.nombre)) {
+  const refs = referenciasComite(comite);
+  const alias = codigoComitePorConstituir(comite);
+  if (refs.includes(String(persona?.comiteId || "")) ||
+    norm(persona?.comite) === norm(comite.nombre) ||
+    (alias && codigoComitePorConstituir({ nombre: persona?.comite, codigo: persona?.comiteId, tipo: persona?.tipo_comite || persona?.tipoComite }) === alias)) {
     return true;
   }
 
-  const refs = [comite?.codigo, comite?.id].filter(Boolean).map(String);
   const nombreComite = norm(comite?.nombre);
   return (solicitudes || []).some(sol => {
     if ((sol?.personaId || sol?.persona_id) !== persona?.id) return false;
+    const programa = programaComite(comite);
+    if (programa && programaId(sol) !== programa) return false;
     const codigo = String(sol?.codigoComite || sol?.codigo_comite || "");
     if (codigo && refs.includes(codigo)) return true;
-    return nombreComite && norm(sol?.comite) === nombreComite;
+    const nombreSol = norm(sol?.comite);
+    if (nombreComite && nombreSol === nombreComite) return true;
+    return alias && codigoComitePorConstituir({ ...sol, nombre: sol?.comite, codigo }) === alias;
   });
 }
 
@@ -1368,7 +1436,10 @@ function TarjetaInforme({ item, active, onClick }) {
 }
 
 export default function InformesView({ personas = [], comites: comitesSupa = [], solicitudes = [], currentUser, soloAuditoria = false, onSavePersonas, programasCustom = [] }) {
-  const comites = useMemo(() => filtrarComitesValidos(mergeComites(comitesSupa)), [comitesSupa]);
+  const comites = useMemo(
+    () => filtrarComitesValidos(mergeComites([...(comitesSupa || []), ...comitesDesdeSolicitudes(solicitudes)])),
+    [comitesSupa, solicitudes]
+  );
   const programas = useMemo(() => combinarProgramasMeta(programasCustom), [programasCustom]);
   const tarjetas = useMemo(() => ([
     { id: "revision", nombre: "INFORME PARA REVISAR SOLICITANTES", descripcion: "Revisa comites, pendientes, VB y condicionales", color: "#0f766e", colorLight: "#ccfbf1", icon: "RS" },
