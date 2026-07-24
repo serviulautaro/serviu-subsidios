@@ -1150,7 +1150,10 @@ app.post('/actividades/:personaId', (req, res) => {
 // API ARCHIVOS — soporta rutas anidadas (programa/comite/rut)
 // Helper para obtener el parámetro wildcard en Express 5 (params.path) o Express 4 (params[0])
 function getWildcard(req) {
-  return decodeURIComponent(req.params.path || req.params[0] || '');
+  const raw = req.params.path || req.params[0] || '';
+  return Array.isArray(raw)
+    ? raw.map(part => decodeURIComponent(String(part || ''))).join('/')
+    : decodeURIComponent(String(raw || ''));
 }
 
 function safeDocsPath(...parts) {

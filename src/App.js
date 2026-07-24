@@ -11205,7 +11205,7 @@ function R2PruebaPanel() {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "No se pudo listar R2.");
       setArchivos(data.archivos || []);
-      setMensaje("Archivos encontrados en R2: " + (data.archivos || []).length);
+      setMensaje((data.archivos || []).length ? "Archivos encontrados en R2: " + (data.archivos || []).length : "No hay archivos en esa carpeta R2. Revise que el nombre de carpeta sea exacto.");
     } catch (err) {
       setError(err.message || "No se pudo listar R2.");
     }
@@ -11226,9 +11226,14 @@ function R2PruebaPanel() {
       const res = await fetch(API + "/api/r2/test-upload/" + ruta, { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "No se pudo subir a R2.");
-      setMensaje("Subido a R2: " + data.key);
+      setMensaje("Subido OK a R2: " + data.key);
+      setArchivos(prev => {
+        const nuevo = { key: data.key, nombre: data.nombre || archivo.name, size: data.size || archivo.size || 0, fuente: "Cloudflare R2" };
+        const sinDuplicado = (prev || []).filter(a => a.key !== nuevo.key);
+        return [nuevo, ...sinDuplicado];
+      });
       setArchivo(null);
-      await listarArchivos();
+      setTimeout(() => { listarArchivos(); }, 800);
     } catch (err) {
       setError(err.message || "No se pudo subir a R2.");
     } finally {
@@ -11260,7 +11265,7 @@ function R2PruebaPanel() {
         <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 5 }}>ARCHIVO DE PRUEBA</div>
         <input type="file" onChange={e => setArchivo(e.target.files?.[0] || null)} style={{ width: "100%" }} />
       </div>
-      <button onClick={subirPrueba} disabled={subiendo} style={{ padding: "10px 14px", border: 0, borderRadius: 8, background: subiendo ? "#94a3b8" : "#2563eb", color: "#fff", fontWeight: 900, cursor: subiendo ? "default" : "pointer" }}>{subiendo ? "Subiendo..." : "Subir prueba"}</button>
+      <button onClick={subirPrueba} disabled={subiendo} style={{ padding: "10px 14px", border: 0, borderRadius: 8, background: subiendo ? "#f59e0b" : "#2563eb", color: "#fff", fontWeight: 900, cursor: subiendo ? "default" : "pointer", boxShadow: subiendo ? "0 0 0 3px #fde68a" : "none" }}>{subiendo ? "Subiendo..." : "Subir prueba"}</button>
       <button onClick={listarArchivos} style={{ padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, background: "#fff", color: "#1e3a5f", fontWeight: 900, cursor: "pointer" }}>Listar</button>
     </div>
     {mensaje && <div style={{ marginTop: 10, color: "#047857", fontSize: 12, fontWeight: 800 }}>{mensaje}</div>}
