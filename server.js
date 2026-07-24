@@ -818,6 +818,12 @@ app.post('/api/archivo-base64', async (req, res) => {
     }
     if (!pgPool) return res.status(503).json({ error: 'Sin PostgreSQL' });
     await ensureRuntimeSchema(); // garantiza columnas data_url y mime_type
+    const archivoId = archivoRegistroId(persona_id, carpeta || '', nombre);
+    const { rows: existentes } = await requirePg().query(
+      'SELECT data_url FROM archivos_solicitante WHERE id=$1 LIMIT 1',
+      [archivoId]
+    );
+    const existente = existentes[0] || null;
     let r2Key = null;
     let r2Error = '';
     try {
@@ -842,6 +848,9 @@ app.post('/api/archivo-base64', async (req, res) => {
       r2Error = e.message || 'No se pudo sincronizar con R2.';
       console.warn('[archivo-base64 R2 pendiente]', nombre, persona_id, r2Error);
     }
+    // Regla para documentos nuevos: si R2 confirmo, PostgreSQL guarda solo metadatos.
+    // Los respaldos data_url historicos existentes nunca se eliminan.
+    const dataUrlPostgres = existente?.data_url || (r2Key ? null : data_url);
     await requirePg().query(
       `INSERT INTO archivos_solicitante
          (id, persona_id, nombre, carpeta, data_url, mime_type, r2_key, r2_bucket, storage_fuente)
@@ -854,11 +863,11 @@ app.post('/api/archivo-base64', async (req, res) => {
          r2_bucket=COALESCE(EXCLUDED.r2_bucket, archivos_solicitante.r2_bucket),
          storage_fuente=EXCLUDED.storage_fuente`,
       [
-        archivoRegistroId(persona_id, carpeta || '', nombre),
+        archivoId,
         persona_id,
         nombre,
         carpeta || '',
-        data_url,
+        dataUrlPostgres,
         mime_type || 'application/octet-stream',
         r2Key,
         r2Key ? R2_BUCKET_DEFINITIVO : null,
@@ -868,7 +877,7 @@ app.post('/api/archivo-base64', async (req, res) => {
     // Registrar en SQLite también
     try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run((carpeta||'') + '/' + nombre, carpeta||'', nombre); } catch {}
     await registrarAuditoriaAutomatica(req, 'api_upsert', 'archivos_solicitante', [{
-      id: archivoRegistroId(persona_id, carpeta || '', nombre),
+      id: archivoId,
       persona_id,
       nombre,
       carpeta: carpeta || '',
@@ -881,6 +890,7 @@ app.post('/api/archivo-base64', async (req, res) => {
       r2_key: r2Key,
       r2_bucket: r2Key ? R2_BUCKET_DEFINITIVO : null,
       pendiente_r2: !r2Key,
+      respaldo_postgres_base64: !!dataUrlPostgres,
       advertencia: r2Error || null,
     });
   } catch(e) {
@@ -2437,7 +2447,13 @@ app.post('/subir/{*path}', upload.single('archivo'), async (req, res) => {
         await requirePg().query(
           `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
            VALUES ($1,$2,$3,$4,$5,$6)
-           ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type, carpeta=EXCLUDED.carpeta`,
+           ON CONFLICT(id) DO UPDATE SET
+             data_url=CASE
+               WHEN archivos_solicitante.r2_key IS NOT NULL THEN archivos_solicitante.data_url
+               ELSE EXCLUDED.data_url
+             END,
+             mime_type=EXCLUDED.mime_type,
+             carpeta=EXCLUDED.carpeta`,
           [archivoRegistroId(personaId, carpetaRel, nombre), personaId, nombre, carpetaRel, dataUrl, mimeType]
         );
         console.log('[subir] Guardado en PG:', nombre, 'persona:', personaId);
