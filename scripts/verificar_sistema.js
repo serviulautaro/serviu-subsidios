@@ -117,6 +117,8 @@ function main() {
   ok("Solicitudes Render cargan por paginas para evitar 504", contains(app, "pageSizeRender") && contains(app, "/api/solicitudes?") && contains(server, "paginado: tieneRango") && contains(server, "LIMIT $1 OFFSET $2"));
   ok("Solicitudes paginadas evitan ordenamiento pesado por fecha", contains(server, "WITH pagina AS") && contains(server, "FROM pagina") && contains(server, "ORDER BY \"id\" ASC") && !contains(server, "ORDER BY \"fecha\" DESC NULLS LAST, \"id\" ASC"));
   ok("Migraciones de documentos no corren automaticamente en startup", contains(server, "RUN_DOC_MIGRATIONS_ON_STARTUP") && contains(server, "Migraciones pesadas: ejecutar solo bajo demanda"));
+  ok("Documentos nuevos se guardan automaticamente en R2 definitivo", contains(server, "resolverDestinoR2Documento") && contains(server, "Bucket: R2_BUCKET_DEFINITIVO") && contains(server, "Render PostgreSQL (pendiente R2)"));
+  ok("Cambios de comite sincronizan documentos sin borrar respaldos", contains(server, "sincronizarDocumentosSolicitudR2") && contains(server, "codigosOrigen") && contains(server, "Cloudflare R2 + Render PostgreSQL"));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
   ok("Ficha solicitante respeta programa seleccionado", contains(app, "solicitudTrabajoPrincipal") && contains(app, "Mostrara solo la ficha del programa seleccionado") && contains(app, "misSols={solsTrabajo}") && contains(app, "nombreComiteSolicitud"));

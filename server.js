@@ -668,20 +668,202 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_archivos_carpeta ON archivos(carpeta);
 `);
 
+const segmentoR2Dinamico = (valor = '', fallback = 'sin_dato') =>
+  r2FolderSegment(String(valor || '').replace(/_/g, ' '), fallback);
+
+const resolverDestinoR2Documento = async ({ personaId, carpeta = '', programaId = '', codigoComite = '', comite = '' }) => {
+  const { rows: personas } = await requirePg().query(
+    'SELECT id, nombre, rut FROM personas WHERE id=$1 LIMIT 1',
+    [personaId]
+  );
+  const persona = personas[0] || { id: personaId, nombre: '', rut: '' };
+  const { rows: solicitudes } = await requirePg().query(
+    `SELECT id, programa_id, comite, codigo_comite
+     FROM solicitudes WHERE persona_id=$1`,
+    [personaId]
+  );
+  const carpetaNorm = textoRegla(carpeta);
+  let solicitud = solicitudes.find(s =>
+    programaId && String(s.programa_id || '') === String(programaId) &&
+    (!codigoComite || String(s.codigo_comite || '') === String(codigoComite))
+  );
+  if (!solicitud) {
+    solicitud = solicitudes
+      .map(s => {
+        const codigo = textoRegla(s.codigo_comite);
+        const programa = textoRegla(s.programa_id);
+        const nombreComite = textoRegla(s.comite);
+        let puntaje = 0;
+        if (codigo && carpetaNorm.includes(codigo)) puntaje += 20;
+        if (programa && carpetaNorm.includes(programa)) puntaje += 10;
+        if (programa === 'CSP RURAL' && carpetaNorm.includes('RURAL')) puntaje += 8;
+        if (programa === 'CSP URBANO' && carpetaNorm.includes('URBANO')) puntaje += 8;
+        if (programa === 'HABITABILIDAD' && carpetaNorm.includes('DESMARQUE')) puntaje += 8;
+        if (nombreComite && carpetaNorm.includes(nombreComite)) puntaje += 5;
+        return { solicitud: s, puntaje };
+      })
+      .sort((a, b) => b.puntaje - a.puntaje)[0];
+    solicitud = solicitud?.puntaje > 0 ? solicitud.solicitud : null;
+  }
+  if (!solicitud && solicitudes.length === 1) solicitud = solicitudes[0];
+
+  const programaFinal = String(programaId || solicitud?.programa_id || 'sin_programa').trim();
+  const codigoFinal = String(codigoComite || solicitud?.codigo_comite || 'sin_comite').trim();
+  const comiteFinal = String(comite || solicitud?.comite || codigoFinal).trim();
+  const rutSegmento = r2FolderSegment(persona.rut || persona.id, String(persona.id || 'solicitante'));
+  const nombreSegmento = r2FolderSegment(persona.nombre, 'solicitante');
+  const prefix = [
+    'programas',
+    segmentoR2Dinamico(programaFinal, 'sin_programa'),
+    'comites',
+    segmentoR2Dinamico(codigoFinal || comiteFinal, 'sin_comite'),
+    `${rutSegmento}_${nombreSegmento}`,
+  ].join('/');
+  return {
+    persona,
+    solicitud,
+    programaId: programaFinal,
+    codigoComite: codigoFinal,
+    comite: comiteFinal,
+    prefix,
+  };
+};
+
+const carpetaPertenecePrograma = (carpeta = '', programaId = '', codigos = []) => {
+  const texto = textoRegla(carpeta).replace(/_/g, ' ');
+  const programa = textoRegla(programaId).replace(/_/g, ' ');
+  if (programa === 'CSP RURAL') return texto.includes('RURAL') && !texto.includes('DESMARQUE');
+  if (programa === 'CSP URBANO') return texto.includes('URBANO');
+  if (programa === 'HABITABILIDAD') return texto.includes('DESMARQUE') || texto.includes('HABITABILIDAD');
+  if (programa && texto.includes(programa)) return true;
+  return codigos
+    .map(codigo => textoRegla(codigo).replace(/_/g, ' '))
+    .filter(Boolean)
+    .some(codigo => texto.includes(codigo));
+};
+
+const sincronizarDocumentosSolicitudR2 = async (solicitud = {}, codigosOrigen = []) => {
+  const personaId = String(solicitud.persona_id || solicitud.personaId || '').trim();
+  const programaId = String(solicitud.programa_id || solicitud.programaId || '').trim();
+  const codigoComite = String(solicitud.codigo_comite || solicitud.codigoComite || '').trim();
+  if (!personaId || !programaId || !codigoComite || !r2Disponible()) {
+    return { ok: true, omitido: true, sincronizados: 0 };
+  }
+  const destino = await resolverDestinoR2Documento({
+    personaId,
+    programaId,
+    codigoComite,
+    comite: solicitud.comite || '',
+  });
+  const { rows } = await requirePg().query(
+    `SELECT id, persona_id, nombre, carpeta, data_url, mime_type, r2_key, r2_bucket
+     FROM archivos_solicitante
+     WHERE persona_id=$1
+       AND nombre IS NOT NULL
+       AND (data_url IS NOT NULL OR r2_key IS NOT NULL)
+     ORDER BY id`,
+    [personaId]
+  );
+  const codigos = [...new Set([codigoComite, ...codigosOrigen].filter(Boolean))];
+  const candidatos = rows.filter(row => carpetaPertenecePrograma(row.carpeta, programaId, codigos));
+  let sincronizados = 0;
+  const errores = [];
+  for (const row of candidatos) {
+    try {
+      const key = r2ObjectKey(destino.prefix, row.nombre);
+      if (row.r2_key !== key || row.r2_bucket !== R2_BUCKET_DEFINITIVO) {
+        let buffer;
+        let mimeType = row.mime_type || r2MimeFromName(row.nombre);
+        if (row.data_url) {
+          buffer = dataUrlABuffer(row.data_url);
+        } else {
+          const origen = await obtenerBufferR2(row.r2_key, row.r2_bucket);
+          buffer = origen.buffer;
+          mimeType = origen.mimeType || mimeType;
+        }
+        if (!buffer?.length) throw new Error('Documento sin contenido.');
+        await r2Client().send(new PutObjectCommand({
+          Bucket: R2_BUCKET_DEFINITIVO,
+          Key: key,
+          Body: buffer,
+          ContentType: mimeType,
+        }));
+        await requirePg().query(
+          `UPDATE archivos_solicitante
+           SET r2_key=$1, r2_bucket=$2, storage_fuente=$3
+           WHERE id=$4`,
+          [key, R2_BUCKET_DEFINITIVO, 'Cloudflare R2 + Render PostgreSQL', row.id]
+        );
+        sincronizados += 1;
+      }
+    } catch (e) {
+      errores.push({ id: row.id, nombre: row.nombre, error: e.message });
+      await requirePg().query(
+        `UPDATE archivos_solicitante
+         SET storage_fuente=$1
+         WHERE id=$2`,
+        ['Render PostgreSQL (pendiente R2)', row.id]
+      ).catch(() => {});
+    }
+  }
+  return { ok: errores.length === 0, sincronizados, errores };
+};
+
 // Ruta para guardar archivo como base64 directo en PostgreSQL (sin disco)
 app.post('/api/archivo-base64', async (req, res) => {
   try {
-    const { persona_id, nombre, carpeta, data_url, mime_type } = req.body || {};
+    const { persona_id, nombre, carpeta, data_url, mime_type, programa_id, codigo_comite, comite } = req.body || {};
     if (!persona_id || !nombre || !data_url) {
       return res.status(400).json({ error: 'Faltan campos: persona_id, nombre, data_url' });
     }
     if (!pgPool) return res.status(503).json({ error: 'Sin PostgreSQL' });
     await ensureRuntimeSchema(); // garantiza columnas data_url y mime_type
+    let r2Key = null;
+    let r2Error = '';
+    try {
+      const destino = await resolverDestinoR2Documento({
+        personaId: persona_id,
+        carpeta,
+        programaId: programa_id,
+        codigoComite: codigo_comite,
+        comite,
+      });
+      r2Key = r2ObjectKey(destino.prefix, nombre);
+      const buffer = dataUrlABuffer(data_url);
+      if (!buffer.length) throw new Error('El documento no contiene datos.');
+      await r2Client().send(new PutObjectCommand({
+        Bucket: R2_BUCKET_DEFINITIVO,
+        Key: r2Key,
+        Body: buffer,
+        ContentType: mime_type || r2MimeFromName(nombre),
+      }));
+    } catch (e) {
+      r2Key = null;
+      r2Error = e.message || 'No se pudo sincronizar con R2.';
+      console.warn('[archivo-base64 R2 pendiente]', nombre, persona_id, r2Error);
+    }
     await requirePg().query(
-      `INSERT INTO archivos_solicitante (id, persona_id, nombre, carpeta, data_url, mime_type)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT(id) DO UPDATE SET data_url=EXCLUDED.data_url, mime_type=EXCLUDED.mime_type, carpeta=EXCLUDED.carpeta`,
-      [archivoRegistroId(persona_id, carpeta || '', nombre), persona_id, nombre, carpeta || '', data_url, mime_type || 'application/octet-stream']
+      `INSERT INTO archivos_solicitante
+         (id, persona_id, nombre, carpeta, data_url, mime_type, r2_key, r2_bucket, storage_fuente)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT(id) DO UPDATE SET
+         data_url=EXCLUDED.data_url,
+         mime_type=EXCLUDED.mime_type,
+         carpeta=EXCLUDED.carpeta,
+         r2_key=COALESCE(EXCLUDED.r2_key, archivos_solicitante.r2_key),
+         r2_bucket=COALESCE(EXCLUDED.r2_bucket, archivos_solicitante.r2_bucket),
+         storage_fuente=EXCLUDED.storage_fuente`,
+      [
+        archivoRegistroId(persona_id, carpeta || '', nombre),
+        persona_id,
+        nombre,
+        carpeta || '',
+        data_url,
+        mime_type || 'application/octet-stream',
+        r2Key,
+        r2Key ? R2_BUCKET_DEFINITIVO : null,
+        r2Key ? 'Cloudflare R2 + Render PostgreSQL' : 'Render PostgreSQL (pendiente R2)',
+      ]
     );
     // Registrar en SQLite también
     try { db.prepare('INSERT OR REPLACE INTO archivos (id, carpeta, nombre) VALUES (?, ?, ?)').run((carpeta||'') + '/' + nombre, carpeta||'', nombre); } catch {}
@@ -692,7 +874,15 @@ app.post('/api/archivo-base64', async (req, res) => {
       carpeta: carpeta || '',
     }], { campos: ['nombre', 'carpeta', 'data_url', 'mime_type'] });
     console.log('[archivo-base64] Guardado en PG:', nombre, 'persona:', persona_id);
-    res.json({ ok: true, nombre });
+    res.json({
+      ok: true,
+      nombre,
+      r2: !!r2Key,
+      r2_key: r2Key,
+      r2_bucket: r2Key ? R2_BUCKET_DEFINITIVO : null,
+      pendiente_r2: !r2Key,
+      advertencia: r2Error || null,
+    });
   } catch(e) {
     console.error('[archivo-base64] Error:', e.message);
     res.status(500).json({ error: e.message });
@@ -890,6 +1080,11 @@ app.post('/api/db/:table/insert', async (req, res) => {
     if (req.params.table === 'solicitudes') cacheSolicitudes = null;
     await registrarAuditoriaAutomatica(req, 'api_insert', req.params.table, data);
     res.json({ ok: true, data });
+    if (req.params.table === 'solicitudes') {
+      setImmediate(() => Promise.allSettled(
+        data.map(row => sincronizarDocumentosSolicitudR2(row))
+      ).catch(e => console.warn('[sincronizacion R2 solicitud insert]', e.message)));
+    }
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
   }
@@ -902,6 +1097,11 @@ app.post('/api/db/:table/upsert', async (req, res) => {
     if (req.params.table === 'solicitudes') cacheSolicitudes = null;
     await registrarAuditoriaAutomatica(req, 'api_upsert', req.params.table, data);
     res.json({ ok: true, data });
+    if (req.params.table === 'solicitudes') {
+      setImmediate(() => Promise.allSettled(
+        data.map(row => sincronizarDocumentosSolicitudR2(row))
+      ).catch(e => console.warn('[sincronizacion R2 solicitud upsert]', e.message)));
+    }
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
   }
@@ -909,6 +1109,14 @@ app.post('/api/db/:table/upsert', async (req, res) => {
 
 app.patch('/api/db/:table/update', async (req, res) => {
   try {
+    let solicitudesAntes = [];
+    if (req.params.table === 'solicitudes') {
+      const filtrosAntes = req.body?.filters || [];
+      const valuesAntes = [];
+      let sqlAntes = 'SELECT persona_id, programa_id, codigo_comite FROM solicitudes';
+      sqlAntes += whereSql(filtrosAntes, valuesAntes);
+      solicitudesAntes = (await requirePg().query(sqlAntes, valuesAntes)).rows;
+    }
     const data = await pgUpdate(req.params.table, req.body?.filters || [], req.body?.values || {});
     cacheBootstrap = null;
     if (req.params.table === 'solicitudes') cacheSolicitudes = null;
@@ -917,6 +1125,20 @@ app.patch('/api/db/:table/update', async (req, res) => {
       campos: resumenValoresAuditoria(req.body?.values || {}),
     });
     res.json({ ok: true, data });
+    if (req.params.table === 'solicitudes') {
+      setImmediate(() => Promise.allSettled(
+        data.map(row => {
+          const anteriores = solicitudesAntes
+            .filter(anterior =>
+              String(anterior.persona_id || '') === String(row.persona_id || '') &&
+              String(anterior.programa_id || '') === String(row.programa_id || '')
+            )
+            .map(anterior => anterior.codigo_comite)
+            .filter(Boolean);
+          return sincronizarDocumentosSolicitudR2(row, anteriores);
+        })
+      ).catch(e => console.warn('[sincronizacion R2 solicitud update]', e.message)));
+    }
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
   }
