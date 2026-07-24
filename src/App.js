@@ -4379,7 +4379,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     let pgNames = [];
     const carpetasRegistradas = new Set();
     try {
-      const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type,data_url`;
+      const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(persona.id)}&select=nombre,carpeta,mime_type,data_url,r2_key,r2_bucket,storage_fuente`;
       const r = await fetch(urlPG);
       const json = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -4392,9 +4392,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
           if (sf.carpeta) carpetasRegistradas.add(sf.carpeta);
           pgNames.push(sf.nombre);
           rutasMap[sf.nombre] = sf.carpeta || carpeta;
-          agregarFuenteArchivo(sf.nombre, sf.data_url ? "Render" : "Referencia historica", sf.carpeta || carpeta);
+          if (sf.r2_key) agregarFuenteArchivo(sf.nombre, "Cloudflare R2", sf.r2_key);
+          if (sf.data_url) agregarFuenteArchivo(sf.nombre, "Render", sf.carpeta || carpeta);
+          if (!sf.r2_key && !sf.data_url) agregarFuenteArchivo(sf.nombre, "Referencia historica", sf.carpeta || carpeta);
           if (!datosMap[sf.nombre])
-            datosMap[sf.nombre] = { dataUrl: sf.data_url || "", mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta };
+            datosMap[sf.nombre] = { dataUrl: sf.data_url || "", mimeType: sf.mime_type || "", carpeta: sf.carpeta || carpeta, r2Key: sf.r2_key || "", r2Bucket: sf.r2_bucket || "", storageFuente: sf.storage_fuente || "" };
         });
       }
     } catch(e) { console.error("[cargarArchivos PG exception]", e.message); }
@@ -4433,7 +4435,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (d.carpeta) carpetasRegistradas.add(d.carpeta);
         rutasMap[d.archivo] = d.carpeta || rutasMap[d.archivo] || carpeta;
         agregarFuenteArchivo(d.archivo, "Respaldo solicitud", d.carpeta || carpeta);
-        datosMap[d.archivo] = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "" };
+        const respaldoSolicitud = { dataUrl: d.archivoData || "", mimeType: d.archivoTipo || "", carpeta: d.carpeta || carpeta, storagePath: d.storagePath || "" };
+        datosMap[d.archivo] = { ...(datosMap[d.archivo] || {}), ...respaldoSolicitud, dataUrl: respaldoSolicitud.dataUrl || datosMap[d.archivo]?.dataUrl || "", mimeType: respaldoSolicitud.mimeType || datosMap[d.archivo]?.mimeType || "", carpeta: respaldoSolicitud.carpeta || datosMap[d.archivo]?.carpeta || carpeta, storagePath: respaldoSolicitud.storagePath || datosMap[d.archivo]?.storagePath || "" };
       });
 
     // UNIÓN: PG + disco (sin duplicados)
@@ -4494,7 +4497,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const respaldoUrl = archivoGuardado?.dataUrl || "";
     const rutaLocal = archivosRutas[nombre] || archivoGuardado?.carpeta || carpeta;
 
-    // Si hay dataUrl en memoria, usarlo directamente (más rápido)
+    // Si hay dataUrl en memoria, usarlo directamente (m??s r??pido)
     if (String(respaldoUrl).startsWith("data:")) return respaldoUrl;
 
     const urlSirveDocumento = async (url) => {
@@ -4514,6 +4517,12 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       } catch {}
       return false;
     };
+
+    // R2: si existe copia en Cloudflare, usarla primero y dejar Render como respaldo.
+    if (archivoGuardado?.r2Key) {
+      const urlR2 = API + "/api/r2/archivo/" + String(archivoGuardado.r2Key).split("/").map(encodeURIComponent).join("/");
+      if (await urlSirveDocumento(urlR2)) return urlR2;
+    }
 
     // 1. RENDER: /files/ (ruta principal de archivos estáticos)
     const esHtmlGenerado = nombre.toLowerCase().endsWith(".html");
@@ -4706,7 +4715,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         let agregados = 0;
         for (const p of zipSeleccionados) {
           const folder = zip.folder(nombreCarpetaZip(p));
-          const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(p.id)}&select=nombre,carpeta,mime_type,data_url&soloDisponibles=true`;
+          const urlPG = `${API}/api/db/archivos_solicitante?eq[persona_id]=${encodeURIComponent(p.id)}&select=nombre,carpeta,mime_type,data_url,r2_key,r2_bucket,storage_fuente&soloDisponibles=true`;
           const r = await fetch(urlPG, { cache: "no-store" });
           const json = await r.json().catch(() => ({}));
           if (!r.ok) throw new Error(json.error || "No se pudieron leer documentos desde la base.");

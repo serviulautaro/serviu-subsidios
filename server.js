@@ -111,6 +111,39 @@ const streamToBuffer = async (stream) => {
   return Buffer.concat(chunks);
 };
 
+const r2FolderSegment = (value = '', fallback = 'sin_dato') => {
+  const clean = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+  return clean || fallback;
+};
+
+const r2MimeFromName = (nombre = '') => {
+  const ext = path.extname(String(nombre || '')).toLowerCase();
+  return ({
+    '.pdf': 'application/pdf',
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.zip': 'application/zip',
+  })[ext] || 'application/octet-stream';
+};
+
+const obtenerBufferR2 = async (key, bucketOverride = '') => {
+  const cfg = r2Config();
+  const bucket = bucketOverride || cfg.bucket;
+  const out = await r2Client().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  return {
+    buffer: await streamToBuffer(out.Body),
+    mimeType: out.ContentType || 'application/octet-stream',
+  };
+};
+
 const timeout = (promise, ms, message) => Promise.race([
   promise,
   new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
@@ -293,6 +326,9 @@ async function ensureRuntimeSchema() {
       ALTER TABLE "solicitudes" ADD COLUMN IF NOT EXISTS "respuesta_serviu_estado" text DEFAULT '';
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "data_url" text;
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "mime_type" text;
+      ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "r2_key" text;
+      ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "r2_bucket" text;
+      ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "storage_fuente" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "siguiente_paso" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "fecha_compromiso" text;
     `).catch(err => {
@@ -489,7 +525,9 @@ async function pgSelect(table, query = {}) {
   let sql = `SELECT ${columnasSelect(query.select)} FROM ${quoteIdent(table)}`;
   sql += whereSql(filtros, values);
   if (table === 'archivos_solicitante' && String(query.soloDisponibles || '') === 'true') {
-    sql += sql.includes(' WHERE ') ? ' AND data_url IS NOT NULL' : ' WHERE data_url IS NOT NULL';
+    sql += sql.includes(' WHERE ')
+      ? ' AND (data_url IS NOT NULL OR r2_key IS NOT NULL)'
+      : ' WHERE (data_url IS NOT NULL OR r2_key IS NOT NULL)';
   }
   sql += aplicarOrdenRango(query, values);
   const { rows } = await requirePg().query(sql, values);
@@ -941,11 +979,11 @@ app.post('/api/zip-documentos', async (req, res) => {
 
     const personasPorId = new Map(personasReq.map(p => [String(p.id), p]));
     const { rows } = await requirePg().query(
-      `SELECT persona_id, nombre, carpeta, data_url, mime_type
+      `SELECT persona_id, nombre, carpeta, data_url, mime_type, r2_key, r2_bucket
        FROM archivos_solicitante
        WHERE persona_id = ANY($1::text[])
          AND nombre IS NOT NULL
-         AND data_url IS NOT NULL
+         AND (data_url IS NOT NULL OR r2_key IS NOT NULL)
        ORDER BY persona_id, nombre`,
       [ids]
     );
@@ -955,7 +993,17 @@ app.post('/api/zip-documentos', async (req, res) => {
     for (const row of rows) {
       const persona = personasPorId.get(String(row.persona_id)) || { id: row.persona_id };
       const folder = zip.folder(carpetaSeguraZip(persona));
-      const buffer = bufferDesdeDataUrl(row.data_url);
+      let buffer = Buffer.alloc(0);
+      if (row.data_url) {
+        buffer = bufferDesdeDataUrl(row.data_url);
+      } else if (row.r2_key) {
+        try {
+          const r2 = await obtenerBufferR2(row.r2_key, row.r2_bucket);
+          buffer = r2.buffer;
+        } catch (e) {
+          console.warn('[zip-documentos R2]', row.r2_key, e.message);
+        }
+      }
       if (!buffer.length) continue;
       folder.file(nombreSeguroZip(row.nombre, `documento_${agregados + 1}`), buffer);
       agregados++;
@@ -1305,6 +1353,116 @@ app.get('/api/r2/archivo/{*path}', async (req, res) => {
   }
 });
 
+app.post('/api/r2/copiar-comite-csp-urbano-no-califican', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    if (!r2Disponible()) return res.status(503).json({ ok: false, error: 'Cloudflare R2 no esta configurado.' });
+    const cfg = r2Config();
+    const norm = (v) => textoRegla(v).replace(/\s+/g, ' ');
+    const esProgramaUrbano = (s = {}) => {
+      const texto = norm(`${s.programa_id || ''}`);
+      return texto.includes('URBANO') || texto.includes('CSP_URBANO') || texto.includes('SITIO PROPIO URBANO');
+    };
+    const esComiteNoCalifica = (s = {}) => {
+      const texto = norm(`${s.comite || ''} ${s.codigo_comite || ''} ${s.tipo_comite || ''}`);
+      return texto.includes('MQINE8DW29WD8AVCU53') ||
+        texto.includes('SOLICITANTES NO CALIFICAN URBANO') ||
+        texto.includes('SOLICITANTES NO CALIFUCAN URBANO') ||
+        ((texto.includes('NO CALIFICA') || texto.includes('NO CALIFICAN') || texto.includes('NO CALIFUCAN')) && texto.includes('URBANO'));
+    };
+
+    const { rows: solicitudesRows } = await requirePg().query(
+      `SELECT id, persona_id, persona_nombre, programa_id, comite, codigo_comite, tipo_comite
+       FROM solicitudes
+       WHERE persona_id IS NOT NULL`
+    );
+    const solicitudesPiloto = solicitudesRows.filter(s => esProgramaUrbano(s) && esComiteNoCalifica(s));
+    const personaIds = [...new Set(solicitudesPiloto.map(s => String(s.persona_id || '').trim()).filter(Boolean))];
+    if (!personaIds.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'No se encontraron solicitantes en Construccion Sitio Propio Urbano / SOLICITANTES NO CALIFICAN URBANO.',
+      });
+    }
+
+    const { rows: personasRows } = await requirePg().query(
+      `SELECT id, nombre, rut, telefono, direccion, comite FROM personas WHERE id = ANY($1::text[])`,
+      [personaIds]
+    );
+    const personasPorId = new Map(personasRows.map(p => [String(p.id), p]));
+    const { rows: archivosRows } = await requirePg().query(
+      `SELECT id, persona_id, nombre, carpeta, data_url, mime_type, r2_key
+       FROM archivos_solicitante
+       WHERE persona_id = ANY($1::text[])
+         AND nombre IS NOT NULL
+         AND data_url IS NOT NULL
+       ORDER BY persona_id, nombre`,
+      [personaIds]
+    );
+
+    const subidos = [];
+    const omitidos = [];
+    const errores = [];
+    for (const row of archivosRows) {
+      try {
+        const persona = personasPorId.get(String(row.persona_id)) || { id: row.persona_id };
+        const rutSegmento = r2FolderSegment(persona.rut || persona.id, String(persona.id || 'solicitante'));
+        const nombreSegmento = r2FolderSegment(persona.nombre || persona.persona_nombre, 'solicitante');
+        const carpetaDestino = `piloto/csp_urbano/solicitantes_no_califican_urbano/${rutSegmento}_${nombreSegmento}`;
+        const key = r2ObjectKey(carpetaDestino, row.nombre);
+        if (row.r2_key === key) {
+          omitidos.push({ persona_id: row.persona_id, nombre: row.nombre, key, motivo: 'ya_estaba_en_r2' });
+          continue;
+        }
+        const buffer = dataUrlABuffer(row.data_url);
+        if (!buffer.length) {
+          omitidos.push({ persona_id: row.persona_id, nombre: row.nombre, motivo: 'sin_contenido' });
+          continue;
+        }
+        const mimeType = row.mime_type || r2MimeFromName(row.nombre);
+        await r2Client().send(new PutObjectCommand({
+          Bucket: cfg.bucket,
+          Key: key,
+          Body: buffer,
+          ContentType: mimeType,
+        }));
+        await requirePg().query(
+          `UPDATE archivos_solicitante
+           SET r2_key=$1, r2_bucket=$2, storage_fuente=$3
+           WHERE id=$4`,
+          [key, cfg.bucket, 'Cloudflare R2 + Render PostgreSQL', row.id]
+        );
+        subidos.push({
+          persona_id: row.persona_id,
+          solicitante: persona.nombre || '',
+          nombre: row.nombre,
+          key,
+          fuente: 'Cloudflare R2 + Render PostgreSQL',
+        });
+      } catch (e) {
+        errores.push({ persona_id: row.persona_id, nombre: row.nombre, error: e.message });
+      }
+    }
+
+    res.json({
+      ok: errores.length === 0,
+      bucket: cfg.bucket,
+      comite: 'SOLICITANTES NO CALIFICAN URBANO',
+      programa: 'Construccion Sitio Propio Urbano',
+      solicitantes_encontrados: personaIds.length,
+      documentos_subidos: subidos.length,
+      documentos_omitidos: omitidos.length,
+      errores,
+      subidos,
+      omitidos,
+      mensaje: 'Copia piloto terminada. No se borro ni reemplazo ningun documento existente.',
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
 app.post('/carpeta/{*path}', (req, res) => {
   const carpetaRel = getWildcard(req);
   const carpeta = safeDocsPath(carpetaRel);
@@ -1377,7 +1535,10 @@ app.get('/archivos/{*path}', async (req, res) => {
   if (pgPool) {
     try {
       const { rows } = await requirePg().query(
-        `SELECT nombre FROM archivos_solicitante WHERE carpeta=$1 AND nombre IS NOT NULL AND data_url IS NOT NULL`,
+        `SELECT nombre FROM archivos_solicitante
+         WHERE carpeta=$1
+           AND nombre IS NOT NULL
+           AND (data_url IS NOT NULL OR r2_key IS NOT NULL)`,
         [carpetaRel]
       );
       rows.forEach(r => archivosSet.add(r.nombre));
@@ -1396,13 +1557,21 @@ async function servirDesdeDB(res, nombre, carpeta) {
     let rows = [];
     if (carpeta) {
       const r = await requirePg().query(
-        `SELECT data_url, mime_type FROM archivos_solicitante
-         WHERE nombre=$1 AND carpeta=$2 AND data_url IS NOT NULL LIMIT 1`,
+        `SELECT data_url, mime_type, r2_key, r2_bucket FROM archivos_solicitante
+         WHERE nombre=$1 AND carpeta=$2 AND (data_url IS NOT NULL OR r2_key IS NOT NULL) LIMIT 1`,
         [nombre, carpeta]
       );
       rows = r.rows;
     }
-    if (!rows.length || !rows[0].data_url) return false;
+    if (!rows.length || (!rows[0].data_url && !rows[0].r2_key)) return false;
+    if (!rows[0].data_url && rows[0].r2_key) {
+      const r2 = await obtenerBufferR2(rows[0].r2_key, rows[0].r2_bucket);
+      res.setHeader('Content-Type', rows[0].mime_type || r2.mimeType || r2MimeFromName(nombre));
+      res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(nombre) + '"');
+      res.setHeader('X-Serviu-Documento-Fuente', 'Cloudflare R2');
+      res.send(r2.buffer);
+      return true;
+    }
     const dataUrl = rows[0].data_url;
     const mime = rows[0].mime_type || 'application/octet-stream';
     if (dataUrl.startsWith('data:')) {
@@ -1424,10 +1593,18 @@ app.get('/archivo-generado/:personaId/:nombre', async (req, res) => {
     const { personaId, nombre } = req.params;
     if (!pgPool) return res.status(503).json({ error: 'Sin conexión a BD' });
     const { rows } = await requirePg().query(
-      'SELECT data_url, mime_type FROM archivos_solicitante WHERE persona_id=$1 AND nombre=$2 LIMIT 1',
+      'SELECT data_url, mime_type, r2_key, r2_bucket FROM archivos_solicitante WHERE persona_id=$1 AND nombre=$2 LIMIT 1',
       [personaId, decodeURIComponent(nombre)]
     );
-    if (!rows.length || !rows[0].data_url) return res.status(404).json({ error: 'Archivo no encontrado' });
+    if (!rows.length || (!rows[0].data_url && !rows[0].r2_key)) return res.status(404).json({ error: 'Archivo no encontrado' });
+    if (!rows[0].data_url && rows[0].r2_key) {
+      const nombreArchivo = decodeURIComponent(nombre);
+      const r2 = await obtenerBufferR2(rows[0].r2_key, rows[0].r2_bucket);
+      res.setHeader('Content-Type', rows[0].mime_type || r2.mimeType || r2MimeFromName(nombreArchivo));
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombreArchivo)}"`);
+      res.setHeader('X-Serviu-Documento-Fuente', 'Cloudflare R2');
+      return res.send(r2.buffer);
+    }
     const dataUrl = rows[0].data_url;
     const mimeType = rows[0].mime_type || 'application/octet-stream';
     // Puede ser dataUrl (data:...;base64,...) o HTML plano
@@ -1478,7 +1655,9 @@ app.delete('/archivos/{*path}', async (req, res) => {
     if (pgPool) {
       try {
         await requirePg().query(
-          `UPDATE archivos_solicitante SET data_url=NULL, mime_type=NULL WHERE carpeta=$1 AND nombre=$2`,
+          `UPDATE archivos_solicitante
+           SET data_url=NULL, mime_type=NULL, r2_key=NULL, r2_bucket=NULL, storage_fuente=NULL
+           WHERE carpeta=$1 AND nombre=$2`,
           [carpetaRel, archivo]
         );
       } catch(e) { console.warn('[delete PG]', e.message); }
