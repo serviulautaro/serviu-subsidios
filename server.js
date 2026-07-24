@@ -1704,6 +1704,12 @@ app.post('/api/r2/copiar-comite-desmarque-vivienda', async (req, res) => {
 
 const R2_BUCKET_DEFINITIVO = 'documentosentidadpatrocinantemunilautaro';
 
+const carpetaRuralDeComite = (carpeta = '', codigos = []) => {
+  const texto = textoRegla(carpeta);
+  return texto.includes('CSP RURAL') &&
+    codigos.some(codigo => texto.includes(textoRegla(codigo)));
+};
+
 const alcanceCopiaDefinitiva = (scope = '') => {
   const normalizado = String(scope || '').trim().toLowerCase();
   const alcances = {
@@ -1759,6 +1765,104 @@ const alcanceCopiaDefinitiva = (scope = '') => {
             (texto.includes('NO CALIF') && texto.includes('URBANO')));
       },
     },
+    csp_rural_nuevo_hogar: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'COMITE DE VIVIENDA RURAL MI NUEVO HOGAR',
+      prefix: 'csp_rural/comite_mi_nuevo_hogar',
+      carpetaCoincide: carpeta => carpetaRuralDeComite(carpeta, ['gr1R', 'comite_0']),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (['gr1R', 'comite_0'].includes(codigo) || textoRegla(s.comite).includes('MI NUEVO HOGAR'));
+      },
+    },
+    csp_rural_la_fuerza: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'COMITE DE VIVIENDA RURAL LA FUERZA',
+      prefix: 'csp_rural/comite_la_fuerza',
+      carpetaCoincide: carpeta => carpetaRuralDeComite(carpeta, ['gr2R', 'comite_1']),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (['gr2R', 'comite_1'].includes(codigo) || textoRegla(s.comite).includes('LA FUERZA'));
+      },
+    },
+    csp_rural_kume_ruka: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'COMITE DE VIVIENDA RURAL KUME RUKA',
+      prefix: 'csp_rural/comite_kume_ruka',
+      carpetaCoincide: carpeta => carpetaRuralDeComite(carpeta, ['gr3R', 'comite_2']),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (['gr3R', 'comite_2'].includes(codigo) || textoRegla(s.comite).includes('KUME RUKA'));
+      },
+    },
+    csp_rural_newen_mapu: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'COMITE DE VIVIENDA RURAL NEWEN MAPU',
+      prefix: 'csp_rural/comite_newen_mapu',
+      carpetaCoincide: carpeta => carpetaRuralDeComite(carpeta, ['gr4R', 'comite_3']),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (['gr4R', 'comite_3'].includes(codigo) || textoRegla(s.comite).includes('NEWEN MAPU'));
+      },
+    },
+    csp_rural_kimey_ruca: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'COMITE DE VIVIENDA RURAL KIMEY RUCA',
+      prefix: 'csp_rural/comite_kimey_ruca',
+      carpetaCoincide: carpeta => carpetaRuralDeComite(carpeta, ['gr5R', 'comite_4']),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (['gr5R', 'comite_4'].includes(codigo) || textoRegla(s.comite).includes('KIMEY RUCA'));
+      },
+    },
+    csp_rural_por_constituir: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'COMITE DE VIVIENDA RURAL FALTA CONSTITUIRLO',
+      prefix: 'csp_rural/comite_por_constituir',
+      carpetaCoincide: carpeta => carpetaRuralDeComite(carpeta, ['gr6R', 'comite_5']),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (['gr6R', 'comite_5'].includes(codigo) || textoRegla(s.comite).includes('FALTA CONSTITUIRLO'));
+      },
+    },
+    csp_rural_grupo_7: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'GRUPO N° 7 RURAL FALTA CONSTITUIR',
+      prefix: 'csp_rural/grupo_7_por_constituir',
+      carpetaCoincide: carpeta => carpetaRuralDeComite(carpeta, ['mq5zdzdom843hmfp7io', 'grupo 7']),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        const texto = textoRegla(s.comite);
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (codigo === 'mq5zdzdom843hmfp7io' || (texto.includes('GRUPO N 7') && texto.includes('RURAL')));
+      },
+    },
+    csp_rural_no_califican: {
+      programa: 'csp_rural',
+      nombre: 'Construccion Sitio Propio Rural',
+      comite: 'SOLICITANTES NO CALIFICA RURAL',
+      prefix: 'csp_rural/solicitantes_no_califican',
+      carpetaCoincide: carpeta => textoRegla(carpeta).includes('RURAL'),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        const texto = textoRegla(s.comite);
+        return String(s.programa_id || '') === 'csp_rural' &&
+          (codigo === 'mqinf245we2vx0umwp' || (texto.includes('NO CALIF') && texto.includes('RURAL')));
+      },
+    },
   };
   return alcances[normalizado] ? { id: normalizado, ...alcances[normalizado] } : null;
 };
@@ -1791,7 +1895,12 @@ app.post('/api/r2/copiar-bucket-definitivo', async (req, res) => {
       return res.status(400).json({
         ok: false,
         error: 'Alcance invalido.',
-        permitidos: ['desmarque', 'csp_pioneros', 'csp_por_constituir', 'csp_no_califican'],
+        permitidos: [
+          'desmarque', 'csp_pioneros', 'csp_por_constituir', 'csp_no_califican',
+          'csp_rural_nuevo_hogar', 'csp_rural_la_fuerza', 'csp_rural_kume_ruka',
+          'csp_rural_newen_mapu', 'csp_rural_kimey_ruca', 'csp_rural_por_constituir',
+          'csp_rural_grupo_7', 'csp_rural_no_califican',
+        ],
       });
     }
     if (cfg.bucket === R2_BUCKET_DEFINITIVO) {
