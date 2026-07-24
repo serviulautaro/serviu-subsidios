@@ -1341,7 +1341,19 @@ app.get('/api/r2/archivo/{*path}', async (req, res) => {
     const cfg = r2Config();
     const key = limpiarR2Prefix(getWildcard(req));
     if (!key) return res.status(400).json({ ok: false, error: 'Ruta R2 invalida.' });
-    const out = await r2Client().send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
+    const bucketSolicitado = String(req.query?.bucket || '').trim();
+    const bucketsPermitidos = new Set([cfg.bucket, R2_BUCKET_DEFINITIVO].filter(Boolean));
+    if (bucketSolicitado && !bucketsPermitidos.has(bucketSolicitado)) {
+      return res.status(400).json({ ok: false, error: 'Bucket R2 no permitido.' });
+    }
+    const bucket = bucketSolicitado || cfg.bucket;
+    let out;
+    try {
+      out = await r2Client().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    } catch (error) {
+      if (bucketSolicitado || bucket === R2_BUCKET_DEFINITIVO) throw error;
+      out = await r2Client().send(new GetObjectCommand({ Bucket: R2_BUCKET_DEFINITIVO, Key: key }));
+    }
     const buffer = await streamToBuffer(out.Body);
     const nombre = path.posix.basename(key);
     res.setHeader('Content-Type', out.ContentType || 'application/octet-stream');
@@ -2027,6 +2039,98 @@ app.post('/api/r2/copiar-bucket-definitivo', async (req, res) => {
       copiados_r2: copiadosR2,
       subidos_postgres: subidosDesdePostgres,
       mensaje: 'Copia no destructiva terminada. No se borraron objetos ni se actualizaron referencias en PostgreSQL.',
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/r2/vincular-bucket-definitivo', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    if (!r2Disponible()) return res.status(503).json({ ok: false, error: 'Cloudflare R2 no esta configurado.' });
+
+    const alcance = alcanceCopiaDefinitiva(req.body?.scope);
+    if (!alcance) return res.status(400).json({ ok: false, error: 'Alcance invalido.' });
+
+    const lote = Math.max(1, Math.min(Number(req.body?.limit || 100), 100));
+    const objetosDestino = await listarObjetosR2Prefix(R2_BUCKET_DEFINITIVO, alcance.prefix);
+    const keysDestino = new Set(objetosDestino.map(o => o.Key));
+    const { rows: solicitudesRows } = await requirePg().query(
+      `SELECT persona_id, persona_nombre, programa_id, comite, codigo_comite, tipo_comite
+       FROM solicitudes
+       WHERE persona_id IS NOT NULL`
+    );
+    const personaIds = [...new Set(
+      solicitudesRows
+        .filter(alcance.solicitudCoincide)
+        .map(s => String(s.persona_id || '').trim())
+        .filter(Boolean)
+    )];
+    if (!personaIds.length) {
+      return res.json({ ok: true, scope: alcance.id, vinculados_este_lote: 0, pendientes: 0, completo: true, errores: [] });
+    }
+
+    const { rows: personasRows } = await requirePg().query(
+      `SELECT id, nombre, rut FROM personas WHERE id = ANY($1::text[])`,
+      [personaIds]
+    );
+    const personasPorId = new Map(personasRows.map(p => [String(p.id), p]));
+    const { rows: archivosRows } = await requirePg().query(
+      `SELECT id, persona_id, nombre, carpeta, data_url, r2_key, r2_bucket
+       FROM archivos_solicitante
+       WHERE persona_id = ANY($1::text[])
+         AND nombre IS NOT NULL
+         AND (data_url IS NOT NULL OR r2_key IS NOT NULL)
+       ORDER BY persona_id, nombre, id`,
+      [personaIds]
+    );
+
+    const candidatos = archivosRows
+      .filter(row => alcance.carpetaCoincide(row.carpeta || ''))
+      .map(row => {
+        const persona = personasPorId.get(String(row.persona_id)) || { id: row.persona_id };
+        const rutSegmento = r2FolderSegment(persona.rut || persona.id, String(persona.id || 'solicitante'));
+        const nombreSegmento = r2FolderSegment(persona.nombre, 'solicitante');
+        const keyCalculada = r2ObjectKey(`${alcance.prefix}/${rutSegmento}_${nombreSegmento}`, row.nombre);
+        const key = row.r2_key && keysDestino.has(row.r2_key) ? row.r2_key : keyCalculada;
+        return { ...row, key };
+      })
+      .filter(row =>
+        keysDestino.has(row.key) &&
+        (row.r2_key !== row.key || row.r2_bucket !== R2_BUCKET_DEFINITIVO)
+      );
+
+    const vinculados = [];
+    const errores = [];
+    for (const row of candidatos.slice(0, lote)) {
+      try {
+        await requirePg().query(
+          `UPDATE archivos_solicitante
+           SET r2_key=$1, r2_bucket=$2, storage_fuente=$3
+           WHERE id=$4`,
+          [row.key, R2_BUCKET_DEFINITIVO, 'Cloudflare R2 + Render PostgreSQL', row.id]
+        );
+        vinculados.push({ id: row.id, persona_id: row.persona_id, nombre: row.nombre, key: row.key });
+      } catch (e) {
+        errores.push({ id: row.id, persona_id: row.persona_id, nombre: row.nombre, error: e.message });
+      }
+    }
+
+    res.json({
+      ok: errores.length === 0,
+      scope: alcance.id,
+      programa: alcance.nombre,
+      comite: alcance.comite,
+      bucket: R2_BUCKET_DEFINITIVO,
+      objetos_destino: objetosDestino.length,
+      vinculados_este_lote: vinculados.length,
+      pendientes: Math.max(0, candidatos.length - vinculados.length),
+      completo: candidatos.length === vinculados.length && errores.length === 0,
+      errores,
+      vinculados,
+      mensaje: 'Referencias R2 vinculadas. Se conservaron los respaldos data_url y los objetos anteriores.',
     });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
