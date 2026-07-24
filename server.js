@@ -1463,6 +1463,123 @@ app.post('/api/r2/copiar-comite-csp-urbano-no-califican', async (req, res) => {
   }
 });
 
+app.post('/api/r2/copiar-comite-csp-urbano-pioneros', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    if (!r2Disponible()) return res.status(503).json({ ok: false, error: 'Cloudflare R2 no esta configurado.' });
+    const cfg = r2Config();
+    const norm = (v) => textoRegla(v).replace(/\s+/g, ' ');
+    const esProgramaUrbano = (s = {}) => {
+      const texto = norm(`${s.programa_id || ''}`);
+      return texto.includes('URBANO') || texto.includes('CSP_URBANO') || texto.includes('SITIO PROPIO URBANO');
+    };
+    const esComitePioneros = (s = {}) => {
+      const codigo = String(s.codigo_comite || '').trim();
+      const texto = norm(`${s.comite || ''} ${s.codigo_comite || ''} ${s.tipo_comite || ''}`);
+      return ['gr1U', 'comite_6'].includes(codigo) ||
+        texto.includes('PIONEROS DE LAUTARO') ||
+        (texto.includes('PIONEROS') && texto.includes('URBANO'));
+    };
+
+    const { rows: solicitudesRows } = await requirePg().query(
+      `SELECT id, persona_id, persona_nombre, programa_id, comite, codigo_comite, tipo_comite
+       FROM solicitudes
+       WHERE persona_id IS NOT NULL`
+    );
+    const solicitudesComite = solicitudesRows.filter(s => esProgramaUrbano(s) && esComitePioneros(s));
+    const personaIds = [...new Set(solicitudesComite.map(s => String(s.persona_id || '').trim()).filter(Boolean))];
+    if (!personaIds.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'No se encontraron solicitantes en Construccion Sitio Propio Urbano / Comite Pioneros.',
+      });
+    }
+
+    const { rows: personasRows } = await requirePg().query(
+      `SELECT id, nombre, rut, telefono, direccion, comite FROM personas WHERE id = ANY($1::text[])`,
+      [personaIds]
+    );
+    const personasPorId = new Map(personasRows.map(p => [String(p.id), p]));
+    const { rows: archivosRows } = await requirePg().query(
+      `SELECT id, persona_id, nombre, carpeta, data_url, mime_type, r2_key
+       FROM archivos_solicitante
+       WHERE persona_id = ANY($1::text[])
+         AND nombre IS NOT NULL
+         AND data_url IS NOT NULL
+       ORDER BY persona_id, nombre`,
+      [personaIds]
+    );
+
+    const subidos = [];
+    const omitidos = [];
+    const errores = [];
+    const keysProcesadas = new Set();
+    for (const row of archivosRows) {
+      try {
+        const persona = personasPorId.get(String(row.persona_id)) || { id: row.persona_id };
+        const rutSegmento = r2FolderSegment(persona.rut || persona.id, String(persona.id || 'solicitante'));
+        const nombreSegmento = r2FolderSegment(persona.nombre || persona.persona_nombre, 'solicitante');
+        const carpetaDestino = `csp_urbano/comite_pioneros/${rutSegmento}_${nombreSegmento}`;
+        const key = r2ObjectKey(carpetaDestino, row.nombre);
+        if (row.r2_key === key) {
+          omitidos.push({ persona_id: row.persona_id, nombre: row.nombre, key, motivo: 'ya_estaba_en_r2' });
+          continue;
+        }
+        const buffer = dataUrlABuffer(row.data_url);
+        if (!buffer.length) {
+          omitidos.push({ persona_id: row.persona_id, nombre: row.nombre, motivo: 'sin_contenido' });
+          continue;
+        }
+        const mimeType = row.mime_type || r2MimeFromName(row.nombre);
+        if (!keysProcesadas.has(key)) {
+          await r2Client().send(new PutObjectCommand({
+            Bucket: cfg.bucket,
+            Key: key,
+            Body: buffer,
+            ContentType: mimeType,
+          }));
+          keysProcesadas.add(key);
+          subidos.push({
+            persona_id: row.persona_id,
+            solicitante: persona.nombre || '',
+            nombre: row.nombre,
+            key,
+            fuente: 'Cloudflare R2 + Render PostgreSQL',
+          });
+        } else {
+          omitidos.push({ persona_id: row.persona_id, nombre: row.nombre, key, motivo: 'duplicado_mismo_archivo' });
+        }
+        await requirePg().query(
+          `UPDATE archivos_solicitante
+           SET r2_key=$1, r2_bucket=$2, storage_fuente=$3
+           WHERE id=$4`,
+          [key, cfg.bucket, 'Cloudflare R2 + Render PostgreSQL', row.id]
+        );
+      } catch (e) {
+        errores.push({ persona_id: row.persona_id, nombre: row.nombre, error: e.message });
+      }
+    }
+
+    res.json({
+      ok: errores.length === 0,
+      bucket: cfg.bucket,
+      comite: 'COMITE DE VIVIENDA URBANO PIONEROS DE LAUTARO',
+      programa: 'Construccion Sitio Propio Urbano',
+      solicitantes_encontrados: personaIds.length,
+      documentos_con_data_url: archivosRows.length,
+      documentos_subidos: subidos.length,
+      documentos_omitidos: omitidos.length,
+      errores,
+      subidos,
+      omitidos,
+      mensaje: 'Copia real del comite Pioneros terminada. No se borro ni reemplazo ningun documento existente.',
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
 app.post('/carpeta/{*path}', (req, res) => {
   const carpetaRel = getWildcard(req);
   const carpeta = safeDocsPath(carpetaRel);
