@@ -8,7 +8,7 @@ const Database = require('better-sqlite3');
 const { execFileSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 const { Pool } = require('pg');
-const { S3Client, HeadBucketCommand, ListObjectsV2Command, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, HeadBucketCommand, ListObjectsV2Command, PutObjectCommand, GetObjectCommand, CopyObjectCommand } = require('@aws-sdk/client-s3');
 const JSZip = require('jszip');
 // (documentos generados en HTML — sin dependencia docx)
 
@@ -1696,6 +1696,228 @@ app.post('/api/r2/copiar-comite-desmarque-vivienda', async (req, res) => {
       subidos,
       omitidos,
       mensaje: 'Copia por lote de Desmarque terminada. No se borro ni reemplazo ningun documento existente.',
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+const R2_BUCKET_DEFINITIVO = 'documentosentidadpatrocinantemunilautaro';
+
+const alcanceCopiaDefinitiva = (scope = '') => {
+  const normalizado = String(scope || '').trim().toLowerCase();
+  const alcances = {
+    desmarque: {
+      programa: PROGRAMA_DESMARQUE,
+      nombre: 'Habitabilidad de Vivienda (DESMARQUE DE VIVIENDA)',
+      comite: NOMBRE_COMITE_DESMARQUE,
+      prefix: 'habitabilidad/desmarque_vivienda',
+      carpetaCoincide: carpeta => textoRegla(carpeta).includes('DESMARQUE'),
+      solicitudCoincide: s => {
+        const texto = textoRegla(`${s.programa_id || ''} ${s.comite || ''} ${s.codigo_comite || ''}`);
+        return texto.includes('HABITABILIDAD') &&
+          (texto.includes('DESMARQUE') || String(s.codigo_comite || '') === COMITE_DESMARQUE);
+      },
+    },
+    csp_pioneros: {
+      programa: 'csp_urbano',
+      nombre: 'Construccion Sitio Propio Urbano',
+      comite: 'COMITE DE VIVIENDA URBANO PIONEROS DE LAUTARO',
+      prefix: 'csp_urbano/comite_pioneros',
+      carpetaCoincide: carpeta => textoRegla(carpeta).includes('CSP') || textoRegla(carpeta).includes('URBANO'),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        const texto = textoRegla(`${s.comite || ''} ${codigo}`);
+        return String(s.programa_id || '') === 'csp_urbano' &&
+          (['gr1U', 'comite_6'].includes(codigo) || texto.includes('PIONEROS'));
+      },
+    },
+    csp_por_constituir: {
+      programa: 'csp_urbano',
+      nombre: 'Construccion Sitio Propio Urbano',
+      comite: 'COMITE DE VIVIENDA URBANO POR CONSTITUIR',
+      prefix: 'csp_urbano/comite_por_constituir',
+      carpetaCoincide: carpeta => textoRegla(carpeta).includes('CSP') || textoRegla(carpeta).includes('URBANO'),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        const texto = textoRegla(`${s.comite || ''} ${codigo}`);
+        return String(s.programa_id || '') === 'csp_urbano' &&
+          (['gr2U', 'comite_7'].includes(codigo) || texto.includes('CONSTITUIR'));
+      },
+    },
+    csp_no_califican: {
+      programa: 'csp_urbano',
+      nombre: 'Construccion Sitio Propio Urbano',
+      comite: 'SOLICITANTES NO CALIFICAN URBANO',
+      prefix: 'piloto/csp_urbano/solicitantes_no_califican_urbano',
+      carpetaCoincide: carpeta => textoRegla(carpeta).includes('CSP') || textoRegla(carpeta).includes('URBANO'),
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        const texto = textoRegla(`${s.comite || ''} ${codigo}`);
+        return String(s.programa_id || '') === 'csp_urbano' &&
+          (codigo === 'mqine8dw29wd8avcu53' ||
+            (texto.includes('NO CALIF') && texto.includes('URBANO')));
+      },
+    },
+  };
+  return alcances[normalizado] ? { id: normalizado, ...alcances[normalizado] } : null;
+};
+
+const listarObjetosR2Prefix = async (bucket, prefix) => {
+  const objetos = [];
+  let continuationToken;
+  do {
+    const out = await r2Client().send(new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: `${limpiarR2Prefix(prefix)}/`,
+      ContinuationToken: continuationToken,
+      MaxKeys: 1000,
+    }));
+    objetos.push(...(out.Contents || []).filter(o => o?.Key));
+    continuationToken = out.IsTruncated ? out.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return objetos;
+};
+
+app.post('/api/r2/copiar-bucket-definitivo', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    if (!r2Disponible()) return res.status(503).json({ ok: false, error: 'Cloudflare R2 no esta configurado.' });
+
+    const cfg = r2Config();
+    const alcance = alcanceCopiaDefinitiva(req.body?.scope);
+    if (!alcance) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Alcance invalido.',
+        permitidos: ['desmarque', 'csp_pioneros', 'csp_por_constituir', 'csp_no_califican'],
+      });
+    }
+    if (cfg.bucket === R2_BUCKET_DEFINITIVO) {
+      return res.status(409).json({ ok: false, error: 'El bucket de origen y el definitivo no pueden ser el mismo.' });
+    }
+
+    const lote = Math.max(1, Math.min(Number(req.body?.limit || 40), 100));
+    const origen = await listarObjetosR2Prefix(cfg.bucket, alcance.prefix);
+    const destinoAntes = await listarObjetosR2Prefix(R2_BUCKET_DEFINITIVO, alcance.prefix);
+    const keysDestino = new Set(destinoAntes.map(o => o.Key));
+    const pendientesR2 = origen.filter(o => !keysDestino.has(o.Key));
+    const copiadosR2 = [];
+    const subidosDesdePostgres = [];
+    const errores = [];
+
+    for (const objeto of pendientesR2.slice(0, lote)) {
+      try {
+        const copySource = `/${cfg.bucket}/${String(objeto.Key).split('/').map(encodeURIComponent).join('/')}`;
+        await r2Client().send(new CopyObjectCommand({
+          Bucket: R2_BUCKET_DEFINITIVO,
+          Key: objeto.Key,
+          CopySource: copySource,
+          MetadataDirective: 'COPY',
+        }));
+        keysDestino.add(objeto.Key);
+        copiadosR2.push({ key: objeto.Key, size: Number(objeto.Size || 0) });
+      } catch (e) {
+        errores.push({ etapa: 'r2_a_r2', key: objeto.Key, error: e.message });
+      }
+    }
+
+    let candidatosPostgres = [];
+    if (pendientesR2.length <= lote) {
+      const { rows: solicitudesRows } = await requirePg().query(
+        `SELECT persona_id, persona_nombre, programa_id, comite, codigo_comite, tipo_comite
+         FROM solicitudes
+         WHERE persona_id IS NOT NULL`
+      );
+      const solicitudesAlcance = solicitudesRows.filter(alcance.solicitudCoincide);
+      const personaIds = [...new Set(solicitudesAlcance.map(s => String(s.persona_id || '').trim()).filter(Boolean))];
+      if (personaIds.length) {
+        const { rows: personasRows } = await requirePg().query(
+          `SELECT id, nombre, rut FROM personas WHERE id = ANY($1::text[])`,
+          [personaIds]
+        );
+        const personasPorId = new Map(personasRows.map(p => [String(p.id), p]));
+        const { rows: archivosRows } = await requirePg().query(
+          `SELECT id, persona_id, nombre, carpeta, data_url, mime_type
+           FROM archivos_solicitante
+           WHERE persona_id = ANY($1::text[])
+             AND nombre IS NOT NULL
+             AND data_url IS NOT NULL
+           ORDER BY persona_id, nombre, id`,
+          [personaIds]
+        );
+        const candidatosPorKey = new Map();
+        archivosRows
+          .filter(row => alcance.carpetaCoincide(row.carpeta || ''))
+          .map(row => {
+            const persona = personasPorId.get(String(row.persona_id)) || { id: row.persona_id };
+            const rutSegmento = r2FolderSegment(persona.rut || persona.id, String(persona.id || 'solicitante'));
+            const nombreSegmento = r2FolderSegment(persona.nombre, 'solicitante');
+            const key = r2ObjectKey(`${alcance.prefix}/${rutSegmento}_${nombreSegmento}`, row.nombre);
+            return { ...row, persona, key };
+          })
+          .filter(row => !keysDestino.has(row.key))
+          .forEach(row => {
+            if (!candidatosPorKey.has(row.key)) candidatosPorKey.set(row.key, row);
+          });
+        candidatosPostgres = [...candidatosPorKey.values()];
+
+        const cupoPostgres = Math.max(0, lote - copiadosR2.length);
+        for (const row of candidatosPostgres.slice(0, cupoPostgres)) {
+          try {
+            const buffer = dataUrlABuffer(row.data_url);
+            if (!buffer.length) {
+              errores.push({ etapa: 'postgres_a_r2', persona_id: row.persona_id, nombre: row.nombre, error: 'sin_contenido' });
+              continue;
+            }
+            await r2Client().send(new PutObjectCommand({
+              Bucket: R2_BUCKET_DEFINITIVO,
+              Key: row.key,
+              Body: buffer,
+              ContentType: row.mime_type || r2MimeFromName(row.nombre),
+            }));
+            keysDestino.add(row.key);
+            subidosDesdePostgres.push({
+              persona_id: row.persona_id,
+              solicitante: row.persona.nombre || '',
+              nombre: row.nombre,
+              key: row.key,
+              size: buffer.length,
+            });
+          } catch (e) {
+            errores.push({ etapa: 'postgres_a_r2', persona_id: row.persona_id, nombre: row.nombre, error: e.message });
+          }
+        }
+      }
+    }
+
+    const destinoDespues = await listarObjetosR2Prefix(R2_BUCKET_DEFINITIVO, alcance.prefix);
+    const totalBytes = destinoDespues.reduce((total, o) => total + Number(o.Size || 0), 0);
+    const pendientesOrigen = Math.max(0, pendientesR2.length - copiadosR2.length);
+    const pendientesPostgres = Math.max(0, candidatosPostgres.length - subidosDesdePostgres.length);
+
+    res.json({
+      ok: errores.length === 0,
+      scope: alcance.id,
+      programa: alcance.nombre,
+      comite: alcance.comite,
+      bucket_origen: cfg.bucket,
+      bucket_destino: R2_BUCKET_DEFINITIVO,
+      prefix: alcance.prefix,
+      lote,
+      origen_r2_encontrados: origen.length,
+      copiados_r2_este_lote: copiadosR2.length,
+      subidos_postgres_este_lote: subidosDesdePostgres.length,
+      objetos_destino: destinoDespues.length,
+      bytes_destino: totalBytes,
+      pendientes_r2: pendientesOrigen,
+      pendientes_postgres_estimados: pendientesPostgres,
+      completo: pendientesOrigen === 0 && pendientesPostgres === 0 && errores.length === 0,
+      errores,
+      copiados_r2: copiadosR2,
+      subidos_postgres: subidosDesdePostgres,
+      mensaje: 'Copia no destructiva terminada. No se borraron objetos ni se actualizaron referencias en PostgreSQL.',
     });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
