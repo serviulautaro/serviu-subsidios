@@ -1875,6 +1875,54 @@ const alcanceCopiaDefinitiva = (scope = '') => {
           (codigo === 'mqinf245we2vx0umwp' || (texto.includes('NO CALIF') && texto.includes('RURAL')));
       },
     },
+    arriendo_regular_2026: {
+      programa: 'mp4oal13gw2vpt4eyb',
+      nombre: 'Arriendo Regular',
+      comite: 'ARRIENDO REGULAR 2026',
+      prefix: 'arriendo_regular/2026',
+      carpetaCoincide: carpeta => {
+        const texto = textoRegla(carpeta);
+        return texto.includes('MP4SG9DWG4XWAOX95XA') ||
+          (texto.includes('ARRIENDO') && texto.includes('2026'));
+      },
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'mp4oal13gw2vpt4eyb' &&
+          (codigo === 'mp4sg9dwg4xwaox95xa' || textoRegla(s.comite).includes('ARRIENDO REGULAR 2026'));
+      },
+    },
+    mave_2026: {
+      programa: 'mave_rural',
+      nombre: 'Mejoramiento de Vivienda Rural',
+      comite: 'MAVE 2026',
+      prefix: 'mave_rural/2026',
+      carpetaCoincide: carpeta => {
+        const texto = textoRegla(carpeta);
+        return texto.includes('MPB9L65IYTQM9U007S') ||
+          (texto.includes('MAVE') && texto.includes('2026'));
+      },
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'mave_rural' &&
+          (codigo === 'mpb9l65iytqm9u007s' || textoRegla(s.comite).includes('MAVE 2026'));
+      },
+    },
+    termico_3_2026: {
+      programa: 'mejoramiento_termico',
+      nombre: 'Mejoramiento Termico',
+      comite: 'TERMICO 3 2026',
+      prefix: 'mejoramiento_termico/termico_3_2026',
+      carpetaCoincide: carpeta => {
+        const texto = textoRegla(carpeta);
+        return texto.includes('MPBFO0XZFLP9HD1ZI1V') ||
+          (texto.includes('TERMICO 3') && texto.includes('2026'));
+      },
+      solicitudCoincide: s => {
+        const codigo = String(s.codigo_comite || '').trim();
+        return String(s.programa_id || '') === 'mejoramiento_termico' &&
+          (codigo === 'mpbfo0xzflp9hd1zi1v' || textoRegla(s.comite).includes('TERMICO 3 2026'));
+      },
+    },
   };
   return alcances[normalizado] ? { id: normalizado, ...alcances[normalizado] } : null;
 };
@@ -1912,6 +1960,7 @@ app.post('/api/r2/copiar-bucket-definitivo', async (req, res) => {
           'csp_rural_nuevo_hogar', 'csp_rural_la_fuerza', 'csp_rural_kume_ruka',
           'csp_rural_newen_mapu', 'csp_rural_kimey_ruca', 'csp_rural_por_constituir',
           'csp_rural_grupo_7', 'csp_rural_no_califican',
+          'arriendo_regular_2026', 'mave_2026', 'termico_3_2026',
         ],
       });
     }
