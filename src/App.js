@@ -11173,6 +11173,108 @@ const esAdminAppUser = (user) => (user?.rol || "").toLowerCase() === "admin";
 const INACTIVITY_LIMIT_MS = 60 * 60 * 1000;
 const DEMO_MAX_SOLICITANTES = 5;
 
+
+function R2PruebaPanel() {
+  const [estado, setEstado] = useState(null);
+  const [mensaje, setMensaje] = useState("");
+  const [error, setError] = useState("");
+  const [carpeta, setCarpeta] = useState("pruebas/rios_miranda_marlene");
+  const [archivo, setArchivo] = useState(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const [archivos, setArchivos] = useState([]);
+
+  const revisarEstado = async () => {
+    setError("");
+    setMensaje("");
+    try {
+      const res = await fetch(API + "/api/r2/status");
+      const data = await res.json();
+      setEstado(data);
+      if (!res.ok || !data.ok) throw new Error(data.error || "R2 no esta conectado.");
+      setMensaje("Conexion R2 OK.");
+    } catch (err) {
+      setError(err.message || "No se pudo revisar R2.");
+    }
+  };
+
+  const listarArchivos = async () => {
+    setError("");
+    setMensaje("");
+    try {
+      const res = await fetch(API + "/api/r2/list?prefix=" + encodeURIComponent(carpeta));
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "No se pudo listar R2.");
+      setArchivos(data.archivos || []);
+      setMensaje("Archivos encontrados en R2: " + (data.archivos || []).length);
+    } catch (err) {
+      setError(err.message || "No se pudo listar R2.");
+    }
+  };
+
+  const subirPrueba = async () => {
+    if (!archivo) {
+      setError("Seleccione un archivo de prueba.");
+      return;
+    }
+    setSubiendo(true);
+    setError("");
+    setMensaje("");
+    try {
+      const form = new FormData();
+      form.append("archivo", archivo);
+      const ruta = carpeta.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+      const res = await fetch(API + "/api/r2/test-upload/" + ruta, { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "No se pudo subir a R2.");
+      setMensaje("Subido a R2: " + data.key);
+      setArchivo(null);
+      await listarArchivos();
+    } catch (err) {
+      setError(err.message || "No se pudo subir a R2.");
+    } finally {
+      setSubiendo(false);
+    }
+  };
+
+  useEffect(() => { revisarEstado(); }, []);
+
+  return <div style={{ background: "#fff", border: "1px solid #bfdbfe", borderRadius: 12, padding: 18, marginBottom: 18 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f" }}>Prueba Cloudflare R2</div>
+        <div style={{ fontSize: 12, color: "#64748b" }}>Subida controlada de prueba. No modifica solicitudes ni borra documentos actuales.</div>
+      </div>
+      <button onClick={revisarEstado} style={{ padding: "8px 12px", border: "1px solid #93c5fd", borderRadius: 8, background: "#eff6ff", color: "#1d4ed8", fontWeight: 900, cursor: "pointer" }}>Revisar conexion</button>
+    </div>
+    {estado && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, fontSize: 12 }}>
+      <span style={{ padding: "5px 8px", borderRadius: 999, background: estado.ok ? "#ecfdf5" : "#fef2f2", color: estado.ok ? "#047857" : "#b91c1c", fontWeight: 900 }}>{estado.ok ? "R2 configurado" : "R2 incompleto"}</span>
+      <span style={{ padding: "5px 8px", borderRadius: 999, background: "#f8fafc", color: "#334155", fontWeight: 800 }}>Bucket: {estado.bucket || "sin bucket"}</span>
+      <span style={{ padding: "5px 8px", borderRadius: 999, background: "#f8fafc", color: "#334155", fontWeight: 800 }}>Fuente: Cloudflare R2</span>
+    </div>}
+    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr auto auto", gap: 10, alignItems: "end" }}>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 5 }}>CARPETA R2 DE PRUEBA</div>
+        <input value={carpeta} onChange={e => setCarpeta(e.target.value)} style={{ width: "100%", padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }} />
+      </div>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 5 }}>ARCHIVO DE PRUEBA</div>
+        <input type="file" onChange={e => setArchivo(e.target.files?.[0] || null)} style={{ width: "100%" }} />
+      </div>
+      <button onClick={subirPrueba} disabled={subiendo} style={{ padding: "10px 14px", border: 0, borderRadius: 8, background: subiendo ? "#94a3b8" : "#2563eb", color: "#fff", fontWeight: 900, cursor: subiendo ? "default" : "pointer" }}>{subiendo ? "Subiendo..." : "Subir prueba"}</button>
+      <button onClick={listarArchivos} style={{ padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, background: "#fff", color: "#1e3a5f", fontWeight: 900, cursor: "pointer" }}>Listar</button>
+    </div>
+    {mensaje && <div style={{ marginTop: 10, color: "#047857", fontSize: 12, fontWeight: 800 }}>{mensaje}</div>}
+    {error && <div style={{ marginTop: 10, color: "#b91c1c", fontSize: 12, fontWeight: 800 }}>{error}</div>}
+    {!!archivos.length && <div style={{ marginTop: 12, border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }}>
+      {archivos.map(a => <div key={a.key} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, padding: "8px 10px", borderTop: "1px solid #f1f5f9", fontSize: 12, alignItems: "center" }}>
+        <div style={{ fontWeight: 800, color: "#1e3a5f" }}>{a.nombre}<div style={{ color: "#64748b", fontWeight: 600 }}>{a.key}</div></div>
+        <div style={{ color: "#64748b" }}>{Math.round((a.size || 0) / 1024)} KB</div>
+        <button onClick={() => window.open(API + "/api/r2/archivo/" + a.key.split("/").map(encodeURIComponent).join("/"), "_blank")} style={{ padding: "6px 10px", border: "1px solid #93c5fd", borderRadius: 7, background: "#eff6ff", color: "#1d4ed8", fontWeight: 900, cursor: "pointer" }}>Abrir</button>
+      </div>)}
+    </div>}
+  </div>;
+}
+
 function AdminUsuariosView({ currentUser, registrarAuditoria }) {
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -11303,6 +11405,8 @@ function AdminUsuariosView({ currentUser, registrarAuditoria }) {
   return <div>
     <h1 style={{ margin: "0 0 6px", color: "#111827" }}>Administracion</h1>
     <div style={{ color: "#6b7280", marginBottom: 22 }}>Usuarios autorizados para utilizar el software. Crear, bloquear, desbloquear o eliminar exige clave de administrador.</div>
+
+    <R2PruebaPanel />
 
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 18, marginBottom: 18 }}>
       <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 12 }}>Agregar usuario autorizado</div>

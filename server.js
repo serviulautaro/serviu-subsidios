@@ -8,6 +8,7 @@ const Database = require('better-sqlite3');
 const { execFileSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 const { Pool } = require('pg');
+const { S3Client, HeadBucketCommand, ListObjectsV2Command, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const JSZip = require('jszip');
 // (documentos generados en HTML — sin dependencia docx)
 
@@ -47,6 +48,68 @@ const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,
 const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
 const TABLAS_PERMITIDAS = new Set(['comites', 'personas', 'solicitudes', 'programas_custom', 'archivos_solicitante', 'visitas', 'audit_log', 'app_users']);
 const ADMIN_KEY = process.env.ADMIN_KEY || Buffer.from('MTk2NTYw', 'base64').toString('utf8');
+let r2ClientCache = null;
+let r2ClientCacheKey = '';
+
+const r2Config = () => ({
+  enabled: String(process.env.R2_ENABLED || '').toLowerCase() === 'true',
+  bucket: String(process.env.R2_BUCKET_NAME || '').trim(),
+  endpoint: String(process.env.R2_ENDPOINT || '').trim(),
+  accessKeyId: String(process.env.R2_ACCESS_KEY_ID || '').trim(),
+  secretAccessKey: String(process.env.R2_SECRET_ACCESS_KEY || '').trim(),
+});
+
+const r2Disponible = () => {
+  const cfg = r2Config();
+  return cfg.enabled && cfg.bucket && cfg.endpoint && cfg.accessKeyId && cfg.secretAccessKey;
+};
+
+const r2Client = () => {
+  const cfg = r2Config();
+  if (!r2Disponible()) {
+    const err = new Error('Cloudflare R2 no esta configurado en Environment Variables.');
+    err.status = 503;
+    throw err;
+  }
+  const cacheKey = [cfg.endpoint, cfg.accessKeyId, cfg.bucket].join('|');
+  if (!r2ClientCache || r2ClientCacheKey !== cacheKey) {
+    r2ClientCache = new S3Client({
+      region: 'auto',
+      endpoint: cfg.endpoint,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: cfg.accessKeyId,
+        secretAccessKey: cfg.secretAccessKey,
+      },
+    });
+    r2ClientCacheKey = cacheKey;
+  }
+  return r2ClientCache;
+};
+
+const limpiarR2Prefix = (value = '') => String(value || '')
+  .replace(/\\/g, '/')
+  .split('/')
+  .map(p => p.trim())
+  .filter(p => p && p !== '.' && p !== '..')
+  .join('/');
+
+const r2ObjectKey = (carpeta = '', nombre = '') => {
+  const prefix = limpiarR2Prefix(carpeta);
+  const file = path.basename(String(nombre || '').replace(/\\/g, '/')).trim();
+  if (!file) {
+    const err = new Error('Nombre de archivo invalido para R2.');
+    err.status = 400;
+    throw err;
+  }
+  return prefix ? `${prefix}/${file}` : file;
+};
+
+const streamToBuffer = async (stream) => {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+};
 
 const timeout = (promise, ms, message) => Promise.race([
   promise,
@@ -1144,6 +1207,100 @@ function buscarArchivoLocal(carpetaRel, archivo) {
 
 // Usar memoria para archivos — Render no tiene disco persistente
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+app.get('/api/r2/status', async (req, res) => {
+  const cfg = r2Config();
+  const configurado = r2Disponible();
+  const base = {
+    ok: configurado,
+    enabled: cfg.enabled,
+    bucket: cfg.bucket || null,
+    endpoint: cfg.endpoint || null,
+    accessKeyId: cfg.accessKeyId ? 'configurado' : 'faltante',
+    secretAccessKey: cfg.secretAccessKey ? 'configurado' : 'faltante',
+  };
+  if (!configurado) return res.status(503).json({ ...base, error: 'Faltan variables R2.' });
+  try {
+    await r2Client().send(new HeadBucketCommand({ Bucket: cfg.bucket }));
+    res.json({ ...base, conexion: 'ok' });
+  } catch (e) {
+    res.status(502).json({ ...base, ok: false, conexion: 'error', error: e.message });
+  }
+});
+
+app.get('/api/r2/list', async (req, res) => {
+  try {
+    const cfg = r2Config();
+    const prefix = limpiarR2Prefix(req.query?.prefix || '');
+    const { Contents = [] } = await r2Client().send(new ListObjectsV2Command({
+      Bucket: cfg.bucket,
+      Prefix: prefix ? `${prefix}/` : '',
+      MaxKeys: 100,
+    }));
+    res.json({
+      ok: true,
+      bucket: cfg.bucket,
+      prefix,
+      archivos: Contents
+        .filter(item => item.Key && !item.Key.endsWith('/'))
+        .map(item => ({
+          key: item.Key,
+          nombre: path.posix.basename(item.Key),
+          size: item.Size || 0,
+          modified: item.LastModified || null,
+          fuente: 'Cloudflare R2',
+        })),
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/r2/test-upload/{*path}', upload.single('archivo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ ok: false, error: 'No se recibio archivo.' });
+    const cfg = r2Config();
+    const carpetaRel = limpiarR2Prefix(getWildcard(req));
+    const nombre = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    const key = r2ObjectKey(carpetaRel || 'pruebas', nombre);
+    const mimeType = req.file.mimetype || 'application/octet-stream';
+    await r2Client().send(new PutObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+      Body: req.file.buffer,
+      ContentType: mimeType,
+    }));
+    res.json({
+      ok: true,
+      fuente: 'Cloudflare R2',
+      bucket: cfg.bucket,
+      key,
+      nombre,
+      size: req.file.size,
+      mime_type: mimeType,
+      mensaje: 'Archivo de prueba subido a R2. No se modificaron documentos existentes.',
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/r2/archivo/{*path}', async (req, res) => {
+  try {
+    const cfg = r2Config();
+    const key = limpiarR2Prefix(getWildcard(req));
+    if (!key) return res.status(400).json({ ok: false, error: 'Ruta R2 invalida.' });
+    const out = await r2Client().send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
+    const buffer = await streamToBuffer(out.Body);
+    const nombre = path.posix.basename(key);
+    res.setHeader('Content-Type', out.ContentType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(nombre) + '"');
+    res.setHeader('X-Serviu-Documento-Fuente', 'Cloudflare R2');
+    res.send(buffer);
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
 
 app.post('/carpeta/{*path}', (req, res) => {
   const carpetaRel = getWildcard(req);
