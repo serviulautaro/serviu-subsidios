@@ -40,9 +40,7 @@ const fetchJson = async ruta => {
 };
 
 const escribirJsonAtomico = (archivo, valor) => {
-  const temporal = archivo + '.tmp';
-  fs.writeFileSync(temporal, JSON.stringify(valor, null, 2));
-  fs.renameSync(temporal, archivo);
+  fs.writeFileSync(archivo, JSON.stringify(valor, null, 2));
 };
 
 const descargar = async item => {
@@ -91,6 +89,7 @@ async function main() {
     procesados: 0,
     descargados: 0,
     existentes: 0,
+    archivos_descargados: [],
     errores: [],
     completo: false,
   };
@@ -104,8 +103,16 @@ async function main() {
       const item = items[indice];
       try {
         const resultado = await descargar(item);
-        if (resultado.estado === 'descargado') estado.descargados += 1;
-        else estado.existentes += 1;
+        if (resultado.estado === 'descargado') {
+          estado.descargados += 1;
+          estado.archivos_descargados.push({
+            key: resultado.key,
+            ruta: resultado.ruta,
+            bytes: resultado.bytes,
+          });
+        } else {
+          estado.existentes += 1;
+        }
       } catch (error) {
         estado.errores.push({ key: item.r2_key, error: error.message });
       } finally {
