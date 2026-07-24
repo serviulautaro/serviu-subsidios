@@ -1580,6 +1580,128 @@ app.post('/api/r2/copiar-comite-csp-urbano-pioneros', async (req, res) => {
   }
 });
 
+app.post('/api/r2/copiar-comite-desmarque-vivienda', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    if (!r2Disponible()) return res.status(503).json({ ok: false, error: 'Cloudflare R2 no esta configurado.' });
+    const cfg = r2Config();
+    const lote = Math.max(1, Math.min(Number(req.body?.limit || 80), 150));
+    const destinoPrefix = 'habitabilidad/desmarque_vivienda';
+
+    const { rows: solicitudesRows } = await requirePg().query(
+      `SELECT id, persona_id, persona_nombre, programa_id, comite, codigo_comite, tipo_comite
+       FROM solicitudes
+       WHERE persona_id IS NOT NULL
+         AND programa_id=$1
+         AND (codigo_comite=$2 OR upper(coalesce(comite,'')) LIKE '%DESMARQUE%')`,
+      [PROGRAMA_DESMARQUE, COMITE_DESMARQUE]
+    );
+    const personaIds = [...new Set(solicitudesRows.map(s => String(s.persona_id || '').trim()).filter(Boolean))];
+    if (!personaIds.length) {
+      return res.status(404).json({
+        ok: false,
+        error: 'No se encontraron solicitantes en Habitabilidad / Desmarque de Vivienda.',
+      });
+    }
+
+    const { rows: personasRows } = await requirePg().query(
+      `SELECT id, nombre, rut, telefono, direccion, comite FROM personas WHERE id = ANY($1::text[])`,
+      [personaIds]
+    );
+    const personasPorId = new Map(personasRows.map(p => [String(p.id), p]));
+
+    const filtroPendiente = `
+      persona_id = ANY($1::text[])
+      AND nombre IS NOT NULL
+      AND data_url IS NOT NULL
+      AND lower(coalesce(carpeta,'')) LIKE '%desmarque%'
+      AND (r2_key IS NULL OR r2_key NOT LIKE $2)
+    `;
+    const likeDestino = `${destinoPrefix}/%`;
+    const { rows: countRows } = await requirePg().query(
+      `SELECT count(*)::int AS total FROM archivos_solicitante WHERE ${filtroPendiente}`,
+      [personaIds, likeDestino]
+    );
+    const pendientesAntes = Number(countRows[0]?.total || 0);
+    const { rows: archivosRows } = await requirePg().query(
+      `SELECT id, persona_id, nombre, carpeta, data_url, mime_type, r2_key
+       FROM archivos_solicitante
+       WHERE ${filtroPendiente}
+       ORDER BY persona_id, nombre, id
+       LIMIT $3`,
+      [personaIds, likeDestino, lote]
+    );
+
+    const subidos = [];
+    const omitidos = [];
+    const errores = [];
+    const keysProcesadas = new Set();
+    for (const row of archivosRows) {
+      try {
+        const persona = personasPorId.get(String(row.persona_id)) || { id: row.persona_id };
+        const rutSegmento = r2FolderSegment(persona.rut || persona.id, String(persona.id || 'solicitante'));
+        const nombreSegmento = r2FolderSegment(persona.nombre || persona.persona_nombre, 'solicitante');
+        const carpetaDestino = `${destinoPrefix}/${rutSegmento}_${nombreSegmento}`;
+        const key = r2ObjectKey(carpetaDestino, row.nombre);
+        const buffer = dataUrlABuffer(row.data_url);
+        if (!buffer.length) {
+          omitidos.push({ persona_id: row.persona_id, nombre: row.nombre, motivo: 'sin_contenido' });
+          continue;
+        }
+        const mimeType = row.mime_type || r2MimeFromName(row.nombre);
+        if (!keysProcesadas.has(key)) {
+          await r2Client().send(new PutObjectCommand({
+            Bucket: cfg.bucket,
+            Key: key,
+            Body: buffer,
+            ContentType: mimeType,
+          }));
+          keysProcesadas.add(key);
+          subidos.push({
+            persona_id: row.persona_id,
+            solicitante: persona.nombre || '',
+            nombre: row.nombre,
+            key,
+            fuente: 'Cloudflare R2 + Render PostgreSQL',
+          });
+        } else {
+          omitidos.push({ persona_id: row.persona_id, nombre: row.nombre, key, motivo: 'duplicado_mismo_archivo' });
+        }
+        await requirePg().query(
+          `UPDATE archivos_solicitante
+           SET r2_key=$1, r2_bucket=$2, storage_fuente=$3
+           WHERE id=$4`,
+          [key, cfg.bucket, 'Cloudflare R2 + Render PostgreSQL', row.id]
+        );
+      } catch (e) {
+        errores.push({ persona_id: row.persona_id, nombre: row.nombre, error: e.message });
+      }
+    }
+
+    const pendientesDespues = Math.max(0, pendientesAntes - archivosRows.length);
+    res.json({
+      ok: errores.length === 0,
+      bucket: cfg.bucket,
+      comite: NOMBRE_COMITE_DESMARQUE,
+      programa: 'Habitabilidad de Vivienda (DESMARQUE DE VIVIENDA)',
+      solicitantes_encontrados: personaIds.length,
+      lote,
+      pendientes_antes: pendientesAntes,
+      procesados_este_lote: archivosRows.length,
+      pendientes_estimados: pendientesDespues,
+      documentos_subidos: subidos.length,
+      documentos_omitidos: omitidos.length,
+      errores,
+      subidos,
+      omitidos,
+      mensaje: 'Copia por lote de Desmarque terminada. No se borro ni reemplazo ningun documento existente.',
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
 app.post('/carpeta/{*path}', (req, res) => {
   const carpetaRel = getWildcard(req);
   const carpeta = safeDocsPath(carpetaRel);
