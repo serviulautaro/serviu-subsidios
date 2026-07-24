@@ -1706,7 +1706,7 @@ const R2_BUCKET_DEFINITIVO = 'documentosentidadpatrocinantemunilautaro';
 
 const carpetaRuralDeComite = (carpeta = '', codigos = []) => {
   const texto = textoRegla(carpeta);
-  return texto.includes('CSP RURAL') &&
+  return texto.includes('RURAL') &&
     codigos.some(codigo => texto.includes(textoRegla(codigo)));
 };
 
