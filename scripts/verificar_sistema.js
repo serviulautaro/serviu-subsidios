@@ -126,7 +126,8 @@ function main() {
   ok("Revision Abogado CSP Rural es unica y se puede editar", contains(server, "La revisión abogado ya existe. Debe editar") && contains(revisionAbogado, "Editar revisión abogado") && contains(revisionAbogado, 'revisionExistente ? "update" : "insert"'));
   ok("Revision Abogado CSP Urbano usa informaciones previas", contains(revisionAbogado, 'programaId === "csp_urbano"') && contains(revisionAbogado, "Certificado de informaciones previas") && contains(revisionAbogado, "INFORMACIONES PREVIAS"));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
-  ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
+  ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "misSols.map") && contains(app, "setProgramaTrabajoId"));
+  ok("Detalle multiprograma permite mostrar todo o filtrar", contains(app, 'setProgramaTrabajoId("__todos__")') && contains(app, "mostrandoTodosProgramas") && contains(app, "const solicitudesActivasVista = solsTrabajo"));
   ok("Ficha solicitante respeta programa seleccionado", contains(app, "solicitudTrabajoPrincipal") && contains(app, "Mostrara solo la ficha del programa seleccionado") && contains(app, "misSols={solsTrabajo}") && contains(app, "nombreComiteSolicitud"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);

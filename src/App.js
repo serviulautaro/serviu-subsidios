@@ -3369,17 +3369,16 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
       setProgramaTrabajoId("");
       return;
     }
-    if (!misSols.some(s => (s.programaId || s.programa_id) === programaTrabajoId)) {
-      setProgramaTrabajoId(misSols[0].programaId || misSols[0].programa_id || "");
+    if (programaTrabajoId !== "__todos__" && !misSols.some(s => (s.programaId || s.programa_id) === programaTrabajoId)) {
+      setProgramaTrabajoId(misSols.length > 1 ? "__todos__" : (misSols[0].programaId || misSols[0].programa_id || ""));
     }
   }, [personaId, misSols.length, programaTrabajoId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const programaSeleccionadoId = programaTrabajoId || misSols[0]?.programaId || misSols[0]?.programa_id || "";
+  const mostrandoTodosProgramas = programaTrabajoId === "__todos__";
+  const programaSeleccionadoId = mostrandoTodosProgramas ? "" : (programaTrabajoId || misSols[0]?.programaId || misSols[0]?.programa_id || "");
   const misSolsCompletas = misSols.map(completarSolicitudActiva);
   const solsTrabajo = programaSeleccionadoId ? misSolsCompletas.filter(s => (s.programaId || s.programa_id) === programaSeleccionadoId) : misSolsCompletas;
-  const solicitudesActivasVista = [
-    ...solsTrabajo.map(s => s),
-    ...misSolsCompletas.filter(s => !solsTrabajo.some(sel => sel.id === s.id)),
-  ];
+  const solicitudesActivasVista = solsTrabajo;
+
   const solicitudTrabajoPrincipal = solsTrabajo[0] || null;
   const tieneSolicitudCsp = solsTrabajo.some(s => ["csp_rural", "csp_urbano"].includes(s.programaId || s.programa_id));
   const [lineaTiempoPersonaCsp, setLineaTiempoPersonaCsp] = useState(() => normalizarLineaTiempoCsp(persona?.lineaTiempoCsp || persona?.linea_tiempo_csp));
@@ -5666,18 +5665,35 @@ const datosSolicitud = {
       </div>
 
 
-      <RevisionAbogadoPanel
-        persona={persona}
-        solicitud={solicitudTrabajoPrincipal}
-        currentUser={currentUser}
-        solicitudes={solicitudes}
-        onSaveSolicitudes={onSaveSolicitudes}
-      />
+      {(mostrandoTodosProgramas
+        ? solsTrabajo.filter(sol => ["csp_rural", "csp_urbano"].includes(sol.programaId || sol.programa_id))
+        : (solicitudTrabajoPrincipal ? [solicitudTrabajoPrincipal] : [])
+      ).map(sol => (
+        <RevisionAbogadoPanel
+          key={sol.id}
+          persona={persona}
+          solicitud={sol}
+          currentUser={currentUser}
+          solicitudes={solicitudes}
+          onSaveSolicitudes={onSaveSolicitudes}
+        />
+      ))}
 
       {misSols.length > 1 && (
         <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 20, border: "1px solid #dbeafe" }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: "#1e3a5f", textTransform: "uppercase", marginBottom: 10 }}>Programa a revisar</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setProgramaTrabajoId("__todos__")}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                border: "1.5px solid " + (mostrandoTodosProgramas ? "#1e3a5f" : "#CBD5E1"),
+                background: mostrandoTodosProgramas ? "#E0E7FF" : "#F8FAFC",
+                color: mostrandoTodosProgramas ? "#1e3a5f" : "#475569",
+                borderRadius: 10, padding: "10px 13px", fontSize: 13, fontWeight: 900, cursor: "pointer",
+              }}>
+              <span>Mostrar todo</span>
+              <span style={{ fontSize: 11, opacity: .78 }}>{misSols.length} programas</span>
+            </button>
             {misSols.map(sol => {
               const prog = todosProgramas.find(p => p.id === (sol.programaId || sol.programa_id));
               const activo = (sol.programaId || sol.programa_id) === programaSeleccionadoId;
