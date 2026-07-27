@@ -123,7 +123,13 @@ export default function RevisionAbogadoPanel({
   solicitudes,
   onSaveSolicitudes,
 }) {
-  const esRural = (solicitud?.programaId || solicitud?.programa_id) === "csp_rural";
+  const programaId = solicitud?.programaId || solicitud?.programa_id || "";
+  const esRural = programaId === "csp_rural";
+  const esUrbano = programaId === "csp_urbano";
+  const esCsp = esRural || esUrbano;
+  const nombrePrograma = esUrbano ? "Construcción Sitio Propio Urbano" : "Construcción Sitio Propio Rural";
+  const nombreCertificado = esUrbano ? "Certificado de informaciones previas" : "Certificado de ruralidad";
+  const tituloCertificado = esUrbano ? "Informaciones previas" : "Ruralidad";
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [revisiones, setRevisiones] = useState([]);
@@ -133,12 +139,12 @@ export default function RevisionAbogadoPanel({
   const revisionExistente = revisiones[0] || null;
 
   const cargar = async () => {
-    if (!persona?.id || !esRural) return;
+    if (!persona?.id || !esCsp) return;
     try {
       const res = await fetch(`${API}/api/db/revisiones_abogado?eq[persona_id]=${encodeURIComponent(persona.id)}&orderBy=fecha&orderAsc=false`, { cache: "no-store" });
       const json = await res.json();
       const filas = (json.data || []).filter(row =>
-        row.programa_id === "csp_rural" &&
+        row.programa_id === programaId &&
         (!solicitud?.id || !row.solicitud_id || String(row.solicitud_id) === String(solicitud.id))
       );
       setRevisiones(filas);
@@ -153,7 +159,7 @@ export default function RevisionAbogadoPanel({
     setForm(formularioInicial(profesionalActual));
   }, [persona?.id, solicitud?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!esRural) return null;
+  if (!esCsp) return null;
 
   const setCampo = (campo, valor) => setForm(actual => ({ ...actual, [campo]: valor }));
   const abrirFormulario = () => {
@@ -182,7 +188,9 @@ export default function RevisionAbogadoPanel({
         revision = { estado: registro.dominio_estado, nota: notaResultado(tipo, registro.dominio_estado, registro.dominio_nota) };
       } else if (documentoCoincide(doc, ["AVALUO FISCAL", "AVALÚO FISCAL"])) {
         revision = { estado: registro.avaluo_estado, nota: notaResultado("", registro.avaluo_estado, registro.avaluo_nota) };
-      } else if (documentoCoincide(doc, ["CERTIFICADO DE RURALIDAD", "RURALIDAD"])) {
+      } else if (documentoCoincide(doc, esUrbano
+        ? ["CERTIFICADO DE INFORMACIONES PREVIAS", "INFORMACIONES PREVIAS"]
+        : ["CERTIFICADO DE RURALIDAD", "RURALIDAD"])) {
         revision = { estado: registro.ruralidad_estado, nota: notaResultado("", registro.ruralidad_estado, registro.ruralidad_nota) };
       }
       return revision ? { ...doc, revision_abogado: revision, nota_revision_abogado: revision.nota } : doc;
@@ -200,11 +208,11 @@ export default function RevisionAbogadoPanel({
     if (!form.fecha || !form.profesional.trim()) return "Fecha y profesional son obligatorios.";
     if (!form.dominio_tipo) return "Seleccione el tipo de documento de dominio.";
     if (form.dominio_tipo === "OTRO" && !form.dominio_otro.trim()) return "Describa el nombre del otro documento.";
-    if (!form.dominio_estado || !form.avaluo_estado || !form.ruralidad_estado) return "Debe indicar el resultado de Dominio, Avalúo Fiscal y Certificado de ruralidad.";
+    if (!form.dominio_estado || !form.avaluo_estado || !form.ruralidad_estado) return `Debe indicar el resultado de Dominio, Avalúo Fiscal y ${nombreCertificado}.`;
     for (const [estado, nota, nombre] of [
       [form.dominio_estado, form.dominio_nota, "Dominio de la propiedad"],
       [form.avaluo_estado, form.avaluo_nota, "Avalúo Fiscal Detallado"],
-      [form.ruralidad_estado, form.ruralidad_nota, "Certificado de ruralidad"],
+      [form.ruralidad_estado, form.ruralidad_nota, nombreCertificado],
     ]) {
       if (["Condicional", "Rechazado"].includes(estado) && !nota.trim()) return `Debe describir la condición de ${nombre}.`;
     }
@@ -222,7 +230,7 @@ export default function RevisionAbogadoPanel({
       id: revisionExistente?.id || uid(),
       persona_id: persona.id,
       solicitud_id: solicitud?.id || null,
-      programa_id: "csp_rural",
+      programa_id: programaId,
       comite: solicitud?.comite || persona.comite || "",
       codigo_comite: solicitud?.codigoComite || solicitud?.codigo_comite || persona.comiteId || persona.comite_id || "",
       fecha: form.fecha,
@@ -268,7 +276,7 @@ export default function RevisionAbogadoPanel({
       <div style={{ background: "linear-gradient(90deg,#172554,#1d4ed8)", padding: "15px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <div>
           <div style={{ color: "#fff", fontSize: 17, fontWeight: 900 }}>⚖ Revisión Abogado</div>
-          <div style={{ color: "#bfdbfe", fontSize: 11, marginTop: 2 }}>Construcción Sitio Propio Rural · {solicitud?.comite || persona.comite || "Comité sin nombre"}</div>
+          <div style={{ color: "#bfdbfe", fontSize: 11, marginTop: 2 }}>{nombrePrograma} · {solicitud?.comite || persona.comite || "Comité sin nombre"}</div>
         </div>
         <button type="button" onClick={abrirFormulario}
           style={{ background: "#fff", color: "#1e3a5f", border: "none", borderRadius: 8, padding: "9px 15px", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
@@ -340,9 +348,9 @@ export default function RevisionAbogadoPanel({
           </section>
 
           <section style={{ borderTop: "1px solid #dbeafe", paddingTop: 12, marginTop: 14 }}>
-            <h4 style={{ margin: "0 0 8px", color: "#1e3a5f" }}>4. Certificado de ruralidad</h4>
+            <h4 style={{ margin: "0 0 8px", color: "#1e3a5f" }}>4. {nombreCertificado}</h4>
             <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Revisar que corresponda a la propiedad.</div>
-            <EstadoSelect label="Resultado del Certificado de ruralidad" value={form.ruralidad_estado} onChange={value => setCampo("ruralidad_estado", value)} nota={form.ruralidad_nota} onNota={value => setCampo("ruralidad_nota", value)} />
+            <EstadoSelect label={`Resultado del ${nombreCertificado}`} value={form.ruralidad_estado} onChange={value => setCampo("ruralidad_estado", value)} nota={form.ruralidad_nota} onNota={value => setCampo("ruralidad_nota", value)} />
           </section>
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
@@ -360,7 +368,7 @@ export default function RevisionAbogadoPanel({
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead><tr>{["Fecha", "Profesional", "Cédula", "Dominio", "Avalúo", "Ruralidad"].map(t => <th key={t} style={{ textAlign: "left", padding: 7, color: "#64748b", borderBottom: "1px solid #bfdbfe" }}>{t}</th>)}</tr></thead>
+              <thead><tr>{["Fecha", "Profesional", "Cédula", "Dominio", "Avalúo", tituloCertificado].map(t => <th key={t} style={{ textAlign: "left", padding: 7, color: "#64748b", borderBottom: "1px solid #bfdbfe" }}>{t}</th>)}</tr></thead>
               <tbody>{revisiones.map(rev => (
                 <tr key={rev.id}>
                   <td style={{ padding: 7, fontWeight: 800 }}>{fmtFecha(rev.fecha)}</td>
