@@ -56,18 +56,26 @@ const notaResultado = (tipo, estado, nota = "") => {
   return `${tipo ? `${tipo}. ` : ""}${base}${detalle ? `. Observación: ${detalle}` : ""}`;
 };
 
+const coloresEstado = estado => {
+  if (estado === "Aprobado") return { fondo: "#dcfce7", borde: "#059669", texto: "#047857" };
+  if (estado === "Condicional") return { fondo: "#fef3c7", borde: "#d97706", texto: "#92400e" };
+  if (estado === "Rechazado") return { fondo: "#fee2e2", borde: "#dc2626", texto: "#b91c1c" };
+  return { fondo: "#f8fafc", borde: "#dbeafe", texto: "#475569" };
+};
+
 function EstadoSelect({ label, value, onChange, nota, onNota }) {
   const exigeNota = ["Condicional", "Rechazado"].includes(value);
+  const colores = coloresEstado(value);
   return (
-    <div style={{ border: "1px solid #dbeafe", borderRadius: 10, padding: 12, background: "#f8fafc" }}>
+    <div style={{ border: `2px solid ${colores.borde}`, borderRadius: 10, padding: 12, background: colores.fondo }}>
       <label style={{ display: "block", fontSize: 12, fontWeight: 900, color: "#1e3a5f", marginBottom: 6 }}>{label}</label>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {ESTADOS.map(estado => (
           <button key={estado} type="button" onClick={() => onChange(estado)}
             style={{
-              border: `1.5px solid ${value === estado ? (estado === "Aprobado" ? "#059669" : estado === "Condicional" ? "#d97706" : "#dc2626") : "#cbd5e1"}`,
-              background: value === estado ? (estado === "Aprobado" ? "#dcfce7" : estado === "Condicional" ? "#fef3c7" : "#fee2e2") : "#fff",
-              color: value === estado ? (estado === "Aprobado" ? "#047857" : estado === "Condicional" ? "#92400e" : "#b91c1c") : "#475569",
+              border: `1.5px solid ${value === estado ? coloresEstado(estado).borde : "#cbd5e1"}`,
+              background: value === estado ? coloresEstado(estado).fondo : "#fff",
+              color: value === estado ? coloresEstado(estado).texto : "#475569",
               borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 800, cursor: "pointer",
             }}>
             {estado}
@@ -324,15 +332,15 @@ export default function RevisionAbogadoPanel({
                   <td style={{ padding: 7, fontWeight: 800 }}>{fmtFecha(rev.fecha)}</td>
                   <td style={{ padding: 7 }}>{rev.profesional}</td>
                   <td style={{ padding: 7 }}>{rev.cedula_color && rev.cedula_vigente ? "VB completo" : "Pendiente"}</td>
-                  <td style={{ padding: 7 }}>
+                  <td style={{ padding: 7, background: coloresEstado(rev.dominio_estado).fondo, color: coloresEstado(rev.dominio_estado).texto }}>
                     <strong>{rev.dominio_estado || "Pendiente"}</strong>
                     {rev.dominio_estado && <div style={{ marginTop: 3, color: "#475569", fontSize: 10 }}>{notaResultado(rev.dominio_tipo === "OTRO" ? rev.dominio_otro : rev.dominio_tipo, rev.dominio_estado, rev.dominio_nota)}</div>}
                   </td>
-                  <td style={{ padding: 7 }}>
+                  <td style={{ padding: 7, background: coloresEstado(rev.avaluo_estado).fondo, color: coloresEstado(rev.avaluo_estado).texto }}>
                     <strong>{rev.avaluo_estado || "Pendiente"}</strong>
                     {rev.avaluo_estado && <div style={{ marginTop: 3, color: "#475569", fontSize: 10 }}>{notaResultado("", rev.avaluo_estado, rev.avaluo_nota)}</div>}
                   </td>
-                  <td style={{ padding: 7 }}>
+                  <td style={{ padding: 7, background: coloresEstado(rev.ruralidad_estado).fondo, color: coloresEstado(rev.ruralidad_estado).texto }}>
                     <strong>{rev.ruralidad_estado || "Pendiente"}</strong>
                     {rev.ruralidad_estado && <div style={{ marginTop: 3, color: "#475569", fontSize: 10 }}>{notaResultado("", rev.ruralidad_estado, rev.ruralidad_nota)}</div>}
                   </td>
