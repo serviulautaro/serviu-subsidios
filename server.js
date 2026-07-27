@@ -46,7 +46,7 @@ let cacheBootstrap = null;
 let cacheSolicitudes = null;
 const SOLICITUDES_SELECT_BASE = 'id,persona_id,persona_nombre,programa_id,fecha,comite,codigo_comite,tipo_comite,profesional_comite,fecha_visita,calificacion_desmarque,respuesta_serviu_estado';
 const SOLICITUDES_SELECT_LISTADO = `${SOLICITUDES_SELECT_BASE},documentos`;
-const TABLAS_PERMITIDAS = new Set(['comites', 'personas', 'solicitudes', 'programas_custom', 'archivos_solicitante', 'visitas', 'audit_log', 'app_users']);
+const TABLAS_PERMITIDAS = new Set(['comites', 'personas', 'solicitudes', 'programas_custom', 'archivos_solicitante', 'visitas', 'revisiones_abogado', 'audit_log', 'app_users']);
 const ADMIN_KEY = process.env.ADMIN_KEY || Buffer.from('MTk2NTYw', 'base64').toString('utf8');
 let r2ClientCache = null;
 let r2ClientCacheKey = '';
@@ -331,6 +331,31 @@ async function ensureRuntimeSchema() {
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "storage_fuente" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "siguiente_paso" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "fecha_compromiso" text;
+      CREATE TABLE IF NOT EXISTS "revisiones_abogado" (
+        "id" text PRIMARY KEY,
+        "persona_id" text NOT NULL,
+        "solicitud_id" text,
+        "programa_id" text NOT NULL DEFAULT 'csp_rural',
+        "comite" text,
+        "codigo_comite" text,
+        "fecha" text NOT NULL,
+        "profesional" text NOT NULL,
+        "cedula_color" boolean DEFAULT false,
+        "cedula_vigente" boolean DEFAULT false,
+        "dominio_tipo" text,
+        "dominio_otro" text,
+        "dominio_detalle" jsonb DEFAULT '{}'::jsonb,
+        "dominio_estado" text,
+        "dominio_nota" text,
+        "avaluo_estado" text,
+        "avaluo_nota" text,
+        "ruralidad_estado" text,
+        "ruralidad_nota" text,
+        "creado" timestamptz DEFAULT now(),
+        "actualizado" timestamptz DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS "idx_revisiones_abogado_persona"
+        ON "revisiones_abogado" ("persona_id", "fecha");
     `).catch(err => {
       schemaRuntimePromise = null;
       throw err;

@@ -3,6 +3,7 @@ import { supabase, IS_DEMO_MODE } from "./supabaseClient";
 import ComitesVivienda from "./components/ComitesVivienda";
 import InformesView from "./components/InformesView";
 import SiguientePaso from "./components/SiguientePaso";
+import RevisionAbogadoPanel from "./components/RevisionAbogadoPanel";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import JSZip from "jszip";
 import {
@@ -5725,6 +5726,14 @@ const datosSolicitud = {
         </div>
       </div>
 
+
+      <RevisionAbogadoPanel
+        persona={persona}
+        solicitud={solicitudTrabajoPrincipal}
+        currentUser={currentUser}
+        solicitudes={solicitudes}
+        onSaveSolicitudes={onSaveSolicitudes}
+      />
 
       {misSols.length > 1 && (
         <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 20, border: "1px solid #dbeafe" }}>

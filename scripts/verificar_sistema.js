@@ -120,6 +120,7 @@ function main() {
   ok("Documentos nuevos se guardan automaticamente en R2 definitivo", contains(server, "resolverDestinoR2Documento") && contains(server, "Bucket: R2_BUCKET_DEFINITIVO") && contains(server, "Render PostgreSQL (pendiente R2)"));
   ok("Documentos nuevos confirmados en R2 no duplican base64 en PostgreSQL", contains(server, "const dataUrlPostgres = existente?.data_url || (r2Key ? null : data_url)") && contains(server, "respaldo_postgres_base64"));
   ok("Cambios de comite sincronizan documentos sin borrar respaldos", contains(server, "sincronizarDocumentosSolicitudR2") && contains(server, "codigosOrigen") && contains(server, "Cloudflare R2 + Render PostgreSQL"));
+  ok("Revision Abogado CSP Rural persiste por solicitante y comite", contains(server, "CREATE TABLE IF NOT EXISTS \"revisiones_abogado\"") && contains(app, "RevisionAbogadoPanel"));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
   ok("Ficha solicitante respeta programa seleccionado", contains(app, "solicitudTrabajoPrincipal") && contains(app, "Mostrara solo la ficha del programa seleccionado") && contains(app, "misSols={solsTrabajo}") && contains(app, "nombreComiteSolicitud"));
