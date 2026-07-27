@@ -3,6 +3,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const appPath = path.join(root, "src", "App.js");
+const revisionAbogadoPath = path.join(root, "src", "components", "RevisionAbogadoPanel.jsx");
 const serverPath = path.join(root, "server.js");
 const pkgPath = path.join(root, "package.json");
 
@@ -28,12 +29,13 @@ function regex(text, pattern) {
 }
 
 function main() {
-  const requiredFiles = [appPath, serverPath, pkgPath];
+  const requiredFiles = [appPath, revisionAbogadoPath, serverPath, pkgPath];
   requiredFiles.forEach((file) => ok(`Existe ${path.relative(root, file)}`, fs.existsSync(file)));
 
   if (!fs.existsSync(appPath)) throw new Error("No existe src/App.js");
 
   const app = read(appPath);
+  const revisionAbogado = fs.existsSync(revisionAbogadoPath) ? read(revisionAbogadoPath) : "";
   const server = fs.existsSync(serverPath) ? read(serverPath) : "";
   const pkg = fs.existsSync(pkgPath) ? JSON.parse(read(pkgPath)) : {};
 
@@ -121,6 +123,7 @@ function main() {
   ok("Documentos nuevos confirmados en R2 no duplican base64 en PostgreSQL", contains(server, "const dataUrlPostgres = existente?.data_url || (r2Key ? null : data_url)") && contains(server, "respaldo_postgres_base64"));
   ok("Cambios de comite sincronizan documentos sin borrar respaldos", contains(server, "sincronizarDocumentosSolicitudR2") && contains(server, "codigosOrigen") && contains(server, "Cloudflare R2 + Render PostgreSQL"));
   ok("Revision Abogado CSP Rural persiste por solicitante y comite", contains(server, "CREATE TABLE IF NOT EXISTS \"revisiones_abogado\"") && contains(app, "RevisionAbogadoPanel"));
+  ok("Revision Abogado CSP Rural es unica y se puede editar", contains(server, "La revisión abogado ya existe. Debe editar") && contains(revisionAbogado, "Editar revisión abogado") && contains(revisionAbogado, 'revisionExistente ? "update" : "insert"'));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "solsTrabajo.map"));
   ok("Ficha solicitante respeta programa seleccionado", contains(app, "solicitudTrabajoPrincipal") && contains(app, "Mostrara solo la ficha del programa seleccionado") && contains(app, "misSols={solsTrabajo}") && contains(app, "nombreComiteSolicitud"));

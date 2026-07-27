@@ -1110,6 +1110,17 @@ app.get('/api/db/:table', async (req, res) => {
 
 app.post('/api/db/:table/insert', async (req, res) => {
   try {
+    if (req.params.table === 'revisiones_abogado') {
+      await ensureRuntimeSchema();
+      const filas = Array.isArray(req.body?.rows || req.body) ? (req.body?.rows || req.body) : [req.body?.rows || req.body];
+      for (const fila of filas.filter(Boolean)) {
+        const { rows } = await requirePg().query(
+          'SELECT id FROM "revisiones_abogado" WHERE "persona_id" = $1 AND "solicitud_id" IS NOT DISTINCT FROM $2 AND "programa_id" = $3 LIMIT 1',
+          [fila.persona_id, fila.solicitud_id || null, fila.programa_id || 'csp_rural']
+        );
+        if (rows.length) return res.status(409).json({ ok: false, error: 'La revisión abogado ya existe. Debe editar la revisión registrada.' });
+      }
+    }
     const data = await pgInsert(req.params.table, req.body?.rows || req.body || []);
     cacheBootstrap = null;
     if (req.params.table === 'solicitudes') cacheSolicitudes = null;

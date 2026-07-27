@@ -49,6 +49,29 @@ const formularioInicial = profesional => ({
   ruralidad_nota: "",
 });
 
+const formularioDesdeRegistro = (registro, profesional) => {
+  if (!registro) return formularioInicial(profesional);
+  const detalle = registro.dominio_detalle && typeof registro.dominio_detalle === "object"
+    ? registro.dominio_detalle
+    : {};
+  return {
+    fecha: registro.fecha || todayISO(),
+    profesional: registro.profesional || profesional || "",
+    cedula_color: !!registro.cedula_color,
+    cedula_vigente: !!registro.cedula_vigente,
+    dominio_tipo: registro.dominio_tipo || "",
+    dominio_otro: registro.dominio_otro || "",
+    dominio_checks: detalle.checks || {},
+    dominio_observaciones: detalle.observaciones || "",
+    dominio_estado: registro.dominio_estado || "",
+    dominio_nota: registro.dominio_nota || "",
+    avaluo_estado: registro.avaluo_estado || "",
+    avaluo_nota: registro.avaluo_nota || "",
+    ruralidad_estado: registro.ruralidad_estado || "",
+    ruralidad_nota: registro.ruralidad_nota || "",
+  };
+};
+
 const notaResultado = (tipo, estado, nota = "") => {
   if (!estado) return "";
   const base = `Revisión Abogado Terreno= ${estado}`;
@@ -107,6 +130,7 @@ export default function RevisionAbogadoPanel({
   const profesionalActual = currentUser?.nombre || currentUser?.username || "";
   const [form, setForm] = useState(() => formularioInicial(profesionalActual));
   const checksDominio = useMemo(() => REVISIONES_DOMINIO[form.dominio_tipo] || [], [form.dominio_tipo]);
+  const revisionExistente = revisiones[0] || null;
 
   const cargar = async () => {
     if (!persona?.id || !esRural) return;
@@ -132,6 +156,14 @@ export default function RevisionAbogadoPanel({
   if (!esRural) return null;
 
   const setCampo = (campo, valor) => setForm(actual => ({ ...actual, [campo]: valor }));
+  const abrirFormulario = () => {
+    if (abierto) {
+      setAbierto(false);
+      return;
+    }
+    setForm(formularioDesdeRegistro(revisionExistente, profesionalActual));
+    setAbierto(true);
+  };
   const documentoCoincide = (doc, palabras) => {
     const nombre = normalizar(doc?.nombre || doc?.label || "");
     return palabras.some(palabra => nombre.includes(normalizar(palabra)));
@@ -187,7 +219,7 @@ export default function RevisionAbogadoPanel({
     }
     setGuardando(true);
     const registro = {
-      id: uid(),
+      id: revisionExistente?.id || uid(),
       persona_id: persona.id,
       solicitud_id: solicitud?.id || null,
       programa_id: "csp_rural",
@@ -211,15 +243,17 @@ export default function RevisionAbogadoPanel({
       ruralidad_nota: form.ruralidad_nota.trim(),
     };
     try {
-      const res = await fetch(`${API}/api/db/revisiones_abogado/insert`, {
-        method: "POST",
+      const res = await fetch(`${API}/api/db/revisiones_abogado/${revisionExistente ? "update" : "insert"}`, {
+        method: revisionExistente ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([registro]),
+        body: JSON.stringify(revisionExistente
+          ? { filters: [{ col: "id", value: revisionExistente.id }], values: { ...registro, actualizado: new Date().toISOString() } }
+          : [registro]),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.ok === false) throw new Error(json.error || "No se pudo guardar la revisión.");
       await actualizarNotasDocumentos(registro);
-      setRevisiones(actual => [registro, ...actual]);
+      setRevisiones([registro]);
       setForm(formularioInicial(profesionalActual));
       setAbierto(false);
     } catch (err) {
@@ -236,9 +270,9 @@ export default function RevisionAbogadoPanel({
           <div style={{ color: "#fff", fontSize: 17, fontWeight: 900 }}>⚖ Revisión Abogado</div>
           <div style={{ color: "#bfdbfe", fontSize: 11, marginTop: 2 }}>Construcción Sitio Propio Rural · {solicitud?.comite || persona.comite || "Comité sin nombre"}</div>
         </div>
-        <button type="button" onClick={() => { setAbierto(value => !value); setForm(formularioInicial(profesionalActual)); }}
+        <button type="button" onClick={abrirFormulario}
           style={{ background: "#fff", color: "#1e3a5f", border: "none", borderRadius: 8, padding: "9px 15px", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
-          {abierto ? "Cancelar" : "+ Realizar revisión abogado"}
+          {abierto ? "Cancelar" : revisionExistente ? "Editar revisión abogado" : "+ Realizar revisión abogado"}
         </button>
       </div>
 
