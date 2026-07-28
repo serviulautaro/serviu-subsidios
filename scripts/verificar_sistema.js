@@ -125,6 +125,7 @@ function main() {
   ok("Revision Abogado CSP Rural persiste por solicitante y comite", contains(server, "CREATE TABLE IF NOT EXISTS \"revisiones_abogado\"") && contains(app, "RevisionAbogadoPanel"));
   ok("Revision Abogado CSP Rural es unica y se puede editar", contains(server, "La revisión abogado ya existe. Debe editar") && contains(revisionAbogado, "Editar revisión abogado") && contains(revisionAbogado, 'revisionExistente ? "update" : "insert"'));
   ok("Revision Abogado CSP Urbano usa informaciones previas", contains(revisionAbogado, 'programaId === "csp_urbano"') && contains(revisionAbogado, "Certificado de informaciones previas") && contains(revisionAbogado, "INFORMACIONES PREVIAS"));
+  ok("Listado CSP Rural muestra ahorro siguiente paso y revision abogado", contains(app, "Ahorro completo:") && contains(app, "Siguiente paso:") && contains(app, "Rev. abogado:") && contains(app, "revisionesAbogadoComite"));
   ok("Editar documentos de programa guarda lista exacta en Render", contains(app, "__listaExactaPrograma") && contains(app, "/api/db/programas_custom/upsert") && contains(app, "documentosExactos ? normalizado.documentos"));
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "misSols.map") && contains(app, "setProgramaTrabajoId"));
   ok("Detalle multiprograma permite mostrar todo o filtrar", contains(app, 'setProgramaTrabajoId("__todos__")') && contains(app, "mostrandoTodosProgramas") && contains(app, "const solicitudesActivasVista = solsTrabajo"));
