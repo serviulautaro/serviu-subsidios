@@ -8,7 +8,7 @@ const Database = require('better-sqlite3');
 const { execFileSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 const { Pool } = require('pg');
-const { S3Client, HeadBucketCommand, ListObjectsV2Command, PutObjectCommand, GetObjectCommand, CopyObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, HeadBucketCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, GetObjectCommand, CopyObjectCommand } = require('@aws-sdk/client-s3');
 const JSZip = require('jszip');
 // (documentos generados en HTML — sin dependencia docx)
 
@@ -1983,6 +1983,298 @@ app.post('/api/r2/copiar-comite-desmarque-vivienda', async (req, res) => {
 });
 
 const R2_BUCKET_DEFINITIVO = 'documentosentidadpatrocinantemunilautaro';
+
+const headObjetoR2 = async (bucket, key) => {
+  if (!bucket || !key) return { existe: false };
+  try {
+    const out = await r2Client().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return {
+      existe: true,
+      size: Number(out.ContentLength || 0),
+      mime_type: out.ContentType || '',
+      modified: out.LastModified || null,
+    };
+  } catch (error) {
+    const codigo = String(error?.name || error?.Code || error?.$metadata?.httpStatusCode || '');
+    if (codigo === 'NotFound' || codigo === 'NoSuchKey' || codigo === '404') return { existe: false };
+    throw error;
+  }
+};
+
+const archivoLocalHistorico = row => {
+  const candidatos = [
+    row.carpeta && row.nombre ? path.join(safeDocsPath(row.carpeta), row.nombre) : '',
+    row.storage_path ? safeDocsPath(row.storage_path) : '',
+  ].filter(Boolean);
+  for (const candidato of candidatos) {
+    try {
+      if (fs.existsSync(candidato) && fs.statSync(candidato).isFile()) {
+        return { buffer: fs.readFileSync(candidato), fuente: 'Carpeta local historica' };
+      }
+    } catch {}
+  }
+  return null;
+};
+
+const destinoR2FilaHistorica = async row => {
+  const destino = await resolverDestinoR2Documento({
+    personaId: row.persona_id,
+    carpeta: row.carpeta || '',
+  });
+  return {
+    ...destino,
+    key: r2ObjectKey(destino.prefix, row.nombre),
+  };
+};
+
+const recuperarBufferFilaHistorica = async row => {
+  const contenido = await requirePg().query(
+    'SELECT data_url FROM archivos_solicitante WHERE id=$1 LIMIT 1',
+    [row.id]
+  );
+  const dataUrl = contenido.rows[0]?.data_url;
+  if (dataUrl && String(dataUrl).length > 20) {
+    return { buffer: dataUrlABuffer(dataUrl), fuente: 'Render PostgreSQL' };
+  }
+
+  const local = archivoLocalHistorico(row);
+  if (local?.buffer?.length) return local;
+
+  if (row.storage_path) {
+    try {
+      const bucket = row.storage_bucket || 'documentos-solicitantes';
+      const { data, error } = await supabaseServer.storage.from(bucket).download(row.storage_path);
+      if (!error && data) {
+        const buffer = Buffer.from(await data.arrayBuffer());
+        if (buffer.length) return { buffer, fuente: 'Supabase Storage historico' };
+      }
+    } catch (error) {
+      console.warn('[auditoria R2 Supabase]', row.id, error.message);
+    }
+  }
+  return null;
+};
+
+app.post('/api/r2/auditar-documentos-lote', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    if (!r2Disponible()) return res.status(503).json({ ok: false, error: 'Cloudflare R2 no esta configurado.' });
+    const ejecutar = req.body?.ejecutar === true;
+    const offset = Math.max(0, Number(req.body?.offset || 0));
+    const limit = Math.max(1, Math.min(Number(req.body?.limit || 25), 50));
+    const total = Number((await requirePg().query('SELECT count(*) total FROM archivos_solicitante')).rows[0]?.total || 0);
+    const { rows } = await requirePg().query(
+      `SELECT id,persona_id,nombre,carpeta,storage_bucket,storage_path,mime_type,tamano_bytes,
+              r2_key,r2_bucket,storage_fuente,
+              (data_url IS NOT NULL AND length(data_url)>20) tiene_data_url
+       FROM archivos_solicitante
+       ORDER BY id LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    const resultados = [];
+    for (const row of rows) {
+      try {
+        const actual = row.r2_key ? await headObjetoR2(row.r2_bucket || R2_BUCKET_DEFINITIVO, row.r2_key) : { existe: false };
+        if (actual.existe && row.r2_bucket === R2_BUCKET_DEFINITIVO) {
+          resultados.push({ id: row.id, estado: 'r2_ok', key: row.r2_key, size: actual.size });
+          continue;
+        }
+
+        const duplicado = await requirePg().query(
+          `SELECT id,r2_key,r2_bucket FROM archivos_solicitante
+           WHERE persona_id=$1 AND lower(trim(nombre))=lower(trim($2))
+             AND r2_key IS NOT NULL AND id<>$3
+           ORDER BY (r2_bucket=$4) DESC LIMIT 5`,
+          [row.persona_id, row.nombre, row.id, R2_BUCKET_DEFINITIVO]
+        );
+        let referenciaDuplicada = null;
+        for (const candidato of duplicado.rows) {
+          const head = await headObjetoR2(candidato.r2_bucket || R2_BUCKET_DEFINITIVO, candidato.r2_key);
+          if (head.existe) {
+            referenciaDuplicada = { ...candidato, head };
+            break;
+          }
+        }
+        if (referenciaDuplicada?.r2_bucket === R2_BUCKET_DEFINITIVO) {
+          if (ejecutar) {
+            await requirePg().query(
+              `UPDATE archivos_solicitante
+               SET r2_key=$1,r2_bucket=$2,storage_fuente=$3
+               WHERE id=$4`,
+              [referenciaDuplicada.r2_key, R2_BUCKET_DEFINITIVO, 'Cloudflare R2 + Render PostgreSQL', row.id]
+            );
+          }
+          resultados.push({ id: row.id, estado: ejecutar ? 'vinculado_duplicado' : 'migrable_duplicado', key: referenciaDuplicada.r2_key });
+          continue;
+        }
+
+        const destino = await destinoR2FilaHistorica(row);
+        const destinoHead = await headObjetoR2(R2_BUCKET_DEFINITIVO, destino.key);
+        const tamanoEsperado = Number(row.tamano_bytes || 0);
+        if (destinoHead.existe && (!tamanoEsperado || destinoHead.size === tamanoEsperado)) {
+          if (ejecutar) {
+            await requirePg().query(
+              `UPDATE archivos_solicitante
+               SET r2_key=$1,r2_bucket=$2,storage_fuente=$3
+               WHERE id=$4`,
+              [destino.key, R2_BUCKET_DEFINITIVO, 'Cloudflare R2 + Render PostgreSQL', row.id]
+            );
+          }
+          resultados.push({ id: row.id, estado: ejecutar ? 'vinculado_existente' : 'objeto_existente', key: destino.key });
+          continue;
+        }
+
+        let recuperado = null;
+        if (actual.existe && row.r2_key) {
+          const origen = await obtenerBufferR2(row.r2_key, row.r2_bucket);
+          recuperado = { buffer: origen.buffer, fuente: `Cloudflare R2 ${row.r2_bucket || 'origen'}` };
+        } else {
+          recuperado = await recuperarBufferFilaHistorica(row);
+        }
+        if (!recuperado?.buffer?.length) {
+          resultados.push({
+            id: row.id,
+            persona_id: row.persona_id,
+            nombre: row.nombre,
+            carpeta: row.carpeta,
+            estado: row.r2_key ? 'referencia_r2_no_encontrada' : 'sin_fuente_recuperable',
+            storage_path: row.storage_path || '',
+          });
+          continue;
+        }
+
+        let keyFinal = destino.key;
+        if (destinoHead.existe && destinoHead.size !== recuperado.buffer.length) {
+          const ext = path.posix.extname(destino.key);
+          const base = ext ? destino.key.slice(0, -ext.length) : destino.key;
+          keyFinal = `${base}__${segmentoR2Dinamico(row.id).slice(-16)}${ext}`;
+        }
+        if (ejecutar) {
+          const finalHead = await headObjetoR2(R2_BUCKET_DEFINITIVO, keyFinal);
+          if (!finalHead.existe) {
+            await r2Client().send(new PutObjectCommand({
+              Bucket: R2_BUCKET_DEFINITIVO,
+              Key: keyFinal,
+              Body: recuperado.buffer,
+              ContentType: row.mime_type || r2MimeFromName(row.nombre),
+              Metadata: {
+                persona_id: segmentoR2Dinamico(row.persona_id, 'sin_persona').slice(0, 120),
+                origen: 'auditoria_documental_no_destructiva',
+              },
+            }));
+          }
+          await requirePg().query(
+            `UPDATE archivos_solicitante
+             SET r2_key=$1,r2_bucket=$2,storage_fuente=$3
+             WHERE id=$4`,
+            [keyFinal, R2_BUCKET_DEFINITIVO, `Cloudflare R2 + Render PostgreSQL (${recuperado.fuente})`, row.id]
+          );
+        }
+        resultados.push({
+          id: row.id,
+          estado: ejecutar ? 'migrado' : 'migrable',
+          fuente: recuperado.fuente,
+          key: keyFinal,
+          size: recuperado.buffer.length,
+        });
+      } catch (error) {
+        resultados.push({ id: row.id, estado: 'error', error: error.message });
+      }
+    }
+    const resumen = resultados.reduce((acc, item) => {
+      acc[item.estado] = (acc[item.estado] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({
+      ok: !resultados.some(item => item.estado === 'error'),
+      ejecutar,
+      bucket: R2_BUCKET_DEFINITIVO,
+      offset,
+      limit,
+      total,
+      siguiente_offset: offset + rows.length < total ? offset + rows.length : null,
+      resumen,
+      resultados,
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/r2/registrar-solicitantes-lote', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    if (!r2Disponible()) return res.status(503).json({ ok: false, error: 'Cloudflare R2 no esta configurado.' });
+    const ejecutar = req.body?.ejecutar === true;
+    const offset = Math.max(0, Number(req.body?.offset || 0));
+    const limit = Math.max(1, Math.min(Number(req.body?.limit || 50), 100));
+    const total = Number((await requirePg().query('SELECT count(*) total FROM solicitudes')).rows[0]?.total || 0);
+    const { rows } = await requirePg().query(
+      `SELECT s.id,s.persona_id,s.programa_id,s.comite,s.codigo_comite,
+              p.nombre persona_nombre,p.rut
+       FROM solicitudes s
+       LEFT JOIN personas p ON p.id=s.persona_id
+       ORDER BY s.id LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    const resultados = [];
+    for (const row of rows) {
+      try {
+        const destino = await resolverDestinoR2Documento({
+          personaId: row.persona_id,
+          programaId: row.programa_id,
+          codigoComite: row.codigo_comite,
+          comite: row.comite,
+        });
+        const key = `${destino.prefix}/_REGISTRO_SOLICITANTE.json`;
+        const head = await headObjetoR2(R2_BUCKET_DEFINITIVO, key);
+        if (!head.existe && ejecutar) {
+          const body = Buffer.from(JSON.stringify({
+            tipo: 'registro_solicitante',
+            solicitud_id: row.id,
+            persona_id: row.persona_id,
+            persona: row.persona_nombre || '',
+            rut: row.rut || '',
+            programa_id: row.programa_id || '',
+            comite: row.comite || '',
+            codigo_comite: row.codigo_comite || '',
+            creado_por: 'auditoria_documental_no_destructiva',
+            fecha_registro: new Date().toISOString(),
+            nota: 'Este registro acredita la carpeta del solicitante aunque todavía no tenga documentos.',
+          }, null, 2));
+          await r2Client().send(new PutObjectCommand({
+            Bucket: R2_BUCKET_DEFINITIVO,
+            Key: key,
+            Body: body,
+            ContentType: 'application/json',
+          }));
+        }
+        resultados.push({ solicitud_id: row.id, persona_id: row.persona_id, estado: head.existe ? 'registro_existente' : ejecutar ? 'registro_creado' : 'registro_pendiente', key });
+      } catch (error) {
+        resultados.push({ solicitud_id: row.id, persona_id: row.persona_id, estado: 'error', error: error.message });
+      }
+    }
+    const resumen = resultados.reduce((acc, item) => {
+      acc[item.estado] = (acc[item.estado] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({
+      ok: !resultados.some(item => item.estado === 'error'),
+      ejecutar,
+      bucket: R2_BUCKET_DEFINITIVO,
+      offset,
+      limit,
+      total,
+      siguiente_offset: offset + rows.length < total ? offset + rows.length : null,
+      resumen,
+      resultados,
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ ok: false, error: error.message });
+  }
+});
 
 const carpetaRuralDeComite = (carpeta = '', codigos = []) => {
   const texto = textoRegla(carpeta);

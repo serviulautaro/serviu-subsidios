@@ -34,6 +34,8 @@
     "backup:render": "node scripts/backup_render.js",
     "backup:documentos:local": "node scripts/backup_documentos_local.js",
     "sincronizar:r2:computador": "node scripts/sincronizar_r2_computador.js",
+    "auditar:r2": "node scripts/auditar_r2_completo.js",
+    "auditar:r2:ejecutar": "node scripts/auditar_r2_completo.js --ejecutar",
     "restaurar:documentos:respaldo": "node scripts/restaurar_documentos_respaldo_render.js",
     "migrar:documentos": "node scripts/migrar_documentos_storage.js",
     "test": "react-scripts test",
