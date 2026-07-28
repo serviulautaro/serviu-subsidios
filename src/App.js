@@ -9654,24 +9654,32 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
     c.codigo === comiteId ||
     normComiteComparar(c.nombre) === normComiteComparar(comiteId)
   ) || comitesFijosSistema().find(c => c.id === comiteId || c.codigo === comiteId);
-  const esComiteCspRural = !!comite && ((comite.programaId || comite.programa_id) === "csp_rural" || String(comite.tipo || "").toUpperCase() === "RURAL");
+  const programaComiteCsp = (() => {
+    const programa = comite?.programaId || comite?.programa_id || "";
+    if (["csp_rural", "csp_urbano"].includes(programa)) return programa;
+    const tipo = String(comite?.tipo || "").toUpperCase();
+    if (tipo === "RURAL") return "csp_rural";
+    if (tipo === "URBANO") return "csp_urbano";
+    return "";
+  })();
+  const esComiteCsp = !!programaComiteCsp;
   useEffect(() => {
-    if (!esComiteCspRural) {
+    if (!esComiteCsp) {
       setRevisionesAbogadoComite([]);
       setVisitasComite([]);
       return;
     }
     let activo = true;
     Promise.all([
-      fetch(`${API}/api/db/revisiones_abogado?programa_id=eq.csp_rural&orderBy=fecha&orderAsc=false`, { cache: "no-store" }).then(r => r.json()),
+      fetch(`${API}/api/db/revisiones_abogado?programa_id=eq.${programaComiteCsp}&orderBy=fecha&orderAsc=false`, { cache: "no-store" }).then(r => r.json()),
       fetch(`${API}/api/db/visitas?orderBy=fecha&orderAsc=false`, { cache: "no-store" }).then(r => r.json()),
     ]).then(([revisiones, visitasData]) => {
       if (!activo) return;
       setRevisionesAbogadoComite(Array.isArray(revisiones?.data) ? revisiones.data : []);
       setVisitasComite(Array.isArray(visitasData?.data) ? visitasData.data : []);
-    }).catch(err => console.warn("[detalle comite rural]", err.message));
+    }).catch(err => console.warn("[detalle comite CSP]", err.message));
     return () => { activo = false; };
-  }, [comiteId, esComiteCspRural]);
+  }, [comiteId, esComiteCsp, programaComiteCsp]);
 
   if (!comite) return null;
 
@@ -10457,21 +10465,21 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           const grupoDesmarqueActual = tieneHabitabilidad && esDesmarcado(p) ? grupoDesmarcado(p, tieneSolicitudDesmarquePersona) : "";
           const desmarcadoBloqueado = grupoDesmarqueActual === "con_programa";
           const puedeMarcarPendiente = grupoDesmarqueActual && (p.comiteId || p.comite_id) === COMITE_DESMARQUE;
-          const solicitudRural = solsAll.find(s => (s.programaId || s.programa_id) === "csp_rural");
-          const revisionAbogadoRural = esComiteCspRural ? revisionesAbogadoComite.find(rev =>
+          const solicitudCsp = solsAll.find(s => (s.programaId || s.programa_id) === programaComiteCsp);
+          const revisionAbogadoCsp = esComiteCsp ? revisionesAbogadoComite.find(rev =>
             String(rev.persona_id) === String(p.id) &&
-            (!solicitudRural?.id || !rev.solicitud_id || String(rev.solicitud_id) === String(solicitudRural.id))
+            (!solicitudCsp?.id || !rev.solicitud_id || String(rev.solicitud_id) === String(solicitudCsp.id))
           ) : null;
-          const estadosRevision = revisionAbogadoRural ? [revisionAbogadoRural.dominio_estado, revisionAbogadoRural.avaluo_estado, revisionAbogadoRural.ruralidad_estado] : [];
-          const resumenRevisionAbogado = !revisionAbogadoRural ? "NO"
+          const estadosRevision = revisionAbogadoCsp ? [revisionAbogadoCsp.dominio_estado, revisionAbogadoCsp.avaluo_estado, revisionAbogadoCsp.ruralidad_estado] : [];
+          const resumenRevisionAbogado = !revisionAbogadoCsp ? "NO"
             : estadosRevision.includes("Rechazado") ? "RECHAZADO"
             : estadosRevision.includes("Condicional") ? "CONDICIONAL"
             : "CALIFICA";
           const colorRevisionAbogado = resumenRevisionAbogado === "CALIFICA" ? { fondo: "#DCFCE7", texto: "#047857", borde: "#86EFAC" }
             : resumenRevisionAbogado === "CONDICIONAL" ? { fondo: "#FEF3C7", texto: "#92400E", borde: "#F59E0B" }
             : { fondo: "#FEE2E2", texto: "#B91C1C", borde: "#FCA5A5" };
-          const ahorroCompletoRural = esComiteCspRural && solicitanteConAhorroCompleto(p);
-          const siguientePasoRural = esComiteCspRural
+          const ahorroCompletoCsp = esComiteCsp && solicitanteConAhorroCompleto(p);
+          const siguientePasoCsp = esComiteCsp
             ? visitasComite.find(v => String(v.persona_id) === String(p.id) && String(v.siguiente_paso || "").trim())?.siguiente_paso || ""
             : "";
           return (
@@ -10481,17 +10489,17 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15, color: noCalificaCsp ? "#DC2626" : "#111827" }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
-                  {esComiteCspRural && (
+                  {esComiteCsp && (
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
-                      <span style={{ background: ahorroCompletoRural ? "#DCFCE7" : "#FEE2E2", color: ahorroCompletoRural ? "#047857" : "#B91C1C", border: `1px solid ${ahorroCompletoRural ? "#86EFAC" : "#FCA5A5"}`, borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
-                        Ahorro completo: {ahorroCompletoRural ? "SI" : "NO"}
+                      <span style={{ background: ahorroCompletoCsp ? "#DCFCE7" : "#FEE2E2", color: ahorroCompletoCsp ? "#047857" : "#B91C1C", border: `1px solid ${ahorroCompletoCsp ? "#86EFAC" : "#FCA5A5"}`, borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
+                        Ahorro completo: {ahorroCompletoCsp ? "SI" : "NO"}
                       </span>
                       <span style={{ background: colorRevisionAbogado.fondo, color: colorRevisionAbogado.texto, border: `1px solid ${colorRevisionAbogado.borde}`, borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
                         Rev. abogado: {resumenRevisionAbogado}
                       </span>
-                      {siguientePasoRural && (
-                        <span title={siguientePasoRural} style={{ maxWidth: 520, background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE", borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          Siguiente paso: {siguientePasoRural}
+                      {siguientePasoCsp && (
+                        <span title={siguientePasoCsp} style={{ maxWidth: 520, background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE", borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          Siguiente paso: {siguientePasoCsp}
                         </span>
                       )}
                     </div>
