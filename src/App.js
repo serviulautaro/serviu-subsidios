@@ -568,7 +568,7 @@ const DOCUMENTOS_COLECTOR_SOLAR = [
 
 const REQUISITOS_CSP_RURAL_OFICIALES = [
   { nombre: "Cedula de identidad", obligatorio: true, requiereArchivo: true, requiereTexto: true },
-  { nombre: "Correo del solicitante", obligatorio: true, etiquetaTexto: "Correo electr�nico", requiereTexto: true, requiereArchivo: false },
+  { nombre: "Correo del solicitante", obligatorio: true, etiquetaTexto: "Correo electr\u00f3nico", requiereTexto: true, requiereArchivo: false },
   { nombre: "Dominio de la propiedad", obligatorio: true, requiereArchivo: true, requiereTexto: false },
   { nombre: "Registro Social de Hogares en la comuna (REVISADO ENTIDAD PATROCINANTE)", obligatorio: true, requiereTexto: true, requiereArchivo: false, nombreOriginal: "Registro Social de Hogares en la comuna" },
   { nombre: "Certificado de ruralidad (SOLICITAR EN DIRECCION DE OBRAS MUNICIPALES)", obligatorio: true, requiereArchivo: true, requiereTexto: false, nombreOriginal: "Certificado de ruralidad" },
@@ -3632,7 +3632,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
         ? `• ${d.label} (${checks[d.id]})`
         : `• ${d.label}`);
     const lineas = buildLineas(formVisita.checksDocs);
-    if (formVisita.otrosSolicitud.trim()) lineas.push(`Otros: ${formVisita.otrosSolicitud.trim()}`);
+    if (formVisita.otrosSolicitud.trim()) lineas.push(`Detalles o compromisos (E.P., solicitante): ${formVisita.otrosSolicitud.trim()}`);
     const recibidosLineas = buildLineas(formVisita.checksDocsRecibidos);
     const nueva = {
       id: uid(), persona_id: personaId, fecha: formVisita.fecha,
@@ -5216,7 +5216,7 @@ const datosSolicitud = {
     // Documentos que requieren archivo o proceso especial: no se pueden marcar manualmente
     const requiereArchivo = doc.nombre && (
       doc.nombre.toLowerCase().includes('cedula') ||
-      doc.nombre.toLowerCase().includes('t�tulo') ||
+      doc.nombre.toLowerCase().includes('t\u00edtulo') ||
       doc.nombre.toLowerCase().includes('titulo') ||
       doc.nombre.toLowerCase().includes('certificado de avaluo') ||
       doc.nombre.toLowerCase().includes('avaluo') ||
@@ -5519,9 +5519,9 @@ const datosSolicitud = {
             {/* Otros + Compromiso */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Otros (solicitudes adicionales)</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4, textTransform: "uppercase" }}>DETALLES O COMPROMISOS (E.P., SOLICITANTE)</label>
                 <textarea value={formVisita.otrosSolicitud} onChange={e => setFormVisita(f => ({ ...f, otrosSolicitud: e.target.value }))}
-                  placeholder="Solicitudes adicionales no listadas…"
+                  placeholder="Registre aquí detalles o compromisos de la E.P. y del solicitante…"
                   rows={3} style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
               <div>

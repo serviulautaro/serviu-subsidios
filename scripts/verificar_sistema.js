@@ -4,6 +4,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const appPath = path.join(root, "src", "App.js");
 const revisionAbogadoPath = path.join(root, "src", "components", "RevisionAbogadoPanel.jsx");
+const informesPath = path.join(root, "src", "components", "InformesView.jsx");
 const serverPath = path.join(root, "server.js");
 const pkgPath = path.join(root, "package.json");
 
@@ -36,6 +37,7 @@ function main() {
 
   const app = read(appPath);
   const revisionAbogado = fs.existsSync(revisionAbogadoPath) ? read(revisionAbogadoPath) : "";
+  const informes = fs.existsSync(informesPath) ? read(informesPath) : "";
   const server = fs.existsSync(serverPath) ? read(serverPath) : "";
   const pkg = fs.existsSync(pkgPath) ? JSON.parse(read(pkgPath)) : {};
 
@@ -50,6 +52,8 @@ function main() {
   ok("Visitas se fusionan desde tabla y respaldo", contains(app, "fusionarVisitas"));
   ok("Guardar visita no cierra formulario si falla persistencia", contains(app, "evitar pérdida de datos"));
   ok("Guardar visita reintenta con columnas mínimas", contains(app, "[visitas insert retry]"));
+  ok("Registro de visitas usa detalles o compromisos", contains(app, "DETALLES O COMPROMISOS (E.P., SOLICITANTE)") && !contains(app, "Otros (solicitudes adicionales)"));
+  ok("Auditoria informa documentos y ultima visita sin modificaciones", contains(server, "/api/auditoria/informe-documentos-visitas") && contains(informes, "Detalles importantes de la última visita") && !contains(informes, ">MODIFICACIONES<"));
 
   ok("Documentos HTML generados se abren desde respaldo", contains(app, "data:text/html") && contains(app, "setHtmlPreview(html)"));
   ok("Borrar documento limpia respaldo interno", contains(app, "quitarRegistroInterno"));

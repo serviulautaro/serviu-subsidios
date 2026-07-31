@@ -331,6 +331,8 @@ async function ensureRuntimeSchema() {
       ALTER TABLE "archivos_solicitante" ADD COLUMN IF NOT EXISTS "storage_fuente" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "siguiente_paso" text;
       ALTER TABLE "visitas" ADD COLUMN IF NOT EXISTS "fecha_compromiso" text;
+      CREATE INDEX IF NOT EXISTS "idx_audit_log_accion_creado" ON "audit_log" ("accion", "creado" DESC);
+      CREATE INDEX IF NOT EXISTS "idx_visitas_persona_fecha" ON "visitas" ("persona_id", "fecha" DESC);
       CREATE TABLE IF NOT EXISTS "revisiones_abogado" (
         "id" text PRIMARY KEY,
         "persona_id" text NOT NULL,
@@ -1199,6 +1201,57 @@ app.delete('/api/db/:table/delete', async (req, res) => {
       filtros: req.body?.filters || [],
     });
     res.json({ ok: true, data });
+  } catch (e) {
+    res.status(e.status || 500).json({ ok: false, error: e.message });
+  }
+});
+
+// Informe acotado de auditoria: documentos subidos y ultima visita del solicitante.
+// Evita descargar la tabla audit_log completa y no incluye modificaciones generales.
+app.post('/api/auditoria/informe-documentos-visitas', async (req, res) => {
+  try {
+    validarAdmin(req.body?.admin_key);
+    await ensureRuntimeSchema();
+    const fechaInicio = String(req.body?.fecha_inicio || '').trim();
+    const fechaTermino = String(req.body?.fecha_termino || fechaInicio).trim();
+    const usuarioId = String(req.body?.usuario_id || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaInicio) || !/^\d{4}-\d{2}-\d{2}$/.test(fechaTermino)) {
+      return res.status(400).json({ ok: false, error: 'Las fechas de auditoria no son validas.' });
+    }
+    const { rows } = await requirePg().query(
+      `SELECT
+         a.id,
+         a.creado,
+         a.user_id,
+         COALESCE(NULLIF(a.usuario, ''), 'Usuario no identificado') AS usuario,
+         COALESCE(NULLIF(a.detalle->>'solicitante', ''), NULLIF(p.nombre, ''), 'Solicitante no identificado') AS solicitante,
+         COALESCE(NULLIF(a.detalle->>'archivo', ''), NULLIF(a.detalle->>'documento', ''), 'Documento no identificado') AS documento,
+         a.entidad_id AS persona_id,
+         v.fecha AS visita_fecha,
+         v.profesional AS visita_profesional,
+         v.solicitud AS visita_detalles,
+         v.compromiso AS visita_compromiso,
+         v.docs_recibidos AS visita_documentos_recibidos,
+         v.siguiente_paso,
+         v.fecha_compromiso
+       FROM audit_log a
+       LEFT JOIN personas p ON p.id::text = a.entidad_id::text
+       LEFT JOIN LATERAL (
+         SELECT fecha, profesional, solicitud, compromiso, docs_recibidos, siguiente_paso, fecha_compromiso
+         FROM visitas
+         WHERE persona_id::text = a.entidad_id::text
+         ORDER BY NULLIF(fecha, '') DESC NULLS LAST, id DESC
+         LIMIT 1
+       ) v ON true
+       WHERE a.accion = 'subir_documento'
+         AND a.creado >= $1::date
+         AND a.creado < ($2::date + INTERVAL '1 day')
+         AND ($3 = '' OR a.user_id::text = $3)
+       ORDER BY a.creado DESC
+       LIMIT 5000`,
+      [fechaInicio, fechaTermino, usuarioId === 'todos' ? '' : usuarioId]
+    );
+    res.json({ ok: true, data: rows });
   } catch (e) {
     res.status(e.status || 500).json({ ok: false, error: e.message });
   }

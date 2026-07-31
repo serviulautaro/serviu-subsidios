@@ -486,131 +486,35 @@ function formatFechaHora(value) {
   }
 }
 
-function accionTexto(accion, detalle = {}) {
-  const tabla = detalle?.tabla || "";
-  if (accion === "api_insert" || accion === "api_upsert") {
-    if (tabla === "personas") return "Solicitante guardado";
-    if (tabla === "solicitudes") return "Solicitud guardada";
-    if (tabla === "archivos_solicitante") return "Documento guardado";
-  }
-  if (accion === "api_update") {
-    if (tabla === "personas") return "Solicitante actualizado";
-    if (tabla === "solicitudes") return "Solicitud/documentos actualizados";
-    if (tabla === "archivos_solicitante") return "Documento actualizado";
-  }
-  if (accion === "api_delete") {
-    if (tabla === "archivos_solicitante") return "Documento enviado a papelera";
-    if (tabla === "personas") return "Solicitante eliminado";
-    if (tabla === "solicitudes") return "Solicitud eliminada";
-  }
-  const map = {
-    ingreso_sistema: "Ingreso al sistema",
-    cambio_clave: "Cambio de clave",
-    crear_solicitante: "Creacion de solicitante",
-    actualizar_solicitantes: "Actualizacion de solicitantes",
-    crear_solicitud_automatica: "Solicitud automatica creada",
-    subir_documento: "Documento subido",
-    guardar_solicitudes: "Solicitud/documentos guardados",
-    guardar_comites: "Comites guardados",
-    crear_programa: "Programa creado",
-    actualizar_programa: "Programa actualizado",
-    eliminar_programa: "Programa eliminado",
-    registrar_visita: "Visita registrada",
-    mover_solicitante: "Solicitante movido",
-    guardar_linea_tiempo_solicitante_csp: "Linea de tiempo CSP guardada",
-    api_insert: "Registro creado",
-    api_upsert: "Registro guardado",
-    api_update: "Registro actualizado",
-    api_delete: "Registro eliminado",
-    crear_usuario_autorizado: "Usuario autorizado creado",
-    bloquear_usuario_autorizado: "Usuario autorizado bloqueado",
-    desbloquear_usuario_autorizado: "Usuario autorizado desbloqueado",
-    eliminar_usuario_autorizado: "Usuario autorizado eliminado",
-  };
-  return map[accion] || accion || "-";
+function detallesUltimaVisitaAuditoria(fila) {
+  return [
+    fila.visita_fecha ? `Fecha: ${fila.visita_fecha}` : "",
+    fila.visita_profesional ? `Profesional: ${fila.visita_profesional}` : "",
+    fila.visita_detalles ? `Detalles: ${fila.visita_detalles}` : "",
+    fila.visita_compromiso ? `Compromisos: ${fila.visita_compromiso}` : "",
+    fila.visita_documentos_recibidos ? `Documentos recibidos: ${fila.visita_documentos_recibidos}` : "",
+    fila.fecha_compromiso ? `Fecha compromiso: ${fila.fecha_compromiso}` : "",
+  ].filter(Boolean).join(" | ");
 }
 
-function detalleAuditoria(detalle, accion = "") {
-  if (!detalle) return "";
-  if (typeof detalle === "string") return detalle;
-  if (detalle.accion_descripcion) return detalle.accion_descripcion;
-  if (detalle.resumen) return detalle.resumen;
-  if (accion === "guardar_linea_tiempo_solicitante_csp") {
-    const solicitante = detalle.solicitante || detalle.persona || "";
-    if (detalle.no_califica) {
-      return `${solicitante ? solicitante + " " : ""}no califica en ${detalle.etapa_no_califica || "linea de tiempo CSP"} por: ${detalle.nota_no_califica || "Sin nota registrada"}`.trim();
-    }
-    const etapas = Array.isArray(detalle.marcadas) ? detalle.marcadas.join(", ") : "";
-    return [
-      solicitante ? `Solicitante: ${solicitante}` : "",
-      etapas ? `Etapas marcadas: ${etapas}` : "Linea de tiempo CSP actualizada",
-    ].filter(Boolean).join(" | ");
-  }
-  if (accion === "subir_documento") {
-    const doc = detalle.archivo || detalle.documento || detalle.nombreArchivo || detalle.nombre_archivo || "";
-    const solicitante = detalle.solicitante || detalle.persona || "";
-    const carpeta = detalle.carpeta || detalle.tipo || "";
-    return [
-      doc ? `Documento subido: ${doc}` : "",
-      solicitante ? `Solicitante: ${solicitante}` : "",
-      carpeta ? `Carpeta: ${carpeta}` : "",
-    ].filter(Boolean).join(" | ");
-  }
-  if (accion === "actualizar_solicitantes") {
-    const cambios = Array.isArray(detalle.cambios) ? detalle.cambios.join("; ") : (detalle.resumen || "");
-    return cambios ? `Actualizacion realizada: ${cambios}` : "";
-  }
-  if (accion === "guardar_solicitudes") {
-    const docs = Array.isArray(detalle.documentos) ? detalle.documentos.join("; ") : (detalle.resumen || detalle.documento || "");
-    return [
-      detalle.programa ? `Programa: ${detalle.programa}` : "",
-      docs ? `Solicitud/documentos: ${docs}` : "",
-    ].filter(Boolean).join(" | ");
-  }
-  if (["api_insert", "api_upsert", "api_update", "api_delete"].includes(accion)) {
-    return [
-      detalle.solicitante ? `Solicitante: ${detalle.solicitante}` : "",
-      detalle.documento ? `Documento: ${detalle.documento}` : "",
-      detalle.programa ? `Programa: ${detalle.programa}` : "",
-      detalle.tabla ? `Tabla: ${detalle.tabla}` : "",
-      detalle.cantidad ? `Registros: ${detalle.cantidad}` : "",
-      Array.isArray(detalle.campos) && detalle.campos.length ? `Campos: ${detalle.campos.join(", ")}` : "",
-      Array.isArray(detalle.ids) && detalle.ids.length ? `IDs: ${detalle.ids.join(", ")}` : "",
-    ].filter(Boolean).join(" | ");
-  }
-  const partes = [];
-  Object.entries(detalle || {}).forEach(([k, val]) => {
-    if (val === undefined || val === null || val === "") return;
-    partes.push(`${k}: ${typeof val === "object" ? JSON.stringify(val) : val}`);
-  });
-  return partes.join(" | ");
-}
-
-function solicitanteAuditoria(log) {
-  const d = log.detalle || {};
-  if (typeof d === "string") return "";
-  return d.solicitante || d.persona || d.nombre || d.personaNombre || d.persona_nombre || d.postulante || "";
-}
-
-function imprimirAuditoria(fechaInicio, fechaTermino, logs, usuarioFiltro = "Todos los usuarios") {
-  const grupos = logs.reduce((acc, log) => {
-    const usuario = log.usuario || "Usuario no identificado";
+function imprimirAuditoria(fechaInicio, fechaTermino, filas, usuarioFiltro = "Todos los usuarios") {
+  const grupos = filas.reduce((acc, fila) => {
+    const usuario = fila.usuario || "Usuario no identificado";
     if (!acc[usuario]) acc[usuario] = [];
-    acc[usuario].push(log);
+    acc[usuario].push(fila);
     return acc;
   }, {});
   const html = `<div class="page">
     <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe de auditoria</h1><div class="muted">Desde: ${fechaInicio} - Hasta: ${fechaTermino}</div><div class="muted">Usuario: ${v(usuarioFiltro)}</div></div></div>
     <div class="stats">
       <div class="stat"><span class="k">Usuarios con actividad</span><b>${Object.keys(grupos).length}</b></div>
-      <div class="stat"><span class="k">Modificaciones</span><b>${logs.length}</b></div>
-      <div class="stat"><span class="k">Documentos subidos</span><b>${logs.filter(l => l.accion === "subir_documento" || ((l.accion === "api_insert" || l.accion === "api_upsert") && l.detalle?.tabla === "archivos_solicitante")).length}</b></div>
+      <div class="stat"><span class="k">Documentos subidos</span><b>${filas.length}</b></div>
       <div class="stat"><span class="k">Generado</span><b style="font-size:16px">${new Date().toLocaleTimeString("es-CL")}</b></div>
     </div>
     ${Object.entries(grupos).map(([usuario, items]) => `<div class="program-box">
-      <div class="program-title">${usuario} - ${items.length} accion(es)</div>
-      <table><thead><tr><th>Fecha y hora</th><th>Accion</th><th>Solicitante</th><th>Detalle</th></tr></thead><tbody>
-        ${items.map(log => `<tr><td>${formatFechaHora(log.creado)}</td><td>${accionTexto(log.accion, log.detalle)}</td><td>${v(solicitanteAuditoria(log))}</td><td>${v(detalleAuditoria(log.detalle, log.accion))}</td></tr>`).join("")}
+      <div class="program-title">Usuario: ${v(usuario)}</div>
+      <table><thead><tr><th>Fecha de carga</th><th>Solicitante</th><th>Documento subido</th><th>Próximo paso</th><th>Detalles importantes de la última visita</th></tr></thead><tbody>
+        ${items.map(fila => `<tr><td>${formatFechaHora(fila.creado)}</td><td>${v(fila.solicitante)}</td><td>${v(fila.documento)}</td><td>${v(fila.siguiente_paso)}</td><td>${v(detallesUltimaVisitaAuditoria(fila))}</td></tr>`).join("")}
       </tbody></table>
     </div>`).join("")}
   </div>`;
@@ -1288,7 +1192,7 @@ function PanelAuditoriaUsuarios({ currentUser }) {
   const [fechaTermino, setFechaTermino] = useState(hoyIso);
   const [usuarioFiltro, setUsuarioFiltro] = useState("todos");
   const [usuarios, setUsuarios] = useState([]);
-  const [logs, setLogs] = useState([]);
+  const [filas, setFilas] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const esAdmin = (currentUser?.rol || "").toLowerCase() === "admin";
@@ -1309,27 +1213,26 @@ function PanelAuditoriaUsuarios({ currentUser }) {
       setCargando(true);
       setError("");
       const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), 15000);
+      const timer = window.setTimeout(() => controller.abort(), 30000);
       try {
-        const inicio = new Date((fechaInicio || hoyIso) + "T00:00:00");
-        const fin = new Date((fechaTermino || fechaInicio || hoyIso) + "T00:00:00");
-        fin.setDate(fin.getDate() + 1);
-        const params = new URLSearchParams({
-          select: "*",
-          orderBy: "creado",
-          orderAsc: "false",
+        const res = await fetch(`${API_BASE}/api/auditoria/informe-documentos-visitas`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            admin_key: "196560",
+            fecha_inicio: fechaInicio || hoyIso,
+            fecha_termino: fechaTermino || fechaInicio || hoyIso,
+            usuario_id: usuarioFiltro,
+          }),
         });
-        params.set("gte[creado]", inicio.toISOString());
-        params.set("lt[creado]", fin.toISOString());
-        params.set("neq[accion]", "ingreso_sistema");
-        const res = await fetch(`${API_BASE}/api/db/audit_log?${params.toString()}`, { signal: controller.signal });
         const json = await res.json().catch(() => ({}));
         if (!res.ok || json.ok === false) throw new Error(json.error || res.statusText || "No se pudo leer auditoria");
-        if (!cancelado) setLogs(Array.isArray(json.data) ? json.data : []);
+        if (!cancelado) setFilas(Array.isArray(json.data) ? json.data : []);
       } catch (err) {
         if (!cancelado) {
           setError(err.name === "AbortError" ? "La consulta de auditoria tardo demasiado. Intente nuevamente." : err.message);
-          setLogs([]);
+          setFilas([]);
         }
       } finally {
         window.clearTimeout(timer);
@@ -1338,23 +1241,16 @@ function PanelAuditoriaUsuarios({ currentUser }) {
     };
     cargar();
     return () => { cancelado = true; };
-  }, [esAdmin, fechaInicio, fechaTermino, hoyIso]);
+  }, [esAdmin, fechaInicio, fechaTermino, hoyIso, usuarioFiltro]);
 
   const usuarioSeleccionado = usuarios.find(u => u.id === usuarioFiltro);
-  const logsFiltrados = usuarioFiltro === "todos"
-    ? logs
-    : logs.filter(log => log.user_id === usuarioFiltro || log.usuario === usuarioSeleccionado?.nombre || log.usuario === usuarioSeleccionado?.username);
-  const grupos = logsFiltrados.reduce((acc, log) => {
-    const usuario = log.usuario || "Usuario no identificado";
+  const grupos = filas.reduce((acc, fila) => {
+    const usuario = fila.usuario || "Usuario no identificado";
     if (!acc[usuario]) acc[usuario] = [];
-    acc[usuario].push(log);
+    acc[usuario].push(fila);
     return acc;
   }, {});
-  const modificaciones = logsFiltrados.length;
-  const documentosSubidos = logsFiltrados.filter(l =>
-    l.accion === "subir_documento" ||
-    ((l.accion === "api_insert" || l.accion === "api_upsert") && l.detalle?.tabla === "archivos_solicitante")
-  ).length;
+  const documentosSubidos = filas.length;
 
   if (!esAdmin) {
     return <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: 14, color: "#991b1b", fontWeight: 800 }}>
@@ -1382,33 +1278,33 @@ function PanelAuditoriaUsuarios({ currentUser }) {
           {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre} ({u.rol})</option>)}
         </select>
       </div>
-      <button onClick={() => imprimirAuditoria(fechaInicio, fechaTermino, logsFiltrados, usuarioSeleccionado?.nombre || "Todos los usuarios")} disabled={!logsFiltrados.length}
-        style={{ width: 210, padding: "10px 18px", border: "none", borderRadius: 8, background: logsFiltrados.length ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: logsFiltrados.length ? "pointer" : "not-allowed" }}>
+      <button onClick={() => imprimirAuditoria(fechaInicio, fechaTermino, filas, usuarioSeleccionado?.nombre || "Todos los usuarios")} disabled={!filas.length}
+        style={{ width: 210, padding: "10px 18px", border: "none", borderRadius: 8, background: filas.length ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: filas.length ? "pointer" : "not-allowed" }}>
         Generar informe
       </button>
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
       <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>USUARIO ACTUAL</div><div style={{ fontWeight: 900, marginTop: 4 }}>{currentUser?.nombre || "-"}</div></div>
       <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>USUARIOS CON ACTIVIDAD</div><div style={{ fontSize: 22, fontWeight: 900, color: "#0f766e" }}>{Object.keys(grupos).length}</div></div>
       <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>DOCUMENTOS SUBIDOS</div><div style={{ fontSize: 22, fontWeight: 900, color: "#2563eb" }}>{documentosSubidos}</div></div>
-      <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}><div style={{ fontSize: 11, color: "#6b7280", fontWeight: 800 }}>MODIFICACIONES</div><div style={{ fontSize: 22, fontWeight: 900, color: "#d97706" }}>{modificaciones}</div></div>
     </div>
 
     {cargando && <div style={{ color: "#6b7280", fontSize: 13 }}>Cargando auditoria...</div>}
     {error && <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: 13 }}>Error al leer auditoria: {error}</div>}
-    {!cargando && !error && logsFiltrados.length === 0 && <div style={{ color: "#6b7280", fontSize: 13 }}>No hay modificaciones registradas para las fechas seleccionadas.</div>}
+    {!cargando && !error && filas.length === 0 && <div style={{ color: "#6b7280", fontSize: 13 }}>No hay documentos subidos en las fechas seleccionadas.</div>}
 
     <div style={{ display: "grid", gap: 10, maxHeight: 520, overflow: "auto" }}>
       {Object.entries(grupos).map(([usuario, items]) => <div key={usuario} style={{ border: "1px solid #d1d5db", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
-        <div style={{ background: "#f3f4f6", padding: "10px 12px", fontWeight: 900, color: "#111827" }}>{usuario} <span style={{ color: "#6b7280", fontWeight: 700 }}>- {items.length} accion(es)</span></div>
+        <div style={{ background: "#f3f4f6", padding: "10px 12px", fontWeight: 900, color: "#111827" }}>Usuario: {usuario} <span style={{ color: "#6b7280", fontWeight: 700 }}>- {items.length} documento(s)</span></div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead><tr style={{ background: "#f9fafb" }}><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Fecha y hora</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Accion</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Solicitante</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Detalle</th></tr></thead>
-          <tbody>{items.map(log => <tr key={log.id}>
-            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>{formatFechaHora(log.creado)}</td>
-            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", fontWeight: 800 }}>{accionTexto(log.accion, log.detalle)}</td>
-            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(solicitanteAuditoria(log))}</td>
-            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(detalleAuditoria(log.detalle, log.accion))}</td>
+          <thead><tr style={{ background: "#f9fafb" }}><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Fecha de carga</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Solicitante</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Documento subido</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Próximo paso</th><th style={{ textAlign: "left", padding: 8, borderTop: "1px solid #e5e7eb" }}>Detalles importantes de la última visita</th></tr></thead>
+          <tbody>{items.map(fila => <tr key={fila.id}>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>{formatFechaHora(fila.creado)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", fontWeight: 800 }}>{v(fila.solicitante)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(fila.documento)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb" }}>{v(fila.siguiente_paso)}</td>
+            <td style={{ padding: 8, borderTop: "1px solid #e5e7eb", whiteSpace: "pre-wrap" }}>{v(detallesUltimaVisitaAuditoria(fila))}</td>
           </tr>)}</tbody>
         </table>
       </div>)}
@@ -1456,7 +1352,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
     return <div style={{ padding: 24, background: "#f3f4f6", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         <h1 style={{ margin: "0 0 6px", color: "#111827" }}>Auditoría diaria</h1>
-        <div style={{ color: "#6b7280", marginBottom: 22 }}>Ingresos al sistema y modificaciones realizadas por cada usuario.</div>
+        <div style={{ color: "#6b7280", marginBottom: 22 }}>Documentos subidos por cada usuario y antecedentes de la última visita del solicitante.</div>
         <Section title="Informe diario de usuarios" subtitle="Selecciona una fecha y genera el informe solo cuando sea necesario" color="#0f766e">
           <PanelAuditoriaUsuarios currentUser={currentUser} />
         </Section>
