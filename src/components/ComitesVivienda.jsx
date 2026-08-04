@@ -26,6 +26,41 @@ function codigoAliasComite(comite = {}) {
   return "";
 }
 
+function refsComite(comite = {}) {
+  const alias = codigoAliasComite(comite) || comite.codigo;
+  return new Set([comite.id, comite.codigo, alias].filter(Boolean).map(String));
+}
+
+function nombresHistoricos(comite = {}) {
+  const nombres = new Set([normNombre(comite.nombre)]);
+  const alias = codigoAliasComite(comite) || comite.codigo;
+  if (alias === "gr6R") {
+    ["Comité de Vivienda Rural El Esfuerzo", "Comité de Vivienda Rural (Por Constituir)", "Comité de Vivienda Rural Falta Constituirlo"].forEach(n => nombres.add(normNombre(n)));
+  }
+  if (alias === "gr2U") {
+    ["Comité de Vivienda Urbano (Por Constituir)", "Comité Urbano Falta Constituir"].forEach(n => nombres.add(normNombre(n)));
+  }
+  return nombres;
+}
+
+function contarFamilias(comite, personas = [], solicitudes = []) {
+  const refs = refsComite(comite);
+  const nombres = nombresHistoricos(comite);
+  const ids = new Set();
+  personas.forEach(p => {
+    const ref = String(p.comiteId || p.comite_id || "");
+    if ((ref && refs.has(ref)) || nombres.has(normNombre(p.comite))) ids.add(String(p.id));
+  });
+  solicitudes.forEach(s => {
+    const ref = String(s.codigoComite || s.codigo_comite || "");
+    if ((ref && refs.has(ref)) || nombres.has(normNombre(s.comite))) {
+      const personaId = s.personaId || s.persona_id;
+      if (personaId) ids.add(String(personaId));
+    }
+  });
+  return ids.size;
+}
+
 // Fusiona los comités estáticos (con directiva) con los genuinamente nuevos de Supabase
 function mergeConSupa(comitesSupa = []) {
   const base = initialComites.map(c => ({ ...c }));
@@ -38,6 +73,8 @@ function mergeConSupa(comitesSupa = []) {
     const alias = codigoAliasComite(sc);
     const existente = base.find(c => c.codigo === alias || normNombre(c.nombre) === normNombre(sc.nombre));
     if (existente) {
+      existente.id = sc.id || existente.id;
+      existente.programaId = sc.programaId || sc.programa_id || existente.programaId;
       existente.nombre = sc.nombre || existente.nombre;
       existente.familias = Number(sc.familias || sc.cantidad_familias || existente.familias || 0);
       existente.constructora = sc.constructora || sc.descripcion || existente.constructora;
@@ -108,11 +145,12 @@ const styles = {
   memberRow: { display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 8, alignItems: "center", marginBottom: 6 },
 };
 
-export default function ComitesVivienda({ comitesSupa = [] }) {
+export default function ComitesVivienda({ comitesSupa = [], personas = [], solicitudes = [], onSaveComites }) {
   const [tab, setTab] = useState("todos");
   const [selected, setSelected] = useState(null);
   const [comites, setComites] = useState(() => mergeConSupa(comitesSupa));
   const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
   const panelRef = useRef(null);
 
   // Re-fusionar cuando llegan nuevos comités desde Supabase
@@ -120,9 +158,10 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
     setComites(mergeConSupa(comitesSupa));
     setSelected(null);
     setEditing(null);
-  }, [comitesSupa.length]);
+  }, [comitesSupa]);
 
-  const filtered = comites.filter(c => tab === "todos" || c.tipo.toLowerCase() === tab);
+  const comitesConFamilias = comites.map(c => ({ ...c, familias: contarFamilias(c, personas, solicitudes) }));
+  const filtered = comitesConFamilias.filter(c => tab === "todos" || c.tipo.toLowerCase() === tab);
 
   useEffect(() => {
     if (selected && panelRef.current) {
@@ -135,7 +174,7 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
   }, [selected]);
 
   const handleRow = (codigo) => setSelected(prev => prev === codigo ? null : codigo);
-  const selectedComite = comites.find(c => c.codigo === selected);
+  const selectedComite = comitesConFamilias.find(c => c.codigo === selected);
 
   const startEdit = () => {
     const c = comites.find(x => x.codigo === selected);
@@ -149,9 +188,28 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
     });
   };
 
-  const saveEdit = () => {
-    setComites(prev => prev.map(c => c.codigo === selected ? { ...c, ...editing } : c));
-    setEditing(null);
+  const saveEdit = async () => {
+    const actual = comites.find(c => c.codigo === selected);
+    if (!actual || saving) return;
+    const refs = refsComite(actual);
+    const nombres = nombresHistoricos(actual);
+    const actualizados = comitesSupa.map(c => {
+      const coincide = refs.has(String(c.id || "")) || refs.has(String(c.codigo || "")) || nombres.has(normNombre(c.nombre));
+      return coincide ? { ...c, ...editing, descripcion: editing.constructora || c.descripcion || "" } : c;
+    });
+    if (!actualizados.some((c, i) => c !== comitesSupa[i])) {
+      alert("No se encontró el registro real del comité. No se guardó ningún cambio.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const ok = await onSaveComites?.(actualizados);
+      if (ok === false) return;
+      setComites(prev => prev.map(c => c.codigo === selected ? { ...c, ...editing } : c));
+      setEditing(null);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const setField = (field, value) => setEditing(prev => ({ ...prev, [field]: value }));
@@ -200,7 +258,7 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
         </div>
       </div>
       <div style={styles.metrics}>
-        <div style={styles.metric}><div style={styles.metricLabel}>Total familias</div><div style={styles.metricValue}>{comites.reduce((s,c)=>s+c.familias,0)}</div></div>
+        <div style={styles.metric}><div style={styles.metricLabel}>Total familias</div><div style={styles.metricValue}>{comitesConFamilias.reduce((s,c)=>s+c.familias,0)}</div></div>
         <div style={styles.metric}><div style={styles.metricLabel}>Comités rurales</div><div style={styles.metricValue}>{comites.filter(c=>c.tipo==="Rural").length}</div></div>
         <div style={styles.metric}><div style={styles.metricLabel}>Comités urbanos</div><div style={styles.metricValue}>{comites.filter(c=>c.tipo==="Urbano").length}</div></div>
       </div>
@@ -216,7 +274,7 @@ export default function ComitesVivienda({ comitesSupa = [] }) {
                 <h3 style={styles.panelTitle}>Editando: <span style={{color:"#6b7280",fontWeight:400}}>{selectedComite.codigo}</span></h3>
                 <div style={{display:"flex", gap:8}}>
                   <button style={styles.cancelBtn} onClick={()=>setEditing(null)}>Cancelar</button>
-                  <button style={styles.saveBtn} onClick={saveEdit}>Guardar cambios</button>
+                  <button style={{...styles.saveBtn, opacity:saving ? 0.65 : 1}} disabled={saving} onClick={saveEdit}>{saving ? "Guardando..." : "Guardar cambios"}</button>
                 </div>
               </div>
 

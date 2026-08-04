@@ -10851,7 +10851,7 @@ function ComitesView({ comites, personas, solicitudes, onSaveComites, onVerDetal
         ))}
       </div>
 
-      {subtab === "directivas" && <ComitesVivienda comitesSupa={comites} />}
+      {subtab === "directivas" && <ComitesVivienda comitesSupa={comites} personas={personas} solicitudes={solicitudes} onSaveComites={onSaveComites} />}
       {subtab === "gestion" && <div>
 
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e3de", padding: "22px 26px", marginBottom: 18 }}>
@@ -11861,6 +11861,11 @@ export default function App() {
       programaId: x.programa_id,
       fechaCreacion: x.fecha_creacion,
       lineaTiempo: normalizarLineaTiempoCsp(x.linea_tiempo),
+      directiva: Array.isArray(x.directiva) ? x.directiva : [],
+      constructora: x.constructora || x.descripcion || "",
+      profesional: x.profesional || "",
+      pj: x.personalidad_juridica || "",
+      venc: x.vencimiento || "",
     }));
     const personasActualesPorId = new Map(personas.map(personaActual => [String(personaActual.id), personaActual]));
     const personasMapeadas = (p || []).map(x => {
@@ -12530,14 +12535,21 @@ export default function App() {
           id: c.id, nombre: c.nombre, descripcion: c.descripcion || null,
           programa_id: c.programaId || null, fecha_creacion: c.fechaCreacion,
           tipo: c.tipo || null,
-          linea_tiempo: normalizarLineaTiempoCsp(c.lineaTiempo || c.linea_tiempo)
+          linea_tiempo: normalizarLineaTiempoCsp(c.lineaTiempo || c.linea_tiempo),
+          directiva: Array.isArray(c.directiva) ? c.directiva : [],
+          constructora: c.constructora || null,
+          profesional: c.profesional || null,
+          personalidad_juridica: c.pj || c.personalidad_juridica || null,
+          vencimiento: c.venc || c.vencimiento || null
         });
         if (error) throw error;
       }
       await registrarAuditoria("guardar_comites", "comites", "", { cantidad: lista.length });
+      return true;
     } catch (err) {
       console.warn("[saveComites] No se pudo guardar comité:", err?.message || err);
       alert("No se pudo guardar el comité en la nube. La pantalla seguirá funcionando; revise conexión o Supabase.");
+      return false;
     }
   };
 

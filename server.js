@@ -320,6 +320,11 @@ async function ensureRuntimeSchema() {
     schemaRuntimePromise = requirePg().query(`
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "tipo" text;
       ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "linea_tiempo" jsonb DEFAULT '{}'::jsonb;
+      ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "directiva" jsonb DEFAULT '[]'::jsonb;
+      ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "constructora" text;
+      ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "profesional" text;
+      ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "personalidad_juridica" text;
+      ALTER TABLE "comites" ADD COLUMN IF NOT EXISTS "vencimiento" text;
       ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "linea_tiempo_csp" jsonb DEFAULT '{}'::jsonb;
       ALTER TABLE "personas" ADD COLUMN IF NOT EXISTS "pendiente_calificar" boolean DEFAULT false;
       ALTER TABLE "solicitudes" ADD COLUMN IF NOT EXISTS "calificacion_desmarque" text DEFAULT '';
