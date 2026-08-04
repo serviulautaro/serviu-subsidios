@@ -47,7 +47,7 @@ const comites = [
     pj: "—", venc: "—", directiva: [],
   },
   {
-    codigo: "gr6R", nombre: "Comité de Vivienda Rural (Por Constituir)", familias: 25, tipo: "Rural",
+    codigo: "gr6R", nombre: "Comité de Vivienda Rural El Esfuerzo", familias: 25, tipo: "Rural",
     constructora: "Falta Licitar", profesional: "Priscilla Curín Castro",
     pj: "—", venc: "—", directiva: [],
   },

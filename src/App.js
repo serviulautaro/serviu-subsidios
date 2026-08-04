@@ -694,7 +694,7 @@ const COMITES_FIJOS = [
   { codigo:"gr3R", nombre:"Comité de Vivienda Rural Küme Ruka",               tipo:"RURAL"  },
   { codigo:"gr4R", nombre:"Comité de Vivienda Rural Newen Mapu",              tipo:"RURAL"  },
   { codigo:"gr5R", nombre:"Comité de Vivienda Rural Kimey Ruca",              tipo:"RURAL"  },
-  { codigo:"gr6R", nombre:"Comité de Vivienda Rural (Por Constituir)",        tipo:"RURAL"  },
+  { codigo:"gr6R", nombre:"Comité de Vivienda Rural El Esfuerzo",            tipo:"RURAL"  },
   { codigo:"gr1U", nombre:"Comité de Vivienda Urbano Pioneros de Lautaro",    tipo:"URBANO" },
   { codigo:"gr2U", nombre:"Comité de Vivienda Urbano (Por Constituir)",       tipo:"URBANO" },
 ];

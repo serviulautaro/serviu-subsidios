@@ -79,6 +79,7 @@ function main() {
   ok("Eliminar archivo local mueve a papelera interna", contains(server, "archivarArchivoLocal") && !contains(server, "unlinkSync"));
   ok("Cliente API bloquea update/delete sin filtros", contains(read(path.join(root, "src", "supabaseClient.js")), "sin filtros bloqueado por seguridad"));
   ok("Comités por constituir se reconocen por alias", contains(app, "codigoComitePorConstituir") && contains(app, "falta constituir"));
+  ok("Comite El Esfuerzo no se duplica por alias historicos", contains(app, '["gr6R", "comite_5"]') && contains(informes, '["gr6R", "comite_5"]') && contains(informes, "Comite de Vivienda Rural El Esfuerzo"));
   ok("Linea de tiempo CSP requiere confirmacion", contains(app, "¿Está seguro de guardar los cambios de la línea de tiempo"));
   ok("Linea de tiempo CSP se guarda en comites", contains(app, "linea_tiempo") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo\""));
   ok("Linea de tiempo CSP se guarda por solicitante", contains(app, "Línea de tiempo CSP del solicitante") && contains(server, "ADD COLUMN IF NOT EXISTS \"linea_tiempo_csp\""));

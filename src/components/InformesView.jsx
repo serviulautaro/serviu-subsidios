@@ -43,7 +43,7 @@ const COMITES_BASE = [
   { codigo: "gr3R", nombre: "Comite de Vivienda Rural Kume Ruka", familias: 29, tipo: "Rural", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Jacqueline Ortega B.", pj: "En tramite", venc: "-", directiva: [{ rol: "Presidente", nombre: "Rosa Llancapan Liempe" }, { rol: "Vicepresidente", nombre: "Maria Angelica Antinao Liempe" }, { rol: "Secretario", nombre: "Elias Rivas Espinoza" }, { rol: "Tesorero", nombre: "Monica Maribel Rubilar Antilaf" }, { rol: "1er Director", nombre: "Juan Miguel Tripainan Huenulao" }] },
   { codigo: "gr4R", nombre: "Comite de Vivienda Rural Newen Mapu", familias: 26, tipo: "Rural", constructora: "Falta Licitar", profesional: "Priscilla Curin Castro", pj: "-", venc: "-", directiva: [] },
   { codigo: "gr5R", nombre: "Comite de Vivienda Rural Kimey Ruca", familias: 28, tipo: "Rural", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", venc: "-", directiva: [] },
-  { codigo: "gr6R", nombre: "Comite de Vivienda Rural Por Constituir", familias: 25, tipo: "Rural", constructora: "Falta Licitar", profesional: "Priscilla Curin Castro", pj: "-", venc: "-", directiva: [] },
+  { codigo: "gr6R", nombre: "Comite de Vivienda Rural El Esfuerzo", familias: 25, tipo: "Rural", constructora: "Falta Licitar", profesional: "Priscilla Curin Castro", pj: "-", venc: "-", directiva: [] },
   { codigo: "gr1U", nombre: "Comite de Vivienda Urbano Pioneros de Lautaro", familias: 30, tipo: "Urbano", constructora: "Sociedad Constructora Torres Venegas Limitada", profesional: "Priscilla Curin Castro", pj: "P.J. 379720", venc: "Venc. 08/05/2028", directiva: [{ rol: "Presidente", nombre: "Luis Armando Espinoza Mendoza" }, { rol: "Vicepresidente", nombre: "Tomas Salvador Diaz Barrientos" }, { rol: "Secretario", nombre: "Margot Leticia Contreras Marquez" }, { rol: "Tesorero", nombre: "Iris del Carmen Godoy Morales" }, { rol: "1er Director", nombre: "Domingo Antonio Bucarey Torres" }] },
   { codigo: "gr2U", nombre: "Comite de Vivienda Urbano Por Constituir", familias: 8, tipo: "Urbano", constructora: "Falta Licitar", profesional: "Jacqueline Ortega B.", pj: "-", venc: "-", directiva: [] },
 ];
@@ -104,6 +104,10 @@ function programaNombre(id, programas = PROGRAMAS_META_BASE) {
 }
 
 function codigoComitePorConstituir(comite = {}) {
+  const id = String(comite.id || "").trim();
+  const codigo = String(comite.codigo || comite.codigoComite || comite.codigo_comite || "").trim();
+  if (["gr6R", "comite_5"].includes(id) || ["gr6R", "comite_5"].includes(codigo)) return "gr6R";
+  if (["gr2U", "comite_7"].includes(id) || ["gr2U", "comite_7"].includes(codigo)) return "gr2U";
   const texto = norm(`${comite.id || ""} ${comite.codigo || ""} ${comite.nombre || ""} ${comite.comite || ""} ${comite.tipo || ""} ${comite.programaId || comite.programa_id || ""}`);
   const esPorConstituir = texto.includes("por constituir") ||
     texto.includes("falta constituir") ||

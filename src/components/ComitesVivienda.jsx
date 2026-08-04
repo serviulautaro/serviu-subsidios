@@ -6,7 +6,7 @@ const initialComites = [
   { codigo:"gr3R", nombre:"Comité de Vivienda Rural Küme Ruka", familias:29, tipo:"Rural", constructora:"Sociedad Constructora Torres Venegas Limitada", profesional:"Jacqueline Ortega B.", pj:"En trámite", venc:"—", directiva:[{rol:"Presidente",nombre:"Rosa Llancapan Liempe"},{rol:"Vicepresidente",nombre:"María Angélica Antinao Liempe"},{rol:"Secretario",nombre:"Elías Rivas Espinoza"},{rol:"Tesorero",nombre:"Mónica Maribel Rubilar Antilaf"},{rol:"1er Director",nombre:"Juan Miguel Tripaiñan Huenulao"}]},
   { codigo:"gr4R", nombre:"Comité de Vivienda Rural Newen Mapu", familias:26, tipo:"Rural", constructora:"Falta Licitar", profesional:"Priscilla Curín Castro", pj:"—", venc:"—", directiva:[]},
   { codigo:"gr5R", nombre:"Comité de Vivienda Rural Kimey Ruca", familias:28, tipo:"Rural", constructora:"Falta Licitar", profesional:"Jacqueline Ortega B.", pj:"—", venc:"—", directiva:[]},
-  { codigo:"gr6R", nombre:"Comité de Vivienda Rural (Por Constituir)", familias:25, tipo:"Rural", constructora:"Falta Licitar", profesional:"Priscilla Curín Castro", pj:"—", venc:"—", directiva:[]},
+  { codigo:"gr6R", nombre:"Comité de Vivienda Rural El Esfuerzo", familias:25, tipo:"Rural", constructora:"Falta Licitar", profesional:"Priscilla Curín Castro", pj:"—", venc:"—", directiva:[]},
   { codigo:"gr1U", nombre:"Comité de Vivienda Urbano Pioneros de Lautaro", familias:30, tipo:"Urbano", constructora:"Sociedad Constructora Torres Venegas Limitada", profesional:"Priscilla Curín Castro", pj:"P.J. 379720", venc:"Venc. 08/05/2028", directiva:[{rol:"Presidente",nombre:"Luis Armando Espinoza Mendoza"},{rol:"Vicepresidente",nombre:"Tomás Salvador Díaz Barrientos"},{rol:"Secretario",nombre:"Margot Leticia Contreras Márquez"},{rol:"Tesorero",nombre:"Iris del Carmen Godoy Morales"},{rol:"1er Director",nombre:"Domingo Antonio Bucarey Torres"}]},
   { codigo:"gr2U", nombre:"Comité de Vivienda Urbano (Por Constituir)", familias:8, tipo:"Urbano", constructora:"Falta Licitar", profesional:"Jacqueline Ortega B.", pj:"—", venc:"—", directiva:[]},
 ];
@@ -18,6 +18,14 @@ function normNombre(s) {
     .replace(/\s+/g, " ");
 }
 
+function codigoAliasComite(comite = {}) {
+  const id = String(comite.id || "").trim();
+  const codigo = String(comite.codigo || "").trim();
+  if (["gr6R", "comite_5"].includes(id) || ["gr6R", "comite_5"].includes(codigo)) return "gr6R";
+  if (["gr2U", "comite_7"].includes(id) || ["gr2U", "comite_7"].includes(codigo)) return "gr2U";
+  return "";
+}
+
 // Fusiona los comités estáticos (con directiva) con los genuinamente nuevos de Supabase
 function mergeConSupa(comitesSupa = []) {
   const base = initialComites.map(c => ({ ...c }));
@@ -27,6 +35,18 @@ function mergeConSupa(comitesSupa = []) {
 
   comitesSupa.forEach(sc => {
     if (!sc.nombre || !sc.nombre.trim()) return;           // sin nombre → ignorar
+    const alias = codigoAliasComite(sc);
+    const existente = base.find(c => c.codigo === alias || normNombre(c.nombre) === normNombre(sc.nombre));
+    if (existente) {
+      existente.nombre = sc.nombre || existente.nombre;
+      existente.familias = Number(sc.familias || sc.cantidad_familias || existente.familias || 0);
+      existente.constructora = sc.constructora || sc.descripcion || existente.constructora;
+      existente.profesional = sc.profesional || existente.profesional;
+      existente.pj = sc.pj || sc.personalidad_juridica || existente.pj;
+      existente.venc = sc.venc || sc.vencimiento || existente.venc;
+      if (Array.isArray(sc.directiva) && sc.directiva.length) existente.directiva = sc.directiva;
+      return;
+    }
     if (nombresBase.has(normNombre(sc.nombre))) return;    // duplicado del estático → ignorar
     const esUrbano = sc.programaId === "csp_urbano" || sc.nombre.toUpperCase().includes("URBANO");
     const tipo = esUrbano ? "Urbano" : "Rural";
