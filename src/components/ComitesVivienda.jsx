@@ -18,6 +18,33 @@ function normNombre(s) {
     .replace(/\s+/g, " ");
 }
 
+function rutKey(rut) {
+  return String(rut || "").toUpperCase().replace(/[^0-9K]/g, "");
+}
+
+function formatRut(rut) {
+  const clean = rutKey(rut);
+  if (clean.length < 2) return clean;
+  const cuerpo = clean.slice(0, -1);
+  return `${cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${clean.slice(-1)}`;
+}
+
+function validarRutChileno(rut) {
+  const clean = rutKey(rut);
+  if (clean.length < 8 || clean.length > 9) return false;
+  const cuerpo = clean.slice(0, -1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0;
+  let multiplicador = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += Number(cuerpo[i]) * multiplicador;
+    multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+  }
+  const resto = 11 - (suma % 11);
+  const esperado = resto === 11 ? "0" : resto === 10 ? "K" : String(resto);
+  return clean.slice(-1) === esperado;
+}
+
 function codigoAliasComite(comite = {}) {
   const id = String(comite.id || "").trim();
   const codigo = String(comite.codigo || "").trim();
@@ -59,6 +86,31 @@ function contarFamilias(comite, personas = [], solicitudes = []) {
     }
   });
   return ids.size;
+}
+
+function personaPertenece(persona, comite, solicitudes = []) {
+  const refs = refsComite(comite);
+  const nombres = nombresHistoricos(comite);
+  const refPersona = String(persona.comiteId || persona.comite_id || "");
+  if ((refPersona && refs.has(refPersona)) || nombres.has(normNombre(persona.comite))) return true;
+  return solicitudes.some(s => {
+    if (String(s.personaId || s.persona_id || "") !== String(persona.id || "")) return false;
+    const ref = String(s.codigoComite || s.codigo_comite || "");
+    return (ref && refs.has(ref)) || nombres.has(normNombre(s.comite));
+  });
+}
+
+function datosMiembro(persona, rol = "") {
+  return {
+    rol,
+    personaId: persona.id,
+    rut: formatRut(persona.rut),
+    nombre: persona.nombre || "",
+    direccion: persona.direccion || "",
+    coordenadas: persona.coordenadas || "",
+    telefono: persona.telefono || "",
+    email: persona.email || persona.correo || "",
+  };
 }
 
 // Fusiona los comités estáticos (con directiva) con los genuinamente nuevos de Supabase
@@ -142,7 +194,7 @@ const styles = {
   fieldLabel: { fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 4, display: "block", textTransform: "uppercase", letterSpacing: "0.04em" },
   editGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px", marginBottom: 14 },
   editDivider: { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#9ca3af", margin: "12px 0 8px" },
-  memberRow: { display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 8, alignItems: "center", marginBottom: 6 },
+  memberRow: { display: "grid", gridTemplateColumns: "150px 210px 1fr auto", gap: 8, alignItems: "start", marginBottom: 10, padding: 10, border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc" },
 };
 
 export default function ComitesVivienda({ comitesSupa = [], personas = [], solicitudes = [], onSaveComites }) {
@@ -178,19 +230,31 @@ export default function ComitesVivienda({ comitesSupa = [], personas = [], solic
 
   const startEdit = () => {
     const c = comites.find(x => x.codigo === selected);
+    const directivaCompleta = c.directiva.map(d => {
+      const persona = personas.find(p =>
+        (d.rut && rutKey(p.rut) === rutKey(d.rut)) ||
+        (d.nombre && normNombre(p.nombre) === normNombre(d.nombre))
+      );
+      return persona ? { ...d, ...datosMiembro(persona, d.rol || d.cargo || "") } : { ...d };
+    });
     setEditing({
       nombre: c.nombre,
       constructora: c.constructora,
       profesional: c.profesional,
       pj: c.pj,
       venc: c.venc,
-      directiva: c.directiva.map(d => ({ ...d })),
+      directiva: directivaCompleta,
     });
   };
 
   const saveEdit = async () => {
     const actual = comites.find(c => c.codigo === selected);
     if (!actual || saving) return;
+    const incompleto = editing.directiva.find(d => !d.rol?.trim() || !validarRutChileno(d.rut) || !d.personaId);
+    if (incompleto) {
+      alert("Cada integrante de la directiva debe tener un rol y una cédula válida correspondiente a un solicitante del comité.");
+      return;
+    }
     const refs = refsComite(actual);
     const nombres = nombresHistoricos(actual);
     const actualizados = comitesSupa.map(c => {
@@ -220,8 +284,37 @@ export default function ComitesVivienda({ comitesSupa = [], personas = [], solic
       directiva: prev.directiva.map((d, idx) => idx === i ? { ...d, [field]: value } : d),
     }));
 
+  const setRutMiembro = (i, value) => setEditing(prev => ({
+    ...prev,
+    directiva: prev.directiva.map((d, idx) => idx === i ? {
+      ...d, rut: value, personaId: "", nombre: "", direccion: "", coordenadas: "", telefono: "", email: "",
+    } : d),
+  }));
+
+  const buscarMiembroPorRut = (i) => {
+    const rut = editing.directiva[i]?.rut || "";
+    if (!validarRutChileno(rut)) {
+      alert("La cédula de identidad ingresada no es válida.");
+      return;
+    }
+    const persona = personas.find(p => rutKey(p.rut) === rutKey(rut));
+    if (!persona) {
+      alert("No existe un solicitante registrado con esa cédula de identidad.");
+      return;
+    }
+    const actual = comites.find(c => c.codigo === selected);
+    if (!personaPertenece(persona, actual, solicitudes)) {
+      alert("El solicitante existe, pero no pertenece a este comité.");
+      return;
+    }
+    setEditing(prev => ({
+      ...prev,
+      directiva: prev.directiva.map((d, idx) => idx === i ? { ...d, ...datosMiembro(persona, d.rol) } : d),
+    }));
+  };
+
   const addMember = () =>
-    setEditing(prev => ({ ...prev, directiva: [...prev.directiva, { rol: "", nombre: "" }] }));
+    setEditing(prev => ({ ...prev, directiva: [...prev.directiva, { rol: "", rut: "", nombre: "", direccion: "", coordenadas: "", telefono: "", email: "" }] }));
 
   const removeMember = (i) =>
     setEditing(prev => ({ ...prev, directiva: prev.directiva.filter((_, idx) => idx !== i) }));
@@ -305,7 +398,18 @@ export default function ComitesVivienda({ comitesSupa = [], personas = [], solic
               {editing.directiva.map((d, i) => (
                 <div key={i} style={styles.memberRow}>
                   <input style={inp} placeholder="Rol" value={d.rol} onChange={e=>setMemberField(i,"rol",e.target.value)} />
-                  <input style={inp} placeholder="Nombre completo" value={d.nombre} onChange={e=>setMemberField(i,"nombre",e.target.value)} />
+                  <div>
+                    <input style={inp} placeholder="Cédula de identidad" value={d.rut || ""}
+                      onChange={e=>setRutMiembro(i,e.target.value)} onBlur={()=>d.rut && buscarMiembroPorRut(i)} />
+                    <button type="button" style={{...styles.addMemberBtn, marginTop:4, padding:4}} onClick={()=>buscarMiembroPorRut(i)}>Buscar solicitante</button>
+                  </div>
+                  <div style={{fontSize:12,lineHeight:1.55,color:"#475569"}}>
+                    <div style={{fontWeight:800,color:"#0f172a"}}>{d.nombre || "Ingrese una cédula válida"}</div>
+                    <div><strong>Dirección:</strong> {d.direccion || "-"}</div>
+                    <div><strong>Coordenadas:</strong> {d.coordenadas || "-"}</div>
+                    <div><strong>Teléfono:</strong> {d.telefono || "-"}</div>
+                    <div><strong>Correo:</strong> {d.email || "-"}</div>
+                  </div>
                   <button style={styles.removeMemberBtn} onClick={()=>removeMember(i)} title="Eliminar">✕</button>
                 </div>
               ))}
@@ -336,6 +440,13 @@ export default function ComitesVivienda({ comitesSupa = [], personas = [], solic
                         <div key={i} style={styles.dirCard}>
                           <div style={styles.dirRole}>{d.rol}</div>
                           <div style={styles.dirName}>{d.nombre}</div>
+                          <div style={{fontSize:11,color:"#64748b",marginTop:6,lineHeight:1.5}}>
+                            <div><strong>Cédula:</strong> {d.rut || "-"}</div>
+                            <div><strong>Dirección:</strong> {d.direccion || "-"}</div>
+                            <div><strong>Coordenadas:</strong> {d.coordenadas || "-"}</div>
+                            <div><strong>Teléfono:</strong> {d.telefono || "-"}</div>
+                            <div><strong>Correo:</strong> {d.email || "-"}</div>
+                          </div>
                         </div>
                       ))}
                     </div>
