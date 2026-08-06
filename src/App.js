@@ -3931,7 +3931,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         actualizado.observaciones = p.observaciones;
       }
       return actualizado;
-    }));
+    }), { soloEstadoLocal: true });
     return true;
   };
 
@@ -12310,7 +12310,7 @@ export default function App() {
     }).catch(e => console.warn("[revision solicitudes activas]", e.message));
   }, [currentUser?.id, datosBaseListos, personas.length, solicitudes.length, comites.length, programasCustom.length]); // eslint-disable-line react-hooks/exhaustive-deps
   // Guardar personas en Supabase
-  const savePersonas = async (lista) => {
+  const savePersonas = async (lista, opciones = {}) => {
     if (IS_DEMO_MODE) {
       const idsActuales = new Set(personas.map(p => p.id));
       const nuevos = lista.filter(p => !idsActuales.has(p.id));
@@ -12320,6 +12320,9 @@ export default function App() {
       }
     }
     setPersonas(lista);
+    // syncPersona ya guardó mediante PATCH solamente los campos modificados.
+    // No volver a enviar fichas completas desde una copia local potencialmente antigua.
+    if (opciones.soloEstadoLocal === true) return true;
     const ultima = lista[lista.length - 1];
     if (ultima && !personas.find(p => p.id === ultima.id)) {
       const nuevaPersonaPayload = {
@@ -12464,7 +12467,8 @@ export default function App() {
       // En modo web multiusuario, una lista local incompleta no debe eliminar datos de Supabase.
       const anterioresPorId = new Map(personas.map(p => [p.id, p]));
       for (const p of lista) {
-        await supabase.from("personas").upsert({
+        const anterior = anterioresPorId.get(p.id);
+        const payload = {
           id: p.id, nombre: p.nombre, rut: p.rut,
           fecha_nacimiento: p.fechaNacimiento, telefono: p.telefono,
           email: p.email, direccion: p.direccion, comuna: p.comuna,
@@ -12472,8 +12476,19 @@ export default function App() {
           comite_id: p.comiteId || null, comite: p.comite || null,
           fecha_ingreso: p.fechaIngreso || p.fecha_ingreso || today(),
           linea_tiempo_csp: normalizarLineaTiempoCsp(p.lineaTiempoCsp || p.linea_tiempo_csp)
-        });
-        const cambios = resumenCambiosPersona(anterioresPorId.get(p.id), p);
+        };
+        const payloadAnterior = anterior ? {
+          id: anterior.id, nombre: anterior.nombre, rut: anterior.rut,
+          fecha_nacimiento: anterior.fechaNacimiento, telefono: anterior.telefono,
+          email: anterior.email, direccion: anterior.direccion, comuna: anterior.comuna,
+          puntaje_rsh: anterior.puntajeRSH, integrantes_familiares: anterior.integrantesFamiliares,
+          comite_id: anterior.comiteId || null, comite: anterior.comite || null,
+          fecha_ingreso: anterior.fechaIngreso || anterior.fecha_ingreso || today(),
+          linea_tiempo_csp: normalizarLineaTiempoCsp(anterior.lineaTiempoCsp || anterior.linea_tiempo_csp)
+        } : null;
+        if (payloadAnterior && JSON.stringify(payloadAnterior) === JSON.stringify(payload)) continue;
+        await supabase.from("personas").upsert(payload);
+        const cambios = resumenCambiosPersona(anterior, p);
         if (cambios.length) {
           await registrarAuditoria("actualizar_solicitantes", "personas", p.id, {
             solicitante: p.nombre || anterioresPorId.get(p.id)?.nombre || "",
