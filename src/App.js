@@ -4288,6 +4288,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     const dataUrl = await fileToDataUrl(file);
 
     // Guardar en PostgreSQL directo (método principal — persiste entre reinicios)
+    let registroPermanente = null;
     if (persona?.id) {
       let guardadoEnPG = false;
       for (let intento = 0; intento < 3; intento++) {
@@ -4304,8 +4305,13 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               mime_type: mimeType
             })
           });
-          if (r.ok) { guardadoEnPG = true; break; }
-          console.warn("[subir] Error PG intento", intento+1, ":", await r.text());
+          const respuesta = await r.json().catch(() => ({}));
+          if (r.ok && respuesta.ok !== false) {
+            guardadoEnPG = true;
+            registroPermanente = respuesta;
+            break;
+          }
+          console.warn("[subir] Error PG intento", intento+1, ":", respuesta.error || r.status);
         } catch(e) { console.warn("[subir] Error PG intento", intento+1, ":", e.message); }
       }
       if (!guardadoEnPG) {
@@ -4322,14 +4328,31 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     } catch(e) { console.warn("[subir] Error disco:", e.message); }
 
     // Actualizar estado local
-    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: { dataUrl, mimeType, carpeta: carp } }));
+    setArchivosDatos(prev => ({ ...prev, [nombreSubido]: {
+      dataUrl,
+      mimeType,
+      carpeta: carp,
+      r2Key: registroPermanente?.r2_key || "",
+      r2Bucket: registroPermanente?.r2_bucket || "",
+      storageFuente: registroPermanente?.r2 ? "Cloudflare R2 + Render PostgreSQL" : "Render PostgreSQL (pendiente R2)",
+    } }));
     setArchivos(prev => prev.includes(nombreSubido) ? prev : [nombreSubido, ...prev]);
     setArchivosRutas(prev => ({ ...prev, [nombreSubido]: carp }));
-    setArchivosFuentes(prev => ({ ...prev, [nombreSubido]: { fuentes: ["Render", "Carpeta local"], detalle: carp } }));
+    setArchivosFuentes(prev => ({ ...prev, [nombreSubido]: {
+      fuentes: registroPermanente?.r2 ? ["Cloudflare R2", "Carpeta local"] : ["Render", "Carpeta local"],
+      detalle: registroPermanente?.r2_key || carp,
+    } }));
     await registrarAuditoria?.("subir_documento", "archivos_solicitante", persona.id, {
       solicitante: persona.nombre, archivo: nombreSubido, carpeta: carp,
     });
-    return { nombre: nombreSubido, dataUrl, mimeType, storagePath: "" };
+    return {
+      nombre: nombreSubido,
+      dataUrl,
+      mimeType,
+      storagePath: registroPermanente?.r2_key || "",
+      r2Key: registroPermanente?.r2_key || "",
+      r2Bucket: registroPermanente?.r2_bucket || "",
+    };
   };
   const cargarArchivos = async () => {
     const datosMap = {};
@@ -4489,7 +4512,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
     // R2: si existe copia en Cloudflare, usarla primero y dejar Render como respaldo.
     if (archivoGuardado?.r2Key) {
-      const urlR2 = API + "/api/r2/archivo/" + String(archivoGuardado.r2Key).split("/").map(encodeURIComponent).join("/");
+      const bucketR2 = archivoGuardado.r2Bucket ? `?bucket=${encodeURIComponent(archivoGuardado.r2Bucket)}` : "";
+      const urlR2 = API + "/api/r2/archivo/" + String(archivoGuardado.r2Key).split("/").map(encodeURIComponent).join("/") + bucketR2;
       if (await urlSirveDocumento(urlR2)) return urlR2;
     }
 
