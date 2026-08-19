@@ -3268,8 +3268,9 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [showDesbloquearTipoComite, setShowDesbloquearTipoComite] = useState(false);
   const [camposDesmarqueDesbloqueados, setCamposDesmarqueDesbloqueados] = useState(false);
   const [showClaveCamposDesmarque, setShowClaveCamposDesmarque] = useState(false);
-  const [rutDesbloqueado, setRutDesbloqueado] = useState(false);
-  const [showClaveRut, setShowClaveRut] = useState(false);
+  const [showEditarRut, setShowEditarRut] = useState(false);
+  const [rutEdicion, setRutEdicion] = useState("");
+  const [guardandoRut, setGuardandoRut] = useState(false);
   const [showClaveVbDesmarque, setShowClaveVbDesmarque] = useState(false);
   const [pendingVbDesmarque, setPendingVbDesmarque] = useState(null);
   const [respuestaServiuSolicitudId, setRespuestaServiuSolicitudId] = useState(null);
@@ -3933,6 +3934,73 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       return actualizado;
     }), { soloEstadoLocal: true });
     return true;
+  };
+
+  const abrirEdicionRut = () => {
+    setRutEdicion(persona?.rut || "");
+    setShowEditarRut(true);
+  };
+
+  const guardarRutSolicitante = async () => {
+    const rutFormateado = formatRut(rutEdicion || "");
+    if (!rutFormatoChilenoValido(rutFormateado)) {
+      alert("La cédula de identidad no es válida. Revise el número y el dígito verificador.");
+      return;
+    }
+    const rutCanonico = limpiarRut(rutFormateado).toUpperCase();
+    const duplicado = personas.find(p =>
+      String(p.id) !== String(persona.id) &&
+      limpiarRut(p.rut || "").toUpperCase() === rutCanonico
+    );
+    if (duplicado) {
+      alert(`La cédula ${rutFormateado} ya pertenece a ${duplicado.nombre || "otro solicitante"}. No se realizó ningún cambio.`);
+      return;
+    }
+    if (limpiarRut(persona.rut || "").toUpperCase() === rutCanonico) {
+      setShowEditarRut(false);
+      return;
+    }
+    if (!window["confirm"](`¿Cambiar la cédula de identidad de ${persona.nombre} a ${rutFormateado}?`)) return;
+
+    setGuardandoRut(true);
+    try {
+      const rutAnterior = persona.rut || "";
+      await syncPersona({ rut: rutFormateado });
+
+      const solicitudesActualizadas = solicitudes.map(sol => {
+        if (!esSolicitudDePersona(sol, persona.id) || !Array.isArray(sol.documentos)) return sol;
+        let cambio = false;
+        const documentos = sol.documentos.map(doc => {
+          if (!docNombreNorm(doc).includes("cedula de identidad")) return doc;
+          const partes = String(doc.valor || "").split("|");
+          if (partes.length < 2) return doc;
+          partes[0] = rutFormateado;
+          cambio = true;
+          return { ...doc, valor: partes.join("|") };
+        });
+        return cambio ? { ...sol, documentos } : sol;
+      });
+      const modificadas = solicitudesActualizadas.filter(sol => {
+        const anterior = solicitudes.find(s => String(s.id) === String(sol.id));
+        return anterior && anterior !== sol;
+      });
+      for (const sol of modificadas) {
+        const guardada = await actualizarSolicitudEnDb(sol.id, { documentos: sol.documentos });
+        if (!guardada) throw new Error(`No se pudo sincronizar la solicitud ${sol.id}.`);
+      }
+      if (modificadas.length) onSaveSolicitudes(solicitudesActualizadas);
+      await registrarAuditoria?.("actualizar_rut_solicitante", "personas", persona.id, {
+        solicitante: persona.nombre || "",
+        rut_anterior: formatRut(rutAnterior),
+        rut_nuevo: rutFormateado,
+        programas_actualizados: modificadas.map(s => s.programaId || s.programa_id || "").filter(Boolean),
+      });
+      setShowEditarRut(false);
+    } catch (e) {
+      alert("No se pudo completar el cambio de cédula de identidad. Detalle: " + (e.message || e));
+    } finally {
+      setGuardandoRut(false);
+    }
   };
 
   const actualizarSolicitudEnDb = async (solId, values) => {
@@ -5395,7 +5463,13 @@ const datosSolicitud = {
                 </span>
               </>
             )}
-            <div style={{ fontSize: 13, color: "#888" }}>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</div>
+            <div style={{ fontSize: 13, color: "#888", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>Cédula de identidad: {formatRut(persona.rut)}{persona.telefono ? " - " + persona.telefono : ""}{persona.email ? " - " + persona.email : ""}</span>
+              <button onClick={abrirEdicionRut}
+                style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid #93c5fd", background: "#eff6ff", color: "#1d4ed8", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
+                Editar cédula
+              </button>
+            </div>
             {(persona.direccion || persona.comuna) && <div style={{ fontSize: 13, color: "#888" }}>{[persona.direccion, persona.comuna].filter(Boolean).join(", ")}</div>}
             {(persona.puntajeRSH || persona.integrantesFamiliares) && <div style={{ fontSize: 13, color: "#888" }}>{persona.puntajeRSH ? "RSH: " + persona.puntajeRSH : ""}{persona.integrantesFamiliares ? " - Grupo familiar: " + persona.integrantesFamiliares + " personas" : ""}</div>}
             {(comite || persona.comite) && (
@@ -5437,6 +5511,32 @@ const datosSolicitud = {
           </div>
         </div>
       </div>
+
+      {showEditarRut && (
+        <Modal title="Editar cédula de identidad" onClose={() => !guardandoRut && setShowEditarRut(false)}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ fontSize: 13, color: "#475569" }}>
+              Este cambio se aplicará al solicitante en todos sus programas. Los documentos, VB, visitas y rutas históricas se conservarán.
+            </div>
+            <div>
+              <label style={{ display: "block", marginBottom: 5, fontSize: 12, fontWeight: 800, color: "#1e3a5f" }}>Cédula de identidad</label>
+              <input autoFocus value={formatRut(rutEdicion)}
+                onChange={e => setRutEdicion(limpiarRut(e.target.value))}
+                onKeyDown={e => { if (e.key === "Enter" && !guardandoRut) guardarRutSolicitante(); }}
+                placeholder="Ej: 10.398.338-K"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "2px solid #1e3a5f", fontSize: 15, boxSizing: "border-box" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button disabled={guardandoRut} onClick={() => setShowEditarRut(false)}
+                style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: guardandoRut ? "not-allowed" : "pointer" }}>Cancelar</button>
+              <button disabled={guardandoRut} onClick={guardarRutSolicitante}
+                style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#1e3a5f", color: "#fff", fontWeight: 800, cursor: guardandoRut ? "wait" : "pointer" }}>
+                {guardandoRut ? "Guardando..." : "Guardar cambio"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {/* ── REGISTRO DE VISITAS A OFICINA ─────────────────────────────────── */}
       <div style={{ background: "#FFFBEB", borderRadius: 14, border: "3px solid #F59E0B", marginBottom: 20, overflow: "hidden", boxShadow: "0 10px 24px rgba(245, 158, 11, 0.24)" }}>
         <div style={{ background: "linear-gradient(90deg, #C2410C 0%, #EA580C 55%, #F59E0B 100%)", borderBottom: "3px solid #92400E", padding: "16px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
