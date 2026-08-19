@@ -144,6 +144,44 @@ const obtenerBufferR2 = async (key, bucketOverride = '') => {
   };
 };
 
+const nombreContentDisposition = (nombre = 'documento') => {
+  const seguro = String(nombre || 'documento')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/["\\\r\n]/g, '_');
+  return `inline; filename="${seguro}"; filename*=UTF-8''${encodeURIComponent(nombre || 'documento')}`;
+};
+
+// Entrega documentos R2 como stream. Esto evita cargar archivos grandes completos
+// en la memoria de Render y permite que los visores PDF soliciten solo los rangos
+// que necesitan. HEAD consulta únicamente los metadatos del objeto.
+const servirObjetoR2 = async (req, res, { bucket, key, nombre = '' }) => {
+  const range = String(req.headers.range || '').trim();
+  const params = { Bucket: bucket, Key: key };
+  const out = req.method === 'HEAD'
+    ? await r2Client().send(new HeadObjectCommand(params))
+    : await r2Client().send(new GetObjectCommand({ ...params, ...(range ? { Range: range } : {}) }));
+
+  res.status(range && out.ContentRange ? 206 : 200);
+  res.setHeader('Content-Type', out.ContentType || r2MimeFromName(nombre || key));
+  res.setHeader('Content-Disposition', nombreContentDisposition(nombre || path.posix.basename(key)));
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('X-Serviu-Documento-Fuente', 'Cloudflare R2');
+  if (out.ContentLength != null) res.setHeader('Content-Length', String(out.ContentLength));
+  if (out.ContentRange) res.setHeader('Content-Range', out.ContentRange);
+  if (out.ETag) res.setHeader('ETag', out.ETag);
+  if (out.LastModified) res.setHeader('Last-Modified', out.LastModified.toUTCString());
+  if (req.method === 'HEAD') return res.end();
+
+  await new Promise((resolve, reject) => {
+    out.Body.once('error', reject);
+    res.once('finish', resolve);
+    res.once('close', resolve);
+    out.Body.pipe(res);
+  });
+};
+
 const timeout = (promise, ms, message) => Promise.race([
   promise,
   new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
@@ -1673,20 +1711,17 @@ app.get('/api/r2/archivo/{*path}', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Bucket R2 no permitido.' });
     }
     const bucket = bucketSolicitado || cfg.bucket;
-    let out;
     try {
-      out = await r2Client().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      await servirObjetoR2(req, res, { bucket, key, nombre: path.posix.basename(key) });
     } catch (error) {
       if (bucketSolicitado || bucket === R2_BUCKET_DEFINITIVO) throw error;
-      out = await r2Client().send(new GetObjectCommand({ Bucket: R2_BUCKET_DEFINITIVO, Key: key }));
+      await servirObjetoR2(req, res, { bucket: R2_BUCKET_DEFINITIVO, key, nombre: path.posix.basename(key) });
     }
-    const buffer = await streamToBuffer(out.Body);
-    const nombre = path.posix.basename(key);
-    res.setHeader('Content-Type', out.ContentType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(nombre) + '"');
-    res.setHeader('X-Serviu-Documento-Fuente', 'Cloudflare R2');
-    res.send(buffer);
   } catch (e) {
+    if (res.headersSent) return res.end();
+    if (e?.$metadata?.httpStatusCode === 416 || e?.name === 'InvalidRange') {
+      return res.status(416).json({ ok: false, error: 'Rango de archivo invalido.' });
+    }
     res.status(e.status || 500).json({ ok: false, error: e.message });
   }
 });
@@ -2897,7 +2932,7 @@ app.get('/archivos/{*path}', async (req, res) => {
 
 
 // ─── HELPER CENTRAL: servir archivo desde PostgreSQL ─────────────────────────
-async function servirDesdeDB(res, nombre, carpeta) {
+async function servirDesdeDB(req, res, nombre, carpeta) {
   if (!pgPool) return false;
   try {
     // Buscar por carpeta exacta + nombre (más preciso)
@@ -2912,11 +2947,7 @@ async function servirDesdeDB(res, nombre, carpeta) {
     }
     if (!rows.length || (!rows[0].data_url && !rows[0].r2_key)) return false;
     if (!rows[0].data_url && rows[0].r2_key) {
-      const r2 = await obtenerBufferR2(rows[0].r2_key, rows[0].r2_bucket);
-      res.setHeader('Content-Type', rows[0].mime_type || r2.mimeType || r2MimeFromName(nombre));
-      res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(nombre) + '"');
-      res.setHeader('X-Serviu-Documento-Fuente', 'Cloudflare R2');
-      res.send(r2.buffer);
+      await servirObjetoR2(req, res, { bucket: rows[0].r2_bucket || r2Config().bucket, key: rows[0].r2_key, nombre });
       return true;
     }
     const dataUrl = rows[0].data_url;
@@ -2946,11 +2977,11 @@ app.get('/archivo-generado/:personaId/:nombre', async (req, res) => {
     if (!rows.length || (!rows[0].data_url && !rows[0].r2_key)) return res.status(404).json({ error: 'Archivo no encontrado' });
     if (!rows[0].data_url && rows[0].r2_key) {
       const nombreArchivo = decodeURIComponent(nombre);
-      const r2 = await obtenerBufferR2(rows[0].r2_key, rows[0].r2_bucket);
-      res.setHeader('Content-Type', rows[0].mime_type || r2.mimeType || r2MimeFromName(nombreArchivo));
-      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nombreArchivo)}"`);
-      res.setHeader('X-Serviu-Documento-Fuente', 'Cloudflare R2');
-      return res.send(r2.buffer);
+      return servirObjetoR2(req, res, {
+        bucket: rows[0].r2_bucket || r2Config().bucket,
+        key: rows[0].r2_key,
+        nombre: nombreArchivo,
+      });
     }
     const dataUrl = rows[0].data_url;
     const mimeType = rows[0].mime_type || 'application/octet-stream';
@@ -2982,7 +3013,7 @@ app.get('/archivo-local/{*path}', async (req, res) => {
     const encontrado = buscarArchivoLocal(carpetaRel, archivo);
     if (encontrado) return res.sendFile(encontrado);
     // 2. PostgreSQL
-    if (await servirDesdeDB(res, archivo, carpetaRel)) return;
+    if (await servirDesdeDB(req, res, archivo, carpetaRel)) return;
     res.status(404).json({ error: 'Archivo no encontrado.' });
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
@@ -3022,12 +3053,12 @@ app.use('/files', async (req, res) => {
     if (!nombre) return res.status(404).json({ error: 'Nombre vacío.' });
     // Los documentos generados (.html) tienen respaldo en PostgreSQL. Priorizar BD
     // evita abrir copias físicas antiguas o dañadas como texto ilegible.
-    if (nombre.toLowerCase().endsWith('.html') && await servirDesdeDB(res, nombre, carpeta)) return;
+    if (nombre.toLowerCase().endsWith('.html') && await servirDesdeDB(req, res, nombre, carpeta)) return;
     // 1. Buscar en disco con búsqueda fuzzy
     const encontrado = buscarArchivoLocal(carpeta, nombre);
     if (encontrado) return res.sendFile(encontrado);
     // 2. PostgreSQL
-    if (await servirDesdeDB(res, nombre, carpeta)) return;
+    if (await servirDesdeDB(req, res, nombre, carpeta)) return;
     res.status(404).json({ error: 'Archivo no encontrado.' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
