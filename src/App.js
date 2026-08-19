@@ -3252,6 +3252,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [showDesbloquearRespuesta, setShowDesbloquearRespuesta] = useState(false);
   const [solsEditando, setSolsEditando] = useState({}); // {solId: true} para habilitar edición
   const [cuentaAhorroDrafts, setCuentaAhorroDrafts] = useState({});
+  const [rutDocumentoDrafts, setRutDocumentoDrafts] = useState({});
   const [showModalEmigrar, setShowModalEmigrar] = useState(false);
   const [programaEmigrar, setProgramaEmigrar] = useState("");
   const [showDesbloquearPrograma, setShowDesbloquearPrograma] = useState(false);
@@ -4934,9 +4935,14 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const guardarFichaDesmarque = async () => {
     const nombreNormalizado = normalizarNombreSolicitante(fichaForm.nombre || persona.nombre || "");
+    const rutFicha = fichaForm.rut || persona.rut || "";
+    if (!rutFormatoChilenoValido(rutFicha)) {
+      alert("La cédula de identidad no es válida. No se guardó ningún cambio.");
+      return;
+    }
     const campos = {
       nombre: nombreNormalizado,
-      rut: fichaForm.rut || persona.rut || "",
+      rut: formatRut(rutFicha),
       direccion: fichaForm.direccion || persona.direccion || "",
       telefono: fichaForm.telefono || persona.telefono || "",
       tipo_comite: fichaForm.tipo_comite || persona.tipo_comite || "",
@@ -7624,12 +7630,20 @@ const datosSolicitud = {
                     {esCedula && (() => {
                       const cedPartes2 = (doc.valor || "").split("|");
                       const rut2 = cedPartes2[0] || persona.rut || "";
+                      const rutDraftKey = `${sol.id}:${docIdx}`;
+                      const rutVisible = Object.prototype.hasOwnProperty.call(rutDocumentoDrafts, rutDraftKey)
+                        ? rutDocumentoDrafts[rutDraftKey]
+                        : rut2;
                       const fecha2 = cedPartes2[1] || "";
                       const tipoRut2 = cedPartes2[2] || persona.rutColores || persona.rutcolores || "";
                       const fechaCedula = /^\d{4}-\d{2}-\d{2}$/.test(fecha2 || "") ? fecha2 : "";
                       const guardarCedula = async (rut, fechaCompleta) => {
                         const rutOk = rutFormatoChilenoValido(rut);
-                        const rutFinal = rutOk ? formatRut(rut) : rut;
+                        if (!rutOk) {
+                          alert("La cédula de identidad no es válida. El número no fue registrado.");
+                          return false;
+                        }
+                        const rutFinal = formatRut(rut);
                         const newValor = rutFinal + "|" + fechaCompleta + "|" + tipoRut2;
                         onSaveSolicitudes(solicitudes.map(s => s.id !== sol.id ? s : { ...s, documentos: s.documentos.map((d2,i2) => i2!==docIdx ? d2 : { ...d2, valor: newValor, entregado: !!(rutOk && fechaCompleta.length===10) }) }));
                         if (fechaCompleta.length===10) {
@@ -7637,16 +7651,28 @@ const datosSolicitud = {
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
                           onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
                         }
-                        if (rutOk) await syncPersona({ rut: rutFinal });
+                        await syncPersona({ rut: rutFinal });
+                        return true;
                       };
                       const rut2Valido = rutFormatoChilenoValido(rut2);
                       return (
                       <div style={{ marginTop: 8, marginBottom: 4, display: "grid", gap: 5 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>Cédula de identidad del solicitante</div>
-                        <input type="text" placeholder="ej: 10.398.338-K" value={formatRut(rut2)}
+                        <input type="text" placeholder="ej: 10.398.338-K" value={formatRut(rutVisible)}
                           onClick={e => e.stopPropagation()}
-                          onChange={e => guardarCedula(e.target.value, fechaCedula)}
-                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid "+(rut2Valido?"#059669":"#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                          onChange={e => setRutDocumentoDrafts(prev => ({ ...prev, [rutDraftKey]: limpiarRut(e.target.value) }))}
+                          onBlur={async () => {
+                            if (!Object.prototype.hasOwnProperty.call(rutDocumentoDrafts, rutDraftKey)) return;
+                            const borrador = rutDocumentoDrafts[rutDraftKey];
+                            if (!rutFormatoChilenoValido(borrador)) {
+                              alert("La cédula de identidad no es válida. El número no fue registrado.");
+                              setRutDocumentoDrafts(prev => { const next = { ...prev }; delete next[rutDraftKey]; return next; });
+                              return;
+                            }
+                            await guardarCedula(borrador, fechaCedula);
+                            setRutDocumentoDrafts(prev => { const next = { ...prev }; delete next[rutDraftKey]; return next; });
+                          }}
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid "+(rutFormatoChilenoValido(rutVisible)?"#059669":"#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha de Nacimiento</div>
                         <input type="date" value={fechaCedula}
                           onClick={e => e.stopPropagation()}
