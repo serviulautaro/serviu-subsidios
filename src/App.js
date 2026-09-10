@@ -10611,6 +10611,7 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
           );
           const desmarqueEnTramite = tieneHabitabilidad && tieneOtroPrograma && !respuestaAprobada && !desmarqueTramiteLiberado(p);
           const condicional = estaCondicional(p);
+          const esPrioritario = solicitantePrioritario(p.id, solsAll);
           const noCalificaCsp = estadoNoCalificaCspPersona(p);
           const grupoDesmarqueActual = tieneHabitabilidad && esDesmarcado(p) ? grupoDesmarcado(p, tieneSolicitudDesmarquePersona) : "";
           const desmarcadoBloqueado = grupoDesmarqueActual === "con_programa";
@@ -10639,14 +10640,23 @@ function DetalleComite({ comiteId, comites, personas, solicitudes, programasCust
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15, color: noCalificaCsp ? "#DC2626" : "#111827" }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: "#888" }}>Cédula: {formatRut(p.rut)}{p.comuna ? " - " + p.comuna : ""}</div>
-                  {esComiteCsp && (
+                  {(esComiteCsp || esPrioritario) && (
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
-                      <span style={{ background: ahorroCompletoCsp ? "#DCFCE7" : "#FEE2E2", color: ahorroCompletoCsp ? "#047857" : "#B91C1C", border: `1px solid ${ahorroCompletoCsp ? "#86EFAC" : "#FCA5A5"}`, borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
-                        Ahorro completo: {ahorroCompletoCsp ? "SI" : "NO"}
-                      </span>
-                      <span style={{ background: colorRevisionAbogado.fondo, color: colorRevisionAbogado.texto, border: `1px solid ${colorRevisionAbogado.borde}`, borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
-                        Rev. abogado: {resumenRevisionAbogado}
-                      </span>
+                      {esComiteCsp && (
+                        <span style={{ background: ahorroCompletoCsp ? "#DCFCE7" : "#FEE2E2", color: ahorroCompletoCsp ? "#047857" : "#B91C1C", border: `1px solid ${ahorroCompletoCsp ? "#86EFAC" : "#FCA5A5"}`, borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
+                          Ahorro completo: {ahorroCompletoCsp ? "SI" : "NO"}
+                        </span>
+                      )}
+                      {esComiteCsp && (
+                        <span style={{ background: colorRevisionAbogado.fondo, color: colorRevisionAbogado.texto, border: `1px solid ${colorRevisionAbogado.borde}`, borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
+                          Rev. abogado: {resumenRevisionAbogado}
+                        </span>
+                      )}
+                      {esPrioritario && (
+                        <span style={{ background: "#FEF3C7", color: "#92400E", border: "1px solid #F59E0B", borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 900 }}>
+                          Prioridad
+                        </span>
+                      )}
                       {siguientePasoCsp && (
                         <span title={siguientePasoCsp} style={{ maxWidth: 520, background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE", borderRadius: 7, padding: "2px 7px", fontSize: 10, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           Siguiente paso: {siguientePasoCsp}
