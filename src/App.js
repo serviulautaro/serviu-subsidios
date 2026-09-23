@@ -1418,7 +1418,7 @@ function textoSubsidioSolicitud(persona = {}) {
   return anio ? `SUBSIDIO HABITACIONAL Año ${anio}` : "";
 }
 
-async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, subsidio, anioSubsidio }) {
+async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, subsidio, anioSubsidio, notaFinal }) {
   const plantilla = await fetch(SOLICITUD_2026_PDF).then(res => {
     if (!res.ok) throw new Error("No se pudo cargar la plantilla oficial 2026.");
     return res.arrayBuffer();
@@ -1452,6 +1452,23 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
       page.drawText(linea, { x, y: y - (i * (size + 2)), size, font, color: black });
     });
   };
+  const drawSingleLine = (text, x, y, size = 8.5, maxWidth = 468) => {
+    const value = upper(text).replace(/\s+/g, " ").trim();
+    if (!value) return;
+    let fontSize = size;
+    while (fontSize > 7 && font.widthOfTextAtSize(value, fontSize) > maxWidth) fontSize -= 0.25;
+    let visible = value;
+    while (visible.length > 1 && font.widthOfTextAtSize(visible, fontSize) > maxWidth) {
+      visible = visible.slice(0, -1).trimEnd();
+    }
+    if (visible !== value) {
+      while (visible.length > 1 && font.widthOfTextAtSize(visible + "...", fontSize) > maxWidth) {
+        visible = visible.slice(0, -1).trimEnd();
+      }
+      visible += "...";
+    }
+    page.drawText(visible, { x, y, size: fontSize, font, color: black });
+  };
   const hoy = new Date();
   const fecha = `${String(hoy.getDate()).padStart(2, "0")}/${String(hoy.getMonth() + 1).padStart(2, "0")}/${hoy.getFullYear()}`;
   const [dia, mes, anio] = fecha.split("/");
@@ -1467,6 +1484,13 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   draw(dia, 149, 125, 8.5, 2);
   draw(mes, 206, 125, 8.5, 2);
   draw(anio, 269, 125, 8.5, 4);
+  const notaFinalLimpia = String(notaFinal || "").trim();
+  if (notaFinalLimpia) {
+    drawSingleLine(`NOTA: ${notaFinalLimpia}`, 72, 76);
+  } else {
+    page.drawText("NOTA:", { x: 72, y: 76, size: 8.5, font, color: black });
+    page.drawLine({ start: { x: 104, y: 74 }, end: { x: 540, y: 74 }, thickness: 0.6, color: black });
+  }
 
   const bytes = await pdfDoc.save();
   return bytesToDataUrl(bytes, "application/pdf");
@@ -3309,7 +3333,7 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     aTrato: "PRESENTE."
   };
   const [formCarta, setFormCarta] = useState(cartaInicial);
-  const [formSolicitud, setFormSolicitud] = useState({ subsidio: "", anioSubsidio: "" });
+  const [formSolicitud, setFormSolicitud] = useState({ subsidio: "", anioSubsidio: "", notaFinal: "" });
   const [filasInforme, setFilasInforme] = useState([{ id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }]);
   const [informeSubsidioTexto, setInformeSubsidioTexto] = useState("");
   const [informeEstadoVivienda, setInformeEstadoVivienda] = useState("");
@@ -3416,7 +3440,8 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const abrirModalSolicitud = () => {
     setFormSolicitud({
       subsidio: textoSubsidioSolicitud(persona),
-      anioSubsidio: anioSolo(persona?.anio_subsidio || persona?.anioSubsidio)
+      anioSubsidio: anioSolo(persona?.anio_subsidio || persona?.anioSubsidio),
+      notaFinal: ""
     });
     setShowModalSolicitud(true);
   };
@@ -5184,7 +5209,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 const anioCompleto = [formSolicitud.anioSubsidio, formSolicitud.anioSubsidio2].filter(Boolean).join(" / ");
 const datosSolicitud = {
   nombre: persona.nombre, rut: persona.rut, direccion: persona.direccion,
-  telefono: persona.telefono, subsidio: subsidioCompleto, anioSubsidio: anioCompleto
+  telefono: persona.telefono, subsidio: subsidioCompleto, anioSubsidio: anioCompleto,
+  notaFinal: formSolicitud.notaFinal || ""
 };
       const pdfDataUrl = await generarPdfSolicitudOficial(datosSolicitud);
       setHtmlPreview(`<iframe title="Solicitud oficial completada" src="${pdfDataUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
@@ -5195,7 +5221,7 @@ const datosSolicitud = {
       setArchivos(prev => prev.includes(nombreArch) ? prev : [nombreArch, ...prev]);
       setArchivosDatos(prev => ({ ...prev, [nombreArch]: { dataUrl: pdfDataUrl, mimeType: "application/pdf", carpeta } }));
       setShowModalSolicitud(false);
-      setFormSolicitud({ subsidio: "", anioSubsidio: "" });
+      setFormSolicitud({ subsidio: "", anioSubsidio: "", notaFinal: "" });
       await cargarArchivos();
     } catch(e) { alert("Error generando solicitud: " + e.message); }
     finally { setGenerando(false); }
@@ -8326,6 +8352,14 @@ const datosSolicitud = {
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
             </div>
             <input value={formSolicitud.anioSubsidio2||""} onChange={e=>setFormSolicitud({...formSolicitud,anioSubsidio2:e.target.value})} placeholder="Año adicional (opcional)" style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:"#555"}} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Nota al final del documento (opcional)</div>
+              <input value={formSolicitud.notaFinal || ""} maxLength={160}
+                onChange={e => setFormSolicitud({ ...formSolicitud, notaFinal: e.target.value })}
+                placeholder="Ej: Se acompaña antecedente adicional para revisión."
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
+              <div style={{ marginTop: 3, fontSize: 11, color: "#94A3B8" }}>Se imprimirá en una sola línea como “NOTA:” al pie del PDF.</div>
+            </div>
             <div style={{ background: "#ECFDF5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#059669" }}>
               <div><strong>Plantilla oficial:</strong> Formulario Solicitud Habilitación Inhabitabilidad 2026</div>
               <div>Se generará un PDF oficial completado automáticamente.</div>
