@@ -1425,6 +1425,11 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   });
   const pdfDoc = await PDFDocument.load(plantilla);
   const page = pdfDoc.getPage(0);
+  const altoOriginal = page.getHeight();
+  const altoOficio = 13 * 72;
+  const desplazamientoY = Math.max(0, altoOficio - altoOriginal);
+  page.setSize(page.getWidth(), altoOficio);
+  if (desplazamientoY) page.translateContent(0, desplazamientoY);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const black = rgb(0, 0, 0);
   const upper = (v) => String(v || "")
@@ -1452,22 +1457,49 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
       page.drawText(linea, { x, y: y - (i * (size + 2)), size, font, color: black });
     });
   };
-  const drawSingleLine = (text, x, y, size = 8.5, maxWidth = 468) => {
-    const value = upper(text).replace(/\s+/g, " ").trim();
-    if (!value) return;
+  const limpiarNota = (value) => String(value || "")
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[^\x09\x0A\x20-\x7E\u00A0-\u00FF]/g, "")
+    .trim();
+  const lineasNota = (value, size, maxWidth) => {
+    const lineas = [];
+    String(value || "").split("\n").forEach(parrafo => {
+      const palabras = parrafo.trim().split(/\s+/).filter(Boolean);
+      if (!palabras.length) return;
+      let actual = "";
+      palabras.forEach(palabra => {
+        const intento = actual ? `${actual} ${palabra}` : palabra;
+        if (actual && font.widthOfTextAtSize(intento, size) > maxWidth) {
+          lineas.push(actual);
+          actual = palabra;
+        } else {
+          actual = intento;
+        }
+      });
+      if (actual) lineas.push(actual);
+    });
+    return lineas;
+  };
+  const drawNotaDosLineas = (text, x, y, size = 8.5, maxWidth = 468) => {
+    const value = limpiarNota(`NOTA: ${text}`);
     let fontSize = size;
-    while (fontSize > 7 && font.widthOfTextAtSize(value, fontSize) > maxWidth) fontSize -= 0.25;
-    let visible = value;
-    while (visible.length > 1 && font.widthOfTextAtSize(visible, fontSize) > maxWidth) {
-      visible = visible.slice(0, -1).trimEnd();
+    let lineas = lineasNota(value, fontSize, maxWidth);
+    while (lineas.length > 2 && fontSize > 7) {
+      fontSize -= 0.25;
+      lineas = lineasNota(value, fontSize, maxWidth);
     }
-    if (visible !== value) {
-      while (visible.length > 1 && font.widthOfTextAtSize(visible + "...", fontSize) > maxWidth) {
-        visible = visible.slice(0, -1).trimEnd();
+    const visibles = lineas.slice(0, 2);
+    if (lineas.length > 2 && visibles.length === 2) {
+      let ultima = visibles[1];
+      while (ultima.length > 1 && font.widthOfTextAtSize(ultima + "...", fontSize) > maxWidth) {
+        ultima = ultima.slice(0, -1).trimEnd();
       }
-      visible += "...";
+      visibles[1] = ultima + "...";
     }
-    page.drawText(visible, { x, y, size: fontSize, font, color: black });
+    visibles.forEach((linea, i) => page.drawText(linea, { x, y: y - (i * 12), size: fontSize, font, color: black }));
   };
   const hoy = new Date();
   const fecha = `${String(hoy.getDate()).padStart(2, "0")}/${String(hoy.getMonth() + 1).padStart(2, "0")}/${hoy.getFullYear()}`;
@@ -1486,10 +1518,11 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   draw(anio, 269, 125, 8.5, 4);
   const notaFinalLimpia = String(notaFinal || "").trim();
   if (notaFinalLimpia) {
-    drawSingleLine(`NOTA: ${notaFinalLimpia}`, 72, 76);
+    drawNotaDosLineas(notaFinalLimpia, 72, 205);
   } else {
-    page.drawText("NOTA:", { x: 72, y: 76, size: 8.5, font, color: black });
-    page.drawLine({ start: { x: 104, y: 74 }, end: { x: 540, y: 74 }, thickness: 0.6, color: black });
+    page.drawText("NOTA:", { x: 72, y: 205, size: 8.5, font, color: black });
+    page.drawLine({ start: { x: 104, y: 203 }, end: { x: 540, y: 203 }, thickness: 0.6, color: black });
+    page.drawLine({ start: { x: 72, y: 189 }, end: { x: 540, y: 189 }, thickness: 0.6, color: black });
   }
 
   const bytes = await pdfDoc.save();
@@ -8354,11 +8387,11 @@ const datosSolicitud = {
             <input value={formSolicitud.anioSubsidio2||""} onChange={e=>setFormSolicitud({...formSolicitud,anioSubsidio2:e.target.value})} placeholder="Año adicional (opcional)" style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:"#555"}} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Nota al final del documento (opcional)</div>
-              <input value={formSolicitud.notaFinal || ""} maxLength={160}
+              <textarea value={formSolicitud.notaFinal || ""} maxLength={320} rows={2}
                 onChange={e => setFormSolicitud({ ...formSolicitud, notaFinal: e.target.value })}
                 placeholder="Ej: Se acompaña antecedente adicional para revisión."
-                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
-              <div style={{ marginTop: 3, fontSize: 11, color: "#94A3B8" }}>Se imprimirá en una sola línea como “NOTA:” al pie del PDF.</div>
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14, resize: "vertical", fontFamily: "inherit" }} />
+              <div style={{ marginTop: 3, fontSize: 11, color: "#94A3B8" }}>Se respetarán las mayúsculas y minúsculas y podrá ocupar hasta dos líneas sobre la firma.</div>
             </div>
             <div style={{ background: "#ECFDF5", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#059669" }}>
               <div><strong>Plantilla oficial:</strong> Formulario Solicitud Habilitación Inhabitabilidad 2026</div>
