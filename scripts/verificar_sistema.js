@@ -68,6 +68,8 @@ function main() {
   ok("Carpeta documentos muestra fuente de cada archivo", contains(app, "archivosFuentes") && contains(app, "Fuente: ${fuentes.join") && contains(app, "Referencia historica") && contains(app, "Respaldo solicitud") && contains(app, "Carpeta local"));
 
   ok("Solicitud 2026 usa plantilla oficial", contains(app, "formulario_solicitud_habilitacion_inhabitabilidad_2026.pdf"));
+  ok("Solicitud 2026 reúne hasta cuatro subsidios en la celda adjudicado", contains(app, "SUBSIDIO ADJUDICADO") && contains(app, "filasSubsidio.forEach") && contains(app, "435 - (index * 14)"));
+  ok("Nota de solicitud queda destacada sobre la firma", contains(app, "rgb(1, 0.96, 0.74)") && contains(app, "font: fontBold") && contains(app, "borderColor: rgb(0.85, 0.55, 0)"));
   ok("Carta SERVIU tiene destinatario Marco Seguel", contains(app, "SEÑOR MARCO SEGUEL REYES"));
   ok("Carta SERVIU permite destinatario Otro", contains(app, "<option value=\"otro\">Otro</option>"));
 

@@ -1448,6 +1448,7 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   page.setSize(page.getWidth(), altoOficio);
   if (desplazamientoY) page.translateContent(0, desplazamientoY);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const black = rgb(0, 0, 0);
   const upper = (v) => String(v || "")
     .replaceAll("N°", "NRO ")
@@ -1481,7 +1482,7 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
     .replace(/[‘’]/g, "'")
     .replace(/[^\x09\x0A\x20-\x7E\u00A0-\u00FF]/g, "")
     .trim();
-  const lineasNota = (value, size, maxWidth) => {
+  const lineasNota = (value, size, maxWidth, fontRef = font) => {
     const lineas = [];
     String(value || "").split("\n").forEach(parrafo => {
       const palabras = parrafo.trim().split(/\s+/).filter(Boolean);
@@ -1489,7 +1490,7 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
       let actual = "";
       palabras.forEach(palabra => {
         const intento = actual ? `${actual} ${palabra}` : palabra;
-        if (actual && font.widthOfTextAtSize(intento, size) > maxWidth) {
+        if (actual && fontRef.widthOfTextAtSize(intento, size) > maxWidth) {
           lineas.push(actual);
           actual = palabra;
         } else {
@@ -1503,25 +1504,25 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   const drawNotaDosLineas = (text, x, y, size = 8.5, maxWidth = 468) => {
     const value = limpiarNota(`NOTA: ${text}`);
     let fontSize = size;
-    let lineas = lineasNota(value, fontSize, maxWidth);
+    let lineas = lineasNota(value, fontSize, maxWidth, fontBold);
     while (lineas.length > 2 && fontSize > 7) {
       fontSize -= 0.25;
-      lineas = lineasNota(value, fontSize, maxWidth);
+      lineas = lineasNota(value, fontSize, maxWidth, fontBold);
     }
     const visibles = lineas.slice(0, 2);
     if (lineas.length > 2 && visibles.length === 2) {
       let ultima = visibles[1];
-      while (ultima.length > 1 && font.widthOfTextAtSize(ultima + "...", fontSize) > maxWidth) {
+      while (ultima.length > 1 && fontBold.widthOfTextAtSize(ultima + "...", fontSize) > maxWidth) {
         ultima = ultima.slice(0, -1).trimEnd();
       }
       visibles[1] = ultima + "...";
     }
-    visibles.forEach((linea, i) => page.drawText(linea, { x, y: y - (i * 12), size: fontSize, font, color: black }));
+    visibles.forEach((linea, i) => page.drawText(linea, { x, y: y - (i * 12), size: fontSize, font: fontBold, color: black }));
   };
-  const drawLineaAjustada = (text, x, y, size = 7.5, maxWidth = 468) => {
+  const drawLineaAjustada = (text, x, y, size = 7.5, maxWidth = 468, minSize = 5.25) => {
     let value = upper(text);
     let fontSize = size;
-    while (font.widthOfTextAtSize(value, fontSize) > maxWidth && fontSize > 6.25) fontSize -= 0.25;
+    while (font.widthOfTextAtSize(value, fontSize) > maxWidth && fontSize > minSize) fontSize -= 0.25;
     if (font.widthOfTextAtSize(value, fontSize) > maxWidth) {
       while (value.length > 1 && font.widthOfTextAtSize(value + "...", fontSize) > maxWidth) value = value.slice(0, -1).trimEnd();
       value += "...";
@@ -1542,37 +1543,23 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
     .map(fila => ({ subsidio: String(fila?.subsidio || "").trim(), anio: String(fila?.anio || "").trim() }))
     .filter(fila => fila.subsidio || fila.anio)
     .slice(0, 4);
-  const subsidioPrincipal = filasSubsidio[0] || { subsidio: "", anio: "" };
-  const subsidiosAdicionales = filasSubsidio.slice(1);
-  draw(subsidioPrincipal.subsidio, 205, 436, 8.2, 56);
-  draw(subsidioPrincipal.anio, 205, 394, 8.5, 20);
-
-  if (subsidiosAdicionales.length) {
-    page.drawRectangle({ x: 60, y: 104, width: 500, height: 118, color: rgb(1, 1, 1) });
-    subsidiosAdicionales.forEach((fila, index) => {
-      const detalleAnio = fila.anio ? ` (AÑO ${fila.anio})` : "";
-      drawLineaAjustada(`SUBSIDIO ${index + 2}${detalleAnio}: ${fila.subsidio}`, 72, 210 - (index * 15));
-    });
-    page.drawLine({ start: { x: 337, y: 105 }, end: { x: 523, y: 105 }, thickness: 0.8, color: black });
-    page.drawText("FIRMA", { x: 418, y: 92, size: 8.5, font, color: black });
-    page.drawText("Fecha:", { x: 72, y: 66, size: 8.5, font, color: black });
-    page.drawLine({ start: { x: 106, y: 64 }, end: { x: 145, y: 64 }, thickness: 0.6, color: black });
-    page.drawLine({ start: { x: 164, y: 64 }, end: { x: 203, y: 64 }, thickness: 0.6, color: black });
-    page.drawLine({ start: { x: 222, y: 64 }, end: { x: 278, y: 64 }, thickness: 0.6, color: black });
-    draw(dia, 118, 67, 8.5, 2);
-    draw(mes, 176, 67, 8.5, 2);
-    draw(anio, 235, 67, 8.5, 4);
-  } else {
-    draw(dia, 149, 125, 8.5, 2);
-    draw(mes, 206, 125, 8.5, 2);
-    draw(anio, 269, 125, 8.5, 4);
-  }
+  page.drawRectangle({ x: 70, y: 381, width: 484, height: 67, color: rgb(1, 1, 1), borderColor: black, borderWidth: 0.8 });
+  page.drawLine({ start: { x: 200, y: 381 }, end: { x: 200, y: 448 }, thickness: 0.8, color: black });
+  page.drawText("SUBSIDIO ADJUDICADO", { x: 79, y: 411, size: 8.2, font: fontBold, color: black });
+  filasSubsidio.forEach((fila, index) => {
+    const detalleAnio = fila.anio ? ` (AÑO ${fila.anio})` : "";
+    drawLineaAjustada(`SUBSIDIO ${index + 1}${detalleAnio}: ${fila.subsidio}`, 205, 435 - (index * 14), 7.2, 345, 5.25);
+  });
+  draw(dia, 149, 125, 8.5, 2);
+  draw(mes, 206, 125, 8.5, 2);
+  draw(anio, 269, 125, 8.5, 4);
   const notaFinalLimpia = String(notaFinal || "").trim();
-  const notaY = subsidiosAdicionales.length ? 160 : 205;
+  const notaY = 204;
+  page.drawRectangle({ x: 68, y: 180, width: 478, height: 35, color: rgb(1, 0.96, 0.74), borderColor: rgb(0.85, 0.55, 0), borderWidth: 1 });
   if (notaFinalLimpia) {
     drawNotaDosLineas(notaFinalLimpia, 72, notaY);
   } else {
-    page.drawText("NOTA:", { x: 72, y: notaY, size: 8.5, font, color: black });
+    page.drawText("NOTA:", { x: 72, y: notaY, size: 8.5, font: fontBold, color: black });
     page.drawLine({ start: { x: 104, y: notaY - 2 }, end: { x: 540, y: notaY - 2 }, thickness: 0.6, color: black });
     page.drawLine({ start: { x: 72, y: notaY - 16 }, end: { x: 540, y: notaY - 16 }, thickness: 0.6, color: black });
   }
