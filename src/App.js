@@ -1418,7 +1418,24 @@ function textoSubsidioSolicitud(persona = {}) {
   return anio ? `SUBSIDIO HABITACIONAL Año ${anio}` : "";
 }
 
-async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, subsidio, anioSubsidio, notaFinal }) {
+function separarValoresSolicitud(value) {
+  return String(value || "")
+    .split(/\s*(?:\r?\n|;|,|\s+\/\s+)\s*/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function filasSubsidiosSolicitud(persona = {}) {
+  const subsidios = separarValoresSolicitud(textoSubsidioSolicitud(persona));
+  const anios = separarValoresSolicitud(persona.anio_subsidio || persona.anioSubsidio).map(anioSolo);
+  const cantidad = Math.min(4, Math.max(1, subsidios.length, anios.length));
+  return Array.from({ length: cantidad }, (_, index) => ({
+    subsidio: subsidios[index] || "",
+    anio: anios[index] || ""
+  }));
+}
+
+async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, subsidios = [], notaFinal }) {
   const plantilla = await fetch(SOLICITUD_2026_PDF).then(res => {
     if (!res.ok) throw new Error("No se pudo cargar la plantilla oficial 2026.");
     return res.arrayBuffer();
@@ -1501,6 +1518,16 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
     }
     visibles.forEach((linea, i) => page.drawText(linea, { x, y: y - (i * 12), size: fontSize, font, color: black }));
   };
+  const drawLineaAjustada = (text, x, y, size = 7.5, maxWidth = 468) => {
+    let value = upper(text);
+    let fontSize = size;
+    while (font.widthOfTextAtSize(value, fontSize) > maxWidth && fontSize > 6.25) fontSize -= 0.25;
+    if (font.widthOfTextAtSize(value, fontSize) > maxWidth) {
+      while (value.length > 1 && font.widthOfTextAtSize(value + "...", fontSize) > maxWidth) value = value.slice(0, -1).trimEnd();
+      value += "...";
+    }
+    page.drawText(value, { x, y, size: fontSize, font, color: black });
+  };
   const hoy = new Date();
   const fecha = `${String(hoy.getDate()).padStart(2, "0")}/${String(hoy.getMonth() + 1).padStart(2, "0")}/${hoy.getFullYear()}`;
   const [dia, mes, anio] = fecha.split("/");
@@ -1511,18 +1538,43 @@ async function generarPdfSolicitudOficial({ nombre, rut, direccion, telefono, su
   draw(direccion, 205, 515, 8.5, 54);
   draw(telefono, 205, 488, 8.5, 32);
   draw("Jcampos@munilautaro.cl", 205, 462, 8.5, 46);
-  draw(subsidio, 205, 436, 8.2, 56);
-  draw(anioSubsidio, 205, 394, 8.5, 20);
-  draw(dia, 149, 125, 8.5, 2);
-  draw(mes, 206, 125, 8.5, 2);
-  draw(anio, 269, 125, 8.5, 4);
-  const notaFinalLimpia = String(notaFinal || "").trim();
-  if (notaFinalLimpia) {
-    drawNotaDosLineas(notaFinalLimpia, 72, 205);
+  const filasSubsidio = subsidios
+    .map(fila => ({ subsidio: String(fila?.subsidio || "").trim(), anio: String(fila?.anio || "").trim() }))
+    .filter(fila => fila.subsidio || fila.anio)
+    .slice(0, 4);
+  const subsidioPrincipal = filasSubsidio[0] || { subsidio: "", anio: "" };
+  const subsidiosAdicionales = filasSubsidio.slice(1);
+  draw(subsidioPrincipal.subsidio, 205, 436, 8.2, 56);
+  draw(subsidioPrincipal.anio, 205, 394, 8.5, 20);
+
+  if (subsidiosAdicionales.length) {
+    page.drawRectangle({ x: 60, y: 104, width: 500, height: 118, color: rgb(1, 1, 1) });
+    subsidiosAdicionales.forEach((fila, index) => {
+      const detalleAnio = fila.anio ? ` (AÑO ${fila.anio})` : "";
+      drawLineaAjustada(`SUBSIDIO ${index + 2}${detalleAnio}: ${fila.subsidio}`, 72, 210 - (index * 15));
+    });
+    page.drawLine({ start: { x: 337, y: 105 }, end: { x: 523, y: 105 }, thickness: 0.8, color: black });
+    page.drawText("FIRMA", { x: 418, y: 92, size: 8.5, font, color: black });
+    page.drawText("Fecha:", { x: 72, y: 66, size: 8.5, font, color: black });
+    page.drawLine({ start: { x: 106, y: 64 }, end: { x: 145, y: 64 }, thickness: 0.6, color: black });
+    page.drawLine({ start: { x: 164, y: 64 }, end: { x: 203, y: 64 }, thickness: 0.6, color: black });
+    page.drawLine({ start: { x: 222, y: 64 }, end: { x: 278, y: 64 }, thickness: 0.6, color: black });
+    draw(dia, 118, 67, 8.5, 2);
+    draw(mes, 176, 67, 8.5, 2);
+    draw(anio, 235, 67, 8.5, 4);
   } else {
-    page.drawText("NOTA:", { x: 72, y: 205, size: 8.5, font, color: black });
-    page.drawLine({ start: { x: 104, y: 203 }, end: { x: 540, y: 203 }, thickness: 0.6, color: black });
-    page.drawLine({ start: { x: 72, y: 189 }, end: { x: 540, y: 189 }, thickness: 0.6, color: black });
+    draw(dia, 149, 125, 8.5, 2);
+    draw(mes, 206, 125, 8.5, 2);
+    draw(anio, 269, 125, 8.5, 4);
+  }
+  const notaFinalLimpia = String(notaFinal || "").trim();
+  const notaY = subsidiosAdicionales.length ? 160 : 205;
+  if (notaFinalLimpia) {
+    drawNotaDosLineas(notaFinalLimpia, 72, notaY);
+  } else {
+    page.drawText("NOTA:", { x: 72, y: notaY, size: 8.5, font, color: black });
+    page.drawLine({ start: { x: 104, y: notaY - 2 }, end: { x: 540, y: notaY - 2 }, thickness: 0.6, color: black });
+    page.drawLine({ start: { x: 72, y: notaY - 16 }, end: { x: 540, y: notaY - 16 }, thickness: 0.6, color: black });
   }
 
   const bytes = await pdfDoc.save();
@@ -3366,7 +3418,10 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     aTrato: "PRESENTE."
   };
   const [formCarta, setFormCarta] = useState(cartaInicial);
-  const [formSolicitud, setFormSolicitud] = useState({ subsidio: "", anioSubsidio: "", notaFinal: "" });
+  const [formSolicitud, setFormSolicitud] = useState({ subsidios: [{ subsidio: "", anio: "" }], notaFinal: "" });
+  const filasFormularioSolicitud = formSolicitud.subsidios || [];
+  const solicitudFormularioValida = filasFormularioSolicitud.length > 0
+    && filasFormularioSolicitud.every(fila => String(fila.subsidio || "").trim() && String(fila.anio || "").trim());
   const [filasInforme, setFilasInforme] = useState([{ id: uid(), descripcion: "", imagenBase64: null, imagenNombre: "", mimeType: "", imgWidth: 265, imgHeight: 200 }]);
   const [informeSubsidioTexto, setInformeSubsidioTexto] = useState("");
   const [informeEstadoVivienda, setInformeEstadoVivienda] = useState("");
@@ -3472,11 +3527,31 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
 
   const abrirModalSolicitud = () => {
     setFormSolicitud({
-      subsidio: textoSubsidioSolicitud(persona),
-      anioSubsidio: anioSolo(persona?.anio_subsidio || persona?.anioSubsidio),
+      subsidios: filasSubsidiosSolicitud(persona),
       notaFinal: ""
     });
     setShowModalSolicitud(true);
+  };
+
+  const actualizarFilaSubsidioSolicitud = (index, campo, valor) => {
+    setFormSolicitud(prev => ({
+      ...prev,
+      subsidios: (prev.subsidios || []).map((fila, filaIndex) => filaIndex === index ? { ...fila, [campo]: valor } : fila)
+    }));
+  };
+
+  const agregarFilaSubsidioSolicitud = () => {
+    setFormSolicitud(prev => ({
+      ...prev,
+      subsidios: [...(prev.subsidios || []), { subsidio: "", anio: "" }].slice(0, 4)
+    }));
+  };
+
+  const quitarFilaSubsidioSolicitud = (index) => {
+    setFormSolicitud(prev => ({
+      ...prev,
+      subsidios: (prev.subsidios || []).filter((_, filaIndex) => filaIndex !== index)
+    }));
   };
 
   const LS_FECHAS_KEY = "fechas_visita_pendientes";
@@ -5238,13 +5313,21 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   const generarSolicitud = async () => {
     setGenerando(true);
     try {
-      const subsidioCompleto = [formSolicitud.subsidio, formSolicitud.subsidio2].filter(Boolean).join(" / ");
-const anioCompleto = [formSolicitud.anioSubsidio, formSolicitud.anioSubsidio2].filter(Boolean).join(" / ");
-const datosSolicitud = {
-  nombre: persona.nombre, rut: persona.rut, direccion: persona.direccion,
-  telefono: persona.telefono, subsidio: subsidioCompleto, anioSubsidio: anioCompleto,
-  notaFinal: formSolicitud.notaFinal || ""
-};
+      const subsidios = (formSolicitud.subsidios || [])
+        .map(fila => ({ subsidio: String(fila.subsidio || "").trim(), anio: String(fila.anio || "").trim() }))
+        .filter(fila => fila.subsidio || fila.anio)
+        .slice(0, 4);
+      if (!subsidios.length || subsidios.some(fila => !fila.subsidio || !fila.anio)) {
+        throw new Error("Complete el nombre y el año de cada subsidio agregado.");
+      }
+      const datosSolicitud = {
+        nombre: persona.nombre,
+        rut: persona.rut,
+        direccion: persona.direccion,
+        telefono: persona.telefono,
+        subsidios,
+        notaFinal: formSolicitud.notaFinal || ""
+      };
       const pdfDataUrl = await generarPdfSolicitudOficial(datosSolicitud);
       setHtmlPreview(`<iframe title="Solicitud oficial completada" src="${pdfDataUrl}" style="width:100%;height:100%;border:0;background:#e8e8e8"></iframe>`);
       const nombreArch = `SOLICITUD_${persona.nombre.split(' ')[0]}_${new Date().toISOString().slice(0,10)}.pdf`;
@@ -5254,7 +5337,7 @@ const datosSolicitud = {
       setArchivos(prev => prev.includes(nombreArch) ? prev : [nombreArch, ...prev]);
       setArchivosDatos(prev => ({ ...prev, [nombreArch]: { dataUrl: pdfDataUrl, mimeType: "application/pdf", carpeta } }));
       setShowModalSolicitud(false);
-      setFormSolicitud({ subsidio: "", anioSubsidio: "", notaFinal: "" });
+      setFormSolicitud({ subsidios: [{ subsidio: "", anio: "" }], notaFinal: "" });
       await cargarArchivos();
     } catch(e) { alert("Error generando solicitud: " + e.message); }
     finally { setGenerando(false); }
@@ -8372,19 +8455,33 @@ const datosSolicitud = {
         <Modal title="Generar Solicitud 2026" onClose={() => setShowModalSolicitud(false)}>
           <div style={{ display: "grid", gap: 12 }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Subsidio Adjudicado *</div>
-              <input value={formSolicitud.subsidio} onChange={e => setFormSolicitud({...formSolicitud, subsidio: e.target.value})}
-                placeholder="Ej: SUBSIDIO RURAL - SUB. RURALES TITULO I"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
-                <input value={formSolicitud.subsidio2||""} onChange={e=>setFormSolicitud({...formSolicitud,subsidio2:e.target.value})} placeholder="Subsidio adicional (opcional)" style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:"#555"}} />
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 6 }}>Subsidios adjudicados (máximo 4) *</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {filasFormularioSolicitud.map((fila, index) => (
+                  <div key={index} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 105px auto", gap: 8, alignItems: "center" }}>
+                    <input value={fila.subsidio} onChange={e => actualizarFilaSubsidioSolicitud(index, "subsidio", e.target.value)}
+                      placeholder={index === 0 ? "Ej: SUBSIDIO RURAL - SUB. RURALES TITULO I" : `Subsidio ${index + 1}`}
+                      aria-label={`Nombre del subsidio ${index + 1}`}
+                      style={{ width: "100%", minWidth: 0, padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
+                    <input value={fila.anio} onChange={e => actualizarFilaSubsidioSolicitud(index, "anio", e.target.value)}
+                      placeholder="Año"
+                      aria-label={`Año del subsidio ${index + 1}`}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 13 }} />
+                    {index > 0 ? (
+                      <button type="button" onClick={() => quitarFilaSubsidioSolicitud(index)} title={`Quitar subsidio ${index + 1}`}
+                        style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", fontWeight: 800, cursor: "pointer" }}>×</button>
+                    ) : <span style={{ width: 32 }} />}
+                  </div>
+                ))}
+              </div>
+              {filasFormularioSolicitud.length < 4 && (
+                <button type="button" onClick={agregarFilaSubsidioSolicitud}
+                  style={{ marginTop: 8, padding: "7px 11px", borderRadius: 8, border: "1px solid #059669", background: "#ECFDF5", color: "#047857", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  + Agregar otro subsidio
+                </button>
+              )}
+              <div style={{ marginTop: 5, fontSize: 11, color: "#94A3B8" }}>Cada subsidio aparecerá en una línea independiente con su año.</div>
             </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Año del Subsidio *</div>
-              <input value={formSolicitud.anioSubsidio} onChange={e => setFormSolicitud({...formSolicitud, anioSubsidio: e.target.value})}
-                placeholder="Ej: 1989"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #ddd", fontSize: 14 }} />
-            </div>
-            <input value={formSolicitud.anioSubsidio2||""} onChange={e=>setFormSolicitud({...formSolicitud,anioSubsidio2:e.target.value})} placeholder="Año adicional (opcional)" style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e7eb",fontSize:13,color:"#555"}} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#444", marginBottom: 4 }}>Nota al final del documento (opcional)</div>
               <textarea value={formSolicitud.notaFinal || ""} maxLength={320} rows={2}
@@ -8407,8 +8504,8 @@ const datosSolicitud = {
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setShowModalSolicitud(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-              <button onClick={generarSolicitud} disabled={!formSolicitud.subsidio || !formSolicitud.anioSubsidio || generando}
-                style={{ padding: "9px 20px", borderRadius: 8, background: (formSolicitud.subsidio && formSolicitud.anioSubsidio) ? "#059669" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: (formSolicitud.subsidio && formSolicitud.anioSubsidio) ? "pointer" : "not-allowed" }}>
+              <button onClick={generarSolicitud} disabled={!solicitudFormularioValida || generando}
+                style={{ padding: "9px 20px", borderRadius: 8, background: solicitudFormularioValida ? "#059669" : "#ccc", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: solicitudFormularioValida ? "pointer" : "not-allowed" }}>
                 {generando ? "Generando..." : "Generar PDF oficial"}
               </button>
             </div>
