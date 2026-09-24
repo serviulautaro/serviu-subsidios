@@ -449,6 +449,237 @@ function informeRevisionSolicitantesHtml(comitesSeleccionados, personas, solicit
   }).join("");
 }
 
+function htmlSeguro(value, fallback = "-") {
+  const texto = value === 0 || (value && value.toString().trim()) ? String(value) : fallback;
+  return texto
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function fechaTrazabilidad(value) {
+  if (!value) return "-";
+  const texto = String(value).trim();
+  const fechaSimple = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (fechaSimple) return `${fechaSimple[3]}-${fechaSimple[2]}-${fechaSimple[1]}`;
+  const fecha = new Date(texto);
+  return Number.isNaN(fecha.getTime()) ? texto : fecha.toLocaleDateString("es-CL");
+}
+
+function claveFechaTrazabilidad(value) {
+  const texto = String(value || "").trim();
+  const fechaChile = texto.match(/^(\d{2})-(\d{2})-(\d{4})/);
+  if (fechaChile) return `${fechaChile[3]}-${fechaChile[2]}-${fechaChile[1]}`;
+  const fechaIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (fechaIso) return `${fechaIso[1]}-${fechaIso[2]}-${fechaIso[3]}`;
+  const fecha = new Date(texto);
+  return Number.isNaN(fecha.getTime()) ? texto : fecha.toISOString();
+}
+
+function detalleAuditoriaObjeto(detalle) {
+  if (!detalle) return {};
+  if (typeof detalle === "object") return detalle;
+  try { return JSON.parse(detalle); } catch { return {}; }
+}
+
+function movimientosObservacionesTrazabilidad(personas = []) {
+  const movimientos = [];
+  personas.forEach(persona => {
+    String(persona?.observaciones || "").split(/\n+/).forEach(linea => {
+      const match = linea.trim().match(/^\[([^\]]+)\]\s*Cambio de comité\/programa:\s*(.+?)\s*->\s*(.+?)\.\s*Motivo:\s*(.+?)(?:\.\s*Usuario:\s*(.+))?$/i);
+      if (!match) return;
+      movimientos.push({
+        fecha: match[1],
+        desde: match[2].trim(),
+        hacia: match[3].trim(),
+        motivo: match[4].trim(),
+        usuario: (match[5] || "").trim(),
+        fuente: "Observaciones"
+      });
+    });
+  });
+  return movimientos;
+}
+
+function movimientosAuditoriaTrazabilidad(auditoria = []) {
+  return auditoria.flatMap(fila => {
+    const detalle = detalleAuditoriaObjeto(fila?.detalle);
+    if (fila?.accion !== "mover_solicitante" || !detalle.desde || !detalle.hacia) return [];
+    return [{
+      fecha: fila.creado || detalle.fecha || "",
+      desde: detalle.desde,
+      hacia: detalle.hacia,
+      motivo: detalle.motivo || "Traslado registrado en auditoría",
+      usuario: fila.usuario || detalle.usuario || "",
+      fuente: "Auditoría"
+    }];
+  });
+}
+
+function nombreComiteTrazabilidad(nombre, codigo, comites = [], programa = "") {
+  const porCodigo = codigo && comites.find(c => String(c.id || c.codigo || "") === String(codigo));
+  if (porCodigo?.nombre) return porCodigo.nombre;
+  if (nombre) return nombre;
+  if (codigo === "comite_desmarque" || programa === "habitabilidad") return "DESMARQUE DE VIVIENDA";
+  return programa ? programaNombre(programa) : "Comité no identificado";
+}
+
+function estadoSolicitudTrazabilidad(sol = {}) {
+  const directo = sol.respuesta_serviu_estado || sol.estado_desmarque || sol.calificacion_desmarque || sol.estado_solicitud || sol.estado;
+  if (directo) return String(directo).trim().toUpperCase();
+  const respuesta = docsSolicitud(sol).find(doc => {
+    const nombre = docNombreNorm(doc);
+    return nombre.includes("respuesta") && nombre.includes("serviu");
+  });
+  if (respuesta?.valor) return String(respuesta.valor).split("|")[0].trim().toUpperCase();
+  return "";
+}
+
+function construirTrazabilidadSolicitante(persona, personas = [], solicitudes = [], comites = [], auditoria = []) {
+  const relacionadas = personasRelacionadas(persona, personas);
+  const basePersonas = relacionadas.length ? relacionadas : [persona];
+  const ids = new Set(basePersonas.map(item => item?.id).filter(Boolean));
+  const solicitudesPersona = (solicitudes || []).filter(sol => ids.has(sol?.personaId || sol?.persona_id));
+  const entradas = [];
+  const asegurarEntrada = (nombre, codigo = "", programa = "") => {
+    const nombreFinal = nombreComiteTrazabilidad(nombre, codigo, comites, programa);
+    const codigoTexto = String(codigo || "");
+    let entrada = entradas.find(item =>
+      (codigoTexto && item.codigos.has(codigoTexto)) || norm(item.comite) === norm(nombreFinal)
+    );
+    if (!entrada) {
+      entrada = {
+        comite: nombreFinal,
+        codigos: new Set(codigoTexto ? [codigoTexto] : []),
+        programas: new Set(),
+        ingreso: "",
+        salida: "",
+        estado: "REGISTRO HISTÓRICO",
+        observaciones: new Set(),
+        actual: false
+      };
+      entradas.push(entrada);
+    }
+    if (codigoTexto) entrada.codigos.add(codigoTexto);
+    if (programa) entrada.programas.add(programaNombre(programa));
+    return entrada;
+  };
+  const fechaAnterior = (actual, candidata) => {
+    if (!actual) return candidata || "";
+    if (!candidata) return actual;
+    return claveFechaTrazabilidad(candidata) < claveFechaTrazabilidad(actual) ? candidata : actual;
+  };
+  const fechaPosterior = (actual, candidata) => {
+    if (!actual) return candidata || "";
+    if (!candidata) return actual;
+    return claveFechaTrazabilidad(candidata) > claveFechaTrazabilidad(actual) ? candidata : actual;
+  };
+
+  solicitudesPersona.forEach(sol => {
+    const programa = programaId(sol);
+    const codigo = sol.codigoComite || sol.codigo_comite || (programa === "habitabilidad" ? "comite_desmarque" : "");
+    const entrada = asegurarEntrada(sol.comite, codigo, programa);
+    entrada.ingreso = fechaAnterior(entrada.ingreso, sol.fecha || sol.fecha_ingreso || sol.creado);
+    const estado = estadoSolicitudTrazabilidad(sol);
+    if (estado) entrada.estado = estado;
+  });
+
+  basePersonas.forEach(item => {
+    const codigo = item.comiteId || item.comite_id || "";
+    if (!codigo && !item.comite) return;
+    const entrada = asegurarEntrada(item.comite, codigo, "");
+    entrada.ingreso = fechaAnterior(entrada.ingreso, item.fechaIngreso || item.fecha_ingreso);
+    const esDesmarque = codigo === "comite_desmarque" || norm(entrada.comite).includes("desmarque");
+    if (esDesmarque && item.estado_desmarque) entrada.estado = String(item.estado_desmarque).toUpperCase();
+  });
+
+  const movimientosCombinados = [
+    ...movimientosObservacionesTrazabilidad(basePersonas),
+    ...movimientosAuditoriaTrazabilidad(auditoria)
+  ];
+  const movimientosMap = new Map();
+  movimientosCombinados.forEach(mov => {
+    const dia = claveFechaTrazabilidad(mov.fecha).slice(0, 10);
+    const clave = `${norm(mov.desde)}|${norm(mov.hacia)}|${dia}`;
+    const anterior = movimientosMap.get(clave);
+    movimientosMap.set(clave, anterior ? { ...anterior, ...mov, fuente: anterior.fuente === mov.fuente ? mov.fuente : "Observaciones y auditoría" } : mov);
+  });
+  const movimientos = [...movimientosMap.values()].sort((a, b) => claveFechaTrazabilidad(a.fecha).localeCompare(claveFechaTrazabilidad(b.fecha)));
+
+  movimientos.forEach(mov => {
+    const origen = asegurarEntrada(mov.desde);
+    const destino = norm(mov.hacia).includes("sin comite") ? null : asegurarEntrada(mov.hacia);
+    origen.salida = fechaPosterior(origen.salida, mov.fecha);
+    if (!origen.estado || origen.estado === "REGISTRO HISTÓRICO") origen.estado = "TRASLADADO";
+    origen.observaciones.add(`Trasladado a ${mov.hacia}${mov.motivo ? `. Motivo: ${mov.motivo}` : ""}`);
+    if (destino) {
+      destino.ingreso = fechaAnterior(destino.ingreso, mov.fecha);
+      destino.observaciones.add(`Ingreso desde ${mov.desde}${mov.motivo ? `. Motivo: ${mov.motivo}` : ""}`);
+    }
+  });
+
+  const codigoActual = persona?.comiteId || persona?.comite_id || "";
+  const nombreActual = persona?.comite || "";
+  if (codigoActual || nombreActual) {
+    const actual = asegurarEntrada(nombreActual, codigoActual);
+    actual.actual = true;
+    const esDesmarque = codigoActual === "comite_desmarque" || norm(actual.comite).includes("desmarque");
+    if (esDesmarque && persona.estado_desmarque) actual.estado = String(persona.estado_desmarque).toUpperCase();
+    else if (!actual.estado || actual.estado === "REGISTRO HISTÓRICO" || actual.estado === "TRASLADADO") actual.estado = "ACTIVO / INTEGRANTE";
+  }
+
+  const resultado = entradas
+    .filter(item => !norm(item.comite).includes("sin comite"))
+    .sort((a, b) => claveFechaTrazabilidad(a.ingreso || "9999").localeCompare(claveFechaTrazabilidad(b.ingreso || "9999")))
+    .map((item, index) => ({
+      orden: index + 1,
+      comite: item.comite,
+      programa: [...item.programas].join(" / ") || "-",
+      ingreso: item.ingreso,
+      salida: item.actual ? "ACTUAL" : item.salida,
+      estado: item.estado || (item.actual ? "ACTIVO / INTEGRANTE" : "REGISTRO HISTÓRICO"),
+      observaciones: [...item.observaciones].join(" | ") || (item.actual ? "Comité actual del solicitante" : "Antecedente conservado en solicitudes")
+    }));
+  return { entradas: resultado, movimientos, solicitudes: solicitudesPersona, relacionadas: basePersonas };
+}
+
+function informeTrazabilidadHtml(persona, trazabilidad) {
+  const filas = trazabilidad.entradas.map(item => `<tr>
+    <td>${item.orden}</td>
+    <td>${htmlSeguro(item.comite)}</td>
+    <td>${htmlSeguro(item.programa)}</td>
+    <td>${htmlSeguro(fechaTrazabilidad(item.ingreso))}</td>
+    <td>${htmlSeguro(item.salida === "ACTUAL" ? "ACTUAL" : fechaTrazabilidad(item.salida))}</td>
+    <td><strong>${htmlSeguro(item.estado)}</strong></td>
+    <td>${htmlSeguro(item.observaciones)}</td>
+  </tr>`).join("");
+  const movimientos = trazabilidad.movimientos.map((mov, index) => `<tr>
+    <td>${index + 1}</td><td>${htmlSeguro(fechaTrazabilidad(mov.fecha))}</td><td>${htmlSeguro(mov.desde)}</td>
+    <td>${htmlSeguro(mov.hacia)}</td><td>${htmlSeguro(mov.motivo)}</td><td>${htmlSeguro(mov.usuario)}</td>
+  </tr>`).join("");
+  return `<div class="page">
+    <div class="top"><div><h1>Unidad de Vivienda</h1><div class="muted">Ilustre Municipalidad de Lautaro</div></div><div style="text-align:right"><h1>Informe de trazabilidad</h1><div class="muted">Generado: ${new Date().toLocaleDateString("es-CL")}</div></div></div>
+    <div class="bar"><span>${htmlSeguro(persona?.nombre)}</span><span>RUT: ${htmlSeguro(formatRut(persona?.rut))}</span></div>
+    <div class="stats">
+      <div class="stat"><span class="k">Comités registrados</span><b>${trazabilidad.entradas.length}</b></div>
+      <div class="stat"><span class="k">Traslados documentados</span><b>${trazabilidad.movimientos.length}</b></div>
+      <div class="stat"><span class="k">Solicitudes históricas</span><b>${trazabilidad.solicitudes.length}</b></div>
+      <div class="stat"><span class="k">Registros vinculados</span><b>${trazabilidad.relacionadas.length}</b></div>
+    </div>
+    <div class="section"><h2>Historial de comités del solicitante</h2>
+      <table><thead><tr><th>#</th><th>Comité</th><th>Programa</th><th>Ingreso</th><th>Salida</th><th>Estado</th><th>Antecedente del movimiento</th></tr></thead>
+      <tbody>${filas || `<tr><td colspan="7">No existen comités históricos registrados para este solicitante.</td></tr>`}</tbody></table>
+    </div>
+    <div class="section"><h2>Movimientos de ingreso, salida o traslado</h2>
+      <table><thead><tr><th>#</th><th>Fecha</th><th>Desde</th><th>Hacia</th><th>Motivo</th><th>Usuario</th></tr></thead>
+      <tbody>${movimientos || `<tr><td colspan="6">No existen traslados con fecha y motivo registrados.</td></tr>`}</tbody></table>
+    </div>
+    <div class="muted" style="margin-top:18px">Fuentes: ficha actual, solicitudes históricas conservadas, observaciones de traslado y registro de auditoría disponible.</div>
+  </div>`;
+}
+
 function imprimirVentana(titulo, html) {
   const w = window.open("", "_blank");
   if (!w) return;
@@ -1065,6 +1296,74 @@ function PanelRevisionSolicitantes({ comites, personas, solicitudes }) {
   </div>;
 }
 
+function PanelTrazabilidadSolicitante({ personas, solicitudes, comites }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [personaId, setPersonaId] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const termino = norm(busqueda);
+  const resultados = (personas || [])
+    .filter(persona => !termino || norm(`${persona.nombre || ""} ${persona.rut || ""} ${persona.comite || ""}`).includes(termino))
+    .sort((a, b) => norm(a.nombre).localeCompare(norm(b.nombre), "es"))
+    .slice(0, 100);
+  const persona = personas.find(item => String(item.id) === String(personaId)) || null;
+  const vistaPrevia = persona ? construirTrazabilidadSolicitante(persona, personas, solicitudes, comites, []) : null;
+
+  const generar = async () => {
+    if (!persona) return;
+    setGenerando(true);
+    try {
+      const relacionadas = personasRelacionadas(persona, personas);
+      const ids = [...new Set((relacionadas.length ? relacionadas : [persona]).map(item => item?.id).filter(Boolean))];
+      const respuestas = await Promise.all(ids.map(async id => {
+        const query = new URLSearchParams({
+          select: "accion,entidad_id,detalle,creado,usuario",
+          "eq[entidad_id]": String(id),
+          orderBy: "creado",
+          orderAsc: "true",
+          limit: "500"
+        });
+        try {
+          const res = await fetch(`${API_BASE}/api/db/audit_log?${query.toString()}`, { cache: "no-store" });
+          const json = await res.json().catch(() => ({}));
+          return res.ok && json.ok !== false && Array.isArray(json.data) ? json.data : [];
+        } catch {
+          return [];
+        }
+      }));
+      const auditoria = respuestas.flat();
+      const trazabilidad = construirTrazabilidadSolicitante(persona, personas, solicitudes, comites, auditoria);
+      imprimirVentana(`Trazabilidad - ${persona.nombre || "Solicitante"}`, informeTrazabilidadHtml(persona, trazabilidad));
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  return <div>
+    <div style={{ fontSize: 13, fontWeight: 800, color: "#1f2937", marginBottom: 8 }}>Buscar solicitante</div>
+    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre, RUT o comité..."
+      style={{ width: "100%", padding: "10px 12px", border: "1px solid #0f766e", borderRadius: 8, fontSize: 14, boxSizing: "border-box", marginBottom: 10 }} />
+    <select value={personaId} onChange={e => setPersonaId(e.target.value)} size={Math.min(6, Math.max(2, resultados.length))}
+      style={{ width: "100%", padding: 8, border: "1px solid #99f6e4", borderRadius: 8, fontSize: 13, background: "#fff" }}>
+      <option value="">Seleccione un solicitante</option>
+      {resultados.map(item => <option key={item.id} value={item.id}>{item.nombre} — {formatRut(item.rut)} — {item.comite || "Sin comité"}</option>)}
+    </select>
+    <div style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>{resultados.length} solicitantes visibles. El informe vincula registros que compartan el mismo RUT.</div>
+
+    {persona && <div style={{ marginTop: 16, padding: 14, borderRadius: 10, background: "#f0fdfa", border: "1px solid #99f6e4" }}>
+      <div style={{ fontWeight: 900, color: "#115e59" }}>{persona.nombre}</div>
+      <div style={{ marginTop: 5, color: "#475569", fontSize: 12 }}>RUT: {formatRut(persona.rut)} · Comité actual: {persona.comite || "Sin comité"}</div>
+      <div style={{ marginTop: 8, color: "#0f766e", fontSize: 12, fontWeight: 700 }}>
+        Antecedentes encontrados: {vistaPrevia?.entradas.length || 0} comités · {vistaPrevia?.solicitudes.length || 0} solicitudes históricas · {vistaPrevia?.movimientos.length || 0} traslados en observaciones
+      </div>
+    </div>}
+
+    <button onClick={generar} disabled={!persona || generando}
+      style={{ width: "100%", marginTop: 16, padding: "14px 18px", border: "none", borderRadius: 8, background: persona && !generando ? "#0f766e" : "#d1d5db", color: "#fff", fontWeight: 800, cursor: persona && !generando ? "pointer" : "not-allowed" }}>
+      {generando ? "Reuniendo historial..." : "Generar informe de trazabilidad"}
+    </button>
+  </div>;
+}
+
 function PanelIndividual({ personas, solicitudes, comites, onSavePersonas }) {
   const [busqueda, setBusqueda] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
@@ -1346,6 +1645,7 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
   const programas = useMemo(() => combinarProgramasMeta(programasCustom), [programasCustom]);
   const tarjetas = useMemo(() => ([
     { id: "revision", nombre: "INFORME PARA REVISAR SOLICITANTES", descripcion: "Revisa comites, pendientes, VB y condicionales", color: "#0f766e", colorLight: "#ccfbf1", icon: "RS" },
+    { id: "trazabilidad", nombre: "Trazabilidad del Solicitante", descripcion: "Historial de comités, ingresos, salidas y traslados", color: "#0f766e", colorLight: "#f0fdfa", icon: "TR" },
     { id: "individual", nombre: "Informe Individual", descripcion: "Informe por persona o por solicitantes de un comite", color: "#2563eb", colorLight: "#eff6ff", icon: "👤" },
     { id: "completo", nombre: "Informe Completo del Comité", descripcion: "Informe general o detallado de un comité", color: "#7c3aed", colorLight: "#f5f3ff", icon: "📋" },
     ...programas,
@@ -1386,6 +1686,10 @@ export default function InformesView({ personas = [], comites: comitesSupa = [],
 
       {vistaActiva === "revision" && <Section title="INFORME PARA REVISAR SOLICITANTES" subtitle="Todos los comites juntos o el comite seleccionado, con documentos faltantes, VB y condicionales" color="#0f766e">
         <PanelRevisionSolicitantes comites={comites} personas={personas} solicitudes={solicitudes} />
+      </Section>}
+
+      {vistaActiva === "trazabilidad" && <Section title="INFORME DE TRAZABILIDAD DEL SOLICITANTE" subtitle="Reúne todos los comités registrados, estado, fechas y motivos de traslado" color="#0f766e">
+        <PanelTrazabilidadSolicitante comites={comites} personas={personas} solicitudes={solicitudes} />
       </Section>}
 
       {programaActivo && <Section title={`Informes - ${programaActivo.nombre}`} subtitle="Selecciona comite, contenido del informe o informe detallado por solicitante" color={programaActivo.color || "#2563eb"}>

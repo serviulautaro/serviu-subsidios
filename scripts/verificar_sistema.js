@@ -139,6 +139,8 @@ function main() {
   ok("Detalle solicitante permite elegir programa a revisar", contains(app, "Programa a revisar") && contains(app, "misSols.map") && contains(app, "setProgramaTrabajoId"));
   ok("Detalle multiprograma permite mostrar todo o filtrar", contains(app, 'setProgramaTrabajoId("__todos__")') && contains(app, "mostrandoTodosProgramas") && contains(app, "const solicitudesActivasVista = solsTrabajo"));
   ok("Ficha solicitante respeta programa seleccionado", contains(app, "solicitudTrabajoPrincipal") && contains(app, "Mostrara solo la ficha del programa seleccionado") && contains(app, "misSols={solsTrabajo}") && contains(app, "nombreComiteSolicitud"));
+  ok("Informe de trazabilidad reúne comités y traslados por solicitante", contains(informes, "PanelTrazabilidadSolicitante") && contains(informes, "construirTrazabilidadSolicitante") && contains(informes, "Historial de comités del solicitante") && contains(informes, "Movimientos de ingreso, salida o traslado"));
+  ok("Nuevas asignaciones registran origen destino y motivo", contains(app, 'registrarAuditoria?.("mover_solicitante"') && contains(app, "Asignación manual desde ficha") && contains(app, "Asignación desde listado Sin Comité"));
 
   const deleteCalls = [...app.matchAll(/supabase\.from\([^)]+\)\.delete\(\)([^;]+)/g)].map((m) => m[0]);
   deleteCalls.forEach((call, index) => {

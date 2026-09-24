@@ -3889,8 +3889,18 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
     ];
     const sel = todosComites.find(c => c.id === comiteParaAsignar);
     if (!sel) return;
-    await supabase.from("personas").update({ comite_id: sel.id, comite: sel.nombre, tipo_comite: sel.tipo }).eq("id", persona.id);
-    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, comiteId: sel.id, comite: sel.nombre, tipo_comite: sel.tipo } : p));
+    const origen = persona.comite || persona.comiteId || "Sin comité";
+    const usuario = currentUser?.nombre || currentUser?.usuario || "Usuario no identificado";
+    const nota = `[${today()}] Cambio de comité/programa: ${origen} -> ${sel.nombre}. Motivo: Asignación manual desde ficha. Usuario: ${usuario}`;
+    const observaciones = [persona.observaciones, nota].filter(Boolean).join("\n");
+    await supabase.from("personas").update({ comite_id: sel.id, comite: sel.nombre, tipo_comite: sel.tipo, observaciones }).eq("id", persona.id);
+    onSavePersonas(personas.map(p => p.id === persona.id ? { ...p, comiteId: sel.id, comite: sel.nombre, tipo_comite: sel.tipo, observaciones } : p));
+    await registrarAuditoria?.("mover_solicitante", "personas", persona.id, {
+      solicitante: persona.nombre,
+      desde: origen,
+      hacia: sel.nombre,
+      motivo: "Asignación manual desde ficha"
+    });
     setShowAsignarComite(false);
     setComiteParaAsignar("");
   };
@@ -9323,7 +9333,7 @@ function ProgramasView({ solicitudes, programasCustom, onAddPrograma, onDeletePr
 }
 
 // ─── VISTA SIN COMITÉ ─────────────────────────────────────────────────────────
-function SinComiteView({ personas, comites, solicitudes, programasCustom = [], onSavePersonas, onSaveSolicitudes, onDetail }) {
+function SinComiteView({ personas, comites, solicitudes, programasCustom = [], onSavePersonas, onSaveSolicitudes, onDetail, currentUser, registrarAuditoria }) {
   const [search, setSearch] = useState("");
   const [filtroSector, setFiltroSector] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
@@ -9463,15 +9473,27 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
   const migrar = async () => {
     if (!comiteDestino || seleccionados.length === 0) return;
     setMigrando(true);
-    const comite = comites.find(c => c.id === comiteDestino);
+    const comite = comitesDisponibles.find(c => c.id === comiteDestino || c.codigo === comiteDestino);
+    const usuario = currentUser?.nombre || currentUser?.usuario || "Usuario no identificado";
     const nuevasPersonas = personas.map(p => {
       if (!seleccionados.includes(p.id)) return p;
-      return { ...p, comiteId: comiteDestino, comite: comite ? comite.nombre : "" };
+      const origen = nombreComiteAsignado(p) || "Sin comité";
+      const destinoNombre = comite ? comite.nombre : comiteDestino;
+      const nota = `[${today()}] Cambio de comité/programa: ${origen} -> ${destinoNombre}. Motivo: Asignación desde listado Sin Comité. Usuario: ${usuario}`;
+      return { ...p, comiteId: comiteDestino, comite: destinoNombre, observaciones: [p.observaciones, nota].filter(Boolean).join("\n") };
     });
     // Actualizar en Supabase
     const { supabase: sb } = await import("./supabaseClient");
     for (const id of seleccionados) {
-      await sb.from("personas").update({ comite_id: comiteDestino, comite: comite ? comite.nombre : "" }).eq("id", id);
+      const anterior = personas.find(p => p.id === id);
+      const actualizada = nuevasPersonas.find(p => p.id === id);
+      await sb.from("personas").update({ comite_id: comiteDestino, comite: comite ? comite.nombre : "", observaciones: actualizada?.observaciones || "" }).eq("id", id);
+      await registrarAuditoria?.("mover_solicitante", "personas", id, {
+        solicitante: anterior?.nombre || "",
+        desde: nombreComiteAsignado(anterior || {}) || "Sin comité",
+        hacia: comite ? comite.nombre : comiteDestino,
+        motivo: "Asignación desde listado Sin Comité"
+      });
     }
     // Si el comité es de un programa, crear solicitudes automáticamente
     if (comite && comite.programaId) {
@@ -13131,7 +13153,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {datosBaseListos && view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} programasCustom={programasCustom} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} />}
+        {datosBaseListos && view === "sincomite" && <SinComiteView personas={personas} comites={comites} solicitudes={solicitudes} programasCustom={programasCustom} onSavePersonas={savePersonas} onSaveSolicitudes={saveSolicitudes} onDetail={goDetail} currentUser={currentUser} registrarAuditoria={registrarAuditoria} />}
         {datosBaseListos && view === "dashboard" && <Dashboard personas={personas} solicitudes={solicitudes} comites={comites} programasCustom={programasCustom} onNav={nav} />}
         {datosBaseListos && view === "personas" && <PersonasView personas={personas} solicitudes={solicitudes} comites={comites} onSave={savePersonas} onDetail={goDetail} programasCustom={programasCustom} />}
         {datosBaseListos && view === "comites" && <ComitesView comites={comites} personas={personas} solicitudes={solicitudes} onSaveComites={saveComites} onVerDetalle={verDetalleComite} filtroPrograma={filtroPrograma} programasCustom={programasCustom} />}
