@@ -9357,10 +9357,6 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     if (!existe) comitesPorCedula.set(key, [...actuales, nombreComite]);
   });
   const comitesPersonaPorCedula = (p) => comitesPorCedula.get(rutKey(p.rut)) || [];
-  const textoComitesPersona = (p) => {
-    const nombres = comitesPersonaPorCedula(p);
-    return nombres.length ? nombres.map(nombre => `Comité: ${nombre}`).join(" | ") : "SIN COMITE";
-  };
   const tieneSolicitudDesmarque = (personaId) => solicitudes.some(s => esSolicitudDePersona(s, personaId) && solicitudProgramaId(s) === "habitabilidad");
   const solicitudDesmarquePersona = (personaId) => solicitudes.find(s => esSolicitudDePersona(s, personaId) && solicitudProgramaId(s) === "habitabilidad");
   const estadoDesmarquePersona = (p) => {
@@ -9376,44 +9372,36 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
     if (clave.includes("INFORME EN SERVIU")) return "INFORME EN SERVIU";
     return "";
   };
-  const comitePersona = (p) => {
-    return textoComitesPersona(p);
-  };
-  const sinComite = personas.filter(p => {
-    const sinAsignacionDirecta = !p.comiteId || p.comiteId === "" || p.comiteId === null;
-    const esSeguimientoSinComite = estadoSeguimiento(p) && comitesPersonaPorCedula(p).length === 0;
-    return sinAsignacionDirecta || esSeguimientoSinComite;
+  // Esta vista es exclusivamente para personas que terminaron el proceso de
+  // desmarque y que no figuran en ningún comité bajo la misma cédula.
+  const sinComitePorCedula = new Map();
+  personas.forEach(p => {
+    const key = rutKey(p.rut) || p.id;
+    const esDesmarcadoSinComite =
+      tieneSolicitudDesmarque(p.id) &&
+      estadoSeguimiento(p) === "DESMARCADO" &&
+      comitesPersonaPorCedula(p).length === 0;
+    if (esDesmarcadoSinComite && !sinComitePorCedula.has(key)) {
+      sinComitePorCedula.set(key, p);
+    }
   });
+  const sinComite = Array.from(sinComitePorCedula.values())
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
   const sectoresDesmarque = [...new Set(
     sinComite
       .filter(p => tieneSolicitudDesmarque(p.id))
       .map(p => (p.sector || p.direccion || "").toString().trim())
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b, "es"));
-  const seguimientoPorCedula = new Map();
-  personas
-    .filter(p => tieneSolicitudDesmarque(p.id))
-    .forEach(p => {
-      const key = rutKey(p.rut) || p.id;
-      const estado = estadoSeguimiento(p);
-      if (!estado) return;
-      const actual = seguimientoPorCedula.get(key);
-      const item = { persona: p, estado, comite: comitePersona(p) };
-      if (!actual || (actual.comite === "SIN COMITE" && item.comite !== "SIN COMITE")) {
-        seguimientoPorCedula.set(key, item);
-      }
-    });
-  const seguimientoDesmarque = Array.from(seguimientoPorCedula.values())
-    .sort((a, b) => a.persona.nombre.localeCompare(b.persona.nombre, "es"));
   const imprimirSeguimientoDesmarque = () => {
     const esc = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
-    const filas = seguimientoDesmarque.map(({ persona: p, estado, comite }) => ({
+    const filas = sinComite.map(p => ({
       rut: formatRut(p.rut),
       nombre: p.nombre || "",
-      estado,
-      comite
+      direccion: p.direccion || "Sin dirección registrada",
+      estado: "DESMARCADO"
     }));
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Informe Desmarque</title>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Desmarcados sin comité</title>
       <style>
         body{font-family:Arial,sans-serif;color:#111827;margin:28px}
         h1{font-size:20px;color:#1e3a5f;margin:0 0 4px}
@@ -9423,10 +9411,10 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
         th{background:#eff6ff;color:#1e3a5f}
         .sin{color:#b91c1c;font-weight:700}
       </style></head><body>
-      <h1>Informe Habitabilidad de Vivienda (DESMARQUE DE VIVIENDA)</h1>
-      <div class="sub">Estados: DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. Búsqueda de comité realizada solo por cédula de identidad.</div>
-      <table><thead><tr><th>Cédula de identidad</th><th>Solicitante</th><th>Estado</th><th>Comités encontrados</th><th>Línea solicitada</th></tr></thead><tbody>
-      ${filas.map(f => `<tr><td>${esc(f.rut)}</td><td>${esc(f.nombre)}</td><td>${esc(f.estado)}</td><td class="${f.comite === "SIN COMITE" ? "sin" : ""}">${esc(f.comite)}</td><td>${esc(`${f.rut}= Estado=${f.estado}=${f.comite}`)}</td></tr>`).join("")}
+      <h1>Solicitantes desmarcados sin comité</h1>
+      <div class="sub">Personas en estado DESMARCADO que no tienen ningún comité asignado según su cédula de identidad.</div>
+      <table><thead><tr><th>Cédula de identidad</th><th>Solicitante</th><th>Dirección</th><th>Estado</th></tr></thead><tbody>
+      ${filas.map(f => `<tr><td>${esc(f.rut)}</td><td>${esc(f.nombre)}</td><td>${esc(f.direccion)}</td><td>${esc(f.estado)}</td></tr>`).join("")}
       </tbody></table></body></html>`;
     const win = window.open("", "_blank");
     if (!win) return;
@@ -9437,7 +9425,7 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
 
   const filtered = sinComite.filter(p => {
     const q = normLocal(search);
-    const texto = normLocal(`${p.nombre || ""} ${p.rut || ""} ${p.comuna || ""} ${p.sector || ""}`);
+    const texto = normLocal(`${p.nombre || ""} ${p.rut || ""} ${p.comuna || ""} ${p.sector || ""} ${p.direccion || ""}`);
     if (q && !texto.includes(q)) return false;
     if (filtroSector && normLocal(p.sector || p.direccion) !== normLocal(filtroSector)) return false;
     return true;
@@ -9525,16 +9513,24 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
             {sinComite.length} solicitante(s) pendientes de asignación
           </div>
         </div>
-        {seleccionados.length > 0 && (
-          <button onClick={() => setShowModalMigrar(true)}
-            style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-            📦 Migrar {seleccionados.length} seleccionado(s)
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {sinComite.length > 0 && (
+            <button onClick={imprimirSeguimientoDesmarque}
+              style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              Imprimir listado
+            </button>
+          )}
+          {seleccionados.length > 0 && (
+            <button onClick={() => setShowModalMigrar(true)}
+              style={{ background: "#059669", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+              📦 Migrar {seleccionados.length} seleccionado(s)
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10, border: "1px solid #e8e3de", flexWrap: "wrap" }}>
-        <input placeholder="Buscar por nombre, RUT, comuna o sector..." value={search} onChange={e => setSearch(e.target.value)}
+        <input placeholder="Buscar por nombre, RUT, comuna, sector o dirección..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ border: "none", outline: "none", fontSize: 14, flex: 1 }} />
         <select value={filtroSector} onChange={e => setFiltroSector(e.target.value)}
           style={{ border: "1px solid #ddd", borderRadius: 8, padding: "7px 10px", fontSize: 13, minWidth: 230, background: "#fff" }}>
@@ -9549,38 +9545,9 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
         )}
       </div>
 
-      <div style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", marginBottom: 18, border: "1px solid #e8e3de" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: "#1e3a5f", marginBottom: 4 }}>Seguimiento Desmarque</div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>Solicitantes en DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU. La revisión de comité usa solo la cédula de identidad.</div>
-          </div>
-          {seguimientoDesmarque.length > 0 && (
-            <button onClick={imprimirSeguimientoDesmarque}
-              style={{ background: "#1e3a5f", color: "#fff", border: "none", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
-              Imprimir informe
-            </button>
-          )}
-        </div>
-        {seguimientoDesmarque.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#999", padding: "10px 0" }}>No hay solicitantes en estado DESMARCADO, RECHAZADO APELABLE o INFORME EN SERVIU.</div>
-        ) : (
-          <div style={{ display: "grid", gap: 7 }}>
-            {seguimientoDesmarque.map(({ persona: p, estado, comite }) => (
-              <div key={rutKey(p.rut) || p.id} style={{ display: "grid", gridTemplateColumns: "150px 1.4fr 180px 1fr", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 9, background: estado === "DESMARCADO" ? "#E0F7FA" : estado === "RECHAZADO APELABLE" ? "#FEF3C7" : "#ECFDF5", border: "1px solid " + (estado === "DESMARCADO" ? "#99F6E4" : estado === "RECHAZADO APELABLE" ? "#FDE68A" : "#BBF7D0") }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>{formatRut(p.rut)}</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#1e3a5f" }}>{p.nombre}</div>
-                <div style={{ fontSize: 12, fontWeight: 900, color: estado === "DESMARCADO" ? "#0E7490" : estado === "RECHAZADO APELABLE" ? "#A16207" : "#166534" }}>{estado}</div>
-                <div style={{ fontSize: 12, color: comite === "SIN COMITE" ? "#B91C1C" : "#374151", fontWeight: 700 }}>{comite}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {filtered.length === 0 && (
         <div style={{ background: "#fff", borderRadius: 14, padding: 48, textAlign: "center", color: "#999", border: "1px solid #e8e3de" }}>
-          {sinComite.length === 0 ? "✅ Todos los solicitantes tienen comité asignado." : "No hay resultados para la búsqueda."}
+          {sinComite.length === 0 ? "No hay solicitantes desmarcados sin comité asignado." : "No hay resultados para la búsqueda."}
         </div>
       )}
 
@@ -9612,6 +9579,9 @@ function SinComiteView({ personas, comites, solicitudes, programasCustom = [], o
                 <div style={{ fontSize: 13, color: "#888" }}>
                   RUT: {p.rut}{p.comuna ? " · " + p.comuna : ""}
                   {p.fechaIngreso || p.fecha_ingreso ? " · Ingreso: " + (p.fechaIngreso || p.fecha_ingreso) : ""}
+                </div>
+                <div style={{ fontSize: 13, color: "#666", marginTop: 3 }}>
+                  Dirección: {p.direccion || "Sin dirección registrada"}
                 </div>
                 {misSols.length > 0 && (
                   <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 2 }}>
