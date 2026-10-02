@@ -1648,7 +1648,9 @@ function toDbFields(form) {
     // Ya en snake_case — pasan directo:
     // dominiopropiedad, discapacidad, banco, rol, cargo_comite, numero_lista, etc.
   };
-  const EXCLUDE = ["comiteId", "fechaIngreso"]; // campos que no van en update directo
+  // El RUT solo puede modificarse desde el flujo dedicado "Editar cédula".
+  // Las fichas completas nunca deben reenviarlo junto con otros campos.
+  const EXCLUDE = ["id", "rut", "comiteId", "comite_id", "fechaIngreso", "fecha_ingreso"];
   const result = {};
   for (const [k, v] of Object.entries(form)) {
     if (EXCLUDE.includes(k)) continue;
@@ -2627,6 +2629,7 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
   );
 
   const inp = (label, key, type = "text") => {
+    const rutProtegido = key === "rut";
     const onChange = key === "fechaNacimiento" ? e => handleFechaNac(e.target.value)
                    : key === "puntajeRSH"     ? e => handleRSH(e.target.value)
                    : key === "avaluoFiscal"   ? e => setForm({ ...form, [key]: formatPesosChilenos(e.target.value) })
@@ -2634,8 +2637,9 @@ function FichaRural({ persona, misSols, comites, onSave, esCsp }) {
     return (
       <div>
         <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{label}</label>
-        <input type={type} value={form[key] || ""} onChange={onChange}
-          style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, boxSizing: "border-box", background: "#fff" }} />
+        <input type={type} value={form[key] || ""} onChange={onChange} readOnly={rutProtegido}
+          style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #D97706", fontSize: 13, boxSizing: "border-box", background: rutProtegido ? "#f3f4f6" : "#fff" }} />
+        {rutProtegido && <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>RUT protegido: use “Editar cédula”.</div>}
       </div>
     );
   };
@@ -2970,6 +2974,7 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
   );
 
   const inp = (label, key, type = "text") => {
+    const rutProtegido = key === "rut";
     const onChange = key === "fechaNacimiento" ? e => handleFechaNac(e.target.value)
                    : key === "puntajeRSH"     ? e => handleRSH(e.target.value)
                    : key === "avaluoFiscal"   ? e => setForm({ ...form, [key]: formatPesosChilenos(e.target.value) })
@@ -2977,8 +2982,9 @@ function FichaUrbana({ persona, misSols, comites, onSave, esCsp }) {
     return (
       <div>
         <label style={{ fontSize: 10, fontWeight: 700, color: "#555", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{label}</label>
-        <input type={type} value={form[key] || ""} onChange={onChange}
-          style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, boxSizing: "border-box", background: "#fff" }} />
+        <input type={type} value={form[key] || ""} onChange={onChange} readOnly={rutProtegido}
+          style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #059669", fontSize: 13, boxSizing: "border-box", background: rutProtegido ? "#f3f4f6" : "#fff" }} />
+        {rutProtegido && <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>RUT protegido: use “Editar cédula”.</div>}
       </div>
     );
   };
@@ -3348,7 +3354,6 @@ function DetallePersona({ personaId, personas, solicitudes, comites, programasCu
   const [showDesbloquearRespuesta, setShowDesbloquearRespuesta] = useState(false);
   const [solsEditando, setSolsEditando] = useState({}); // {solId: true} para habilitar edición
   const [cuentaAhorroDrafts, setCuentaAhorroDrafts] = useState({});
-  const [rutDocumentoDrafts, setRutDocumentoDrafts] = useState({});
   const [showModalEmigrar, setShowModalEmigrar] = useState(false);
   const [programaEmigrar, setProgramaEmigrar] = useState("");
   const [showDesbloquearPrograma, setShowDesbloquearPrograma] = useState(false);
@@ -3991,8 +3996,20 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
   };
 
   // Sincroniza campos de persona a Supabase y estado local
-  const syncPersona = async (fields) => {
+  const syncPersona = async (fields, opciones = {}) => {
     if (!persona) return;
+    const incluyeRut = Object.prototype.hasOwnProperty.call(fields || {}, "rut");
+    if (incluyeRut && opciones.permitirCambioRut !== true) {
+      throw new Error("El RUT está protegido. Use exclusivamente la opción Editar cédula.");
+    }
+    const fieldsSeguros = { ...(fields || {}) };
+    if (incluyeRut) {
+      const rutFormateado = formatRut(fieldsSeguros.rut || "");
+      if (!rutFormatoChilenoValido(rutFormateado)) {
+        throw new Error("La cédula de identidad no es válida.");
+      }
+      fieldsSeguros.rut = rutFormateado;
+    }
     // Mapeo completo camelCase → snake_case para columnas de Supabase
     const snakeMap = {
       fechaNacimiento:       "fecha_nacimiento",
@@ -4033,7 +4050,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
       estadoDesmarque:       "estado_desmarque",
     };
     const dbFields = {};
-    for (const [k, v] of Object.entries(fields)) dbFields[snakeMap[k] || k] = v;
+    for (const [k, v] of Object.entries(fieldsSeguros)) dbFields[snakeMap[k] || k] = v;
     let guardadoOk = false;
     try {
       const res = await fetch(`${API}/api/db/personas/update`, {
@@ -4042,13 +4059,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         body: JSON.stringify({
           filters: [{ col: "id", value: persona.id }],
           values: dbFields,
+          permitir_cambio_rut: incluyeRut && opciones.permitirCambioRut === true,
         })
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.ok !== false && (!Array.isArray(json.data) || json.data.length > 0)) guardadoOk = true;
       else console.warn("[syncPersona Render] error al actualizar campo(s):", Object.keys(dbFields), json.error || res.status);
     } catch (err) { console.warn("[syncPersona Render] excepcion:", err.message); }
-    if (!guardadoOk) {
+    // Para el RUT no existe respaldo directo a Supabase: si Render rechaza la
+    // validación o detecta duplicidad, el cambio debe detenerse.
+    if (!guardadoOk && !incluyeRut) {
       try {
         const { error } = await supabase.from("personas").update(dbFields).eq("id", persona.id);
         if (error) console.warn("[syncPersona] error al actualizar campo(s):", Object.keys(dbFields), error.message);
@@ -4058,8 +4078,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     if (!guardadoOk) throw new Error("No se pudo guardar el cambio en Render ni en respaldo.");
     onSavePersonas(personas.map(p => {
       if (String(p.id) !== String(persona.id)) return p;
-      const actualizado = { ...p, ...fields };
-      if (!Object.prototype.hasOwnProperty.call(fields, "observaciones") && p.observaciones) {
+      const actualizado = { ...p, ...fieldsSeguros };
+      if (!Object.prototype.hasOwnProperty.call(fieldsSeguros, "observaciones") && p.observaciones) {
         actualizado.observaciones = p.observaciones;
       }
       return actualizado;
@@ -4096,7 +4116,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
     setGuardandoRut(true);
     try {
       const rutAnterior = persona.rut || "";
-      await syncPersona({ rut: rutFormateado });
+      await syncPersona({ rut: rutFormateado }, { permitirCambioRut: true });
 
       const solicitudesActualizadas = solicitudes.map(sol => {
         if (!esSolicitudDePersona(sol, persona.id) || !Array.isArray(sol.documentos)) return sol;
@@ -4312,7 +4332,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (n.includes("cedula") && n.includes("identidad")) {
           const p = valor.split("|");
           const fecha = normalizarFechaInput(p[1]);
-          agregar(updates, "rut", p[0]);
+          // Nunca copiar el RUT desde documentos a la ficha. Documentos antiguos
+          // pueden contener datos desplazados; el RUT se cambia solo con el flujo
+          // dedicado y auditado "Editar cédula".
           agregar(updates, "fechaNacimiento", fecha);
           agregar(updates, "rutColores", p[2]);
           agregar(updates, "adultoMayor", textoAdultoMayor(fecha));
@@ -5065,14 +5087,8 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
 
   const guardarFichaDesmarque = async () => {
     const nombreNormalizado = normalizarNombreSolicitante(fichaForm.nombre || persona.nombre || "");
-    const rutFicha = fichaForm.rut || persona.rut || "";
-    if (!rutFormatoChilenoValido(rutFicha)) {
-      alert("La cédula de identidad no es válida. No se guardó ningún cambio.");
-      return;
-    }
     const campos = {
       nombre: nombreNormalizado,
-      rut: formatRut(rutFicha),
       direccion: fichaForm.direccion || persona.direccion || "",
       telefono: fichaForm.telefono || persona.telefono || "",
       tipo_comite: fichaForm.tipo_comite || persona.tipo_comite || "",
@@ -7768,11 +7784,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                     {/* Cédula: cédula de identidad + Fecha de Nacimiento */}
                     {esCedula && (() => {
                       const cedPartes2 = (doc.valor || "").split("|");
-                      const rut2 = cedPartes2[0] || persona.rut || "";
-                      const rutDraftKey = `${sol.id}:${docIdx}`;
-                      const rutVisible = Object.prototype.hasOwnProperty.call(rutDocumentoDrafts, rutDraftKey)
-                        ? rutDocumentoDrafts[rutDraftKey]
-                        : rut2;
+                      const rut2 = persona.rut || cedPartes2[0] || "";
                       const fecha2 = cedPartes2[1] || "";
                       const tipoRut2 = cedPartes2[2] || persona.rutColores || persona.rutcolores || "";
                       const fechaCedula = /^\d{4}-\d{2}-\d{2}$/.test(fecha2 || "") ? fecha2 : "";
@@ -7790,28 +7802,16 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                           await supabase.from("personas").update({ fecha_nacimiento: fechaCompleta, adultomayor: am }).eq("id", persona.id);
                           onSavePersonas(personas.map(p => p.id===persona.id ? {...p, fechaNacimiento: fechaCompleta, adultoMayor: am} : p));
                         }
-                        await syncPersona({ rut: rutFinal });
                         return true;
                       };
                       const rut2Valido = rutFormatoChilenoValido(rut2);
                       return (
                       <div style={{ marginTop: 8, marginBottom: 4, display: "grid", gap: 5 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px" }}>Cédula de identidad del solicitante</div>
-                        <input type="text" placeholder="ej: 10.398.338-K" value={formatRut(rutVisible)}
+                        <input type="text" value={formatRut(rut2)} readOnly
                           onClick={e => e.stopPropagation()}
-                          onChange={e => setRutDocumentoDrafts(prev => ({ ...prev, [rutDraftKey]: limpiarRut(e.target.value) }))}
-                          onBlur={async () => {
-                            if (!Object.prototype.hasOwnProperty.call(rutDocumentoDrafts, rutDraftKey)) return;
-                            const borrador = rutDocumentoDrafts[rutDraftKey];
-                            if (!rutFormatoChilenoValido(borrador)) {
-                              alert("La cédula de identidad no es válida. El número no fue registrado.");
-                              setRutDocumentoDrafts(prev => { const next = { ...prev }; delete next[rutDraftKey]; return next; });
-                              return;
-                            }
-                            await guardarCedula(borrador, fechaCedula);
-                            setRutDocumentoDrafts(prev => { const next = { ...prev }; delete next[rutDraftKey]; return next; });
-                          }}
-                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid "+(rutFormatoChilenoValido(rutVisible)?"#059669":"#DC2626"), fontSize: 12, background: "#fff", boxSizing: "border-box" }} />
+                          style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1.5px solid "+(rutFormatoChilenoValido(rut2)?"#059669":"#DC2626"), fontSize: 12, background: "#f3f4f6", boxSizing: "border-box" }} />
+                        <div style={{ fontSize: 10, color: "#475569" }}>RUT protegido. Para corregirlo use “Editar cédula” en la cabecera de la ficha.</div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.3px", marginTop: 2 }}>Fecha de Nacimiento</div>
                         <input type="date" value={fechaCedula}
                           onClick={e => e.stopPropagation()}
@@ -8191,9 +8191,11 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
               return (
                 <div key={key}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 3 }}>{label}</div>
-                  <input value={fichaForm[key] || ""} onChange={e => setFichaForm({...fichaForm, [key]: e.target.value})}
+                  <input value={fichaForm[key] || ""} readOnly={key === "rut"}
+                    onChange={e => { if (key !== "rut") setFichaForm({...fichaForm, [key]: e.target.value}); }}
                     placeholder={ph}
-                    style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, background: "#fff" }} />
+                    style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: "1.5px solid #ddd", fontSize: 13, background: key === "rut" ? "#f3f4f6" : "#fff" }} />
+                  {key === "rut" && <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>RUT protegido: use “Editar cédula” en la cabecera.</div>}
                 </div>
               );
             })}
@@ -12622,10 +12624,20 @@ export default function App() {
         return;
       }
     }
-    setPersonas(lista);
     // syncPersona ya guardó mediante PATCH solamente los campos modificados.
     // No volver a enviar fichas completas desde una copia local potencialmente antigua.
-    if (opciones.soloEstadoLocal === true) return true;
+    if (opciones.soloEstadoLocal === true) {
+      setPersonas(lista);
+      return true;
+    }
+    // En cualquier guardado general se conserva el RUT que ya estaba cargado.
+    // Esto evita que formularios antiguos o datos de documentos lo reemplacen.
+    const personasPorIdOriginal = new Map(personas.map(p => [String(p.id), p]));
+    lista = lista.map(p => {
+      const anterior = personasPorIdOriginal.get(String(p.id));
+      return anterior ? { ...p, rut: anterior.rut } : p;
+    });
+    setPersonas(lista);
     const ultima = lista[lista.length - 1];
     if (ultima && !personas.find(p => p.id === ultima.id)) {
       const nuevaPersonaPayload = {
@@ -12768,11 +12780,10 @@ export default function App() {
     } else {
       // Actualizar sin borrar registros ausentes de la lista local.
       // En modo web multiusuario, una lista local incompleta no debe eliminar datos de Supabase.
-      const anterioresPorId = new Map(personas.map(p => [p.id, p]));
       for (const p of lista) {
-        const anterior = anterioresPorId.get(p.id);
+        const anterior = personasPorIdOriginal.get(String(p.id));
         const payload = {
-          id: p.id, nombre: p.nombre, rut: p.rut,
+          nombre: p.nombre,
           fecha_nacimiento: p.fechaNacimiento, telefono: p.telefono,
           email: p.email, direccion: p.direccion, comuna: p.comuna,
           puntaje_rsh: p.puntajeRSH, integrantes_familiares: p.integrantesFamiliares,
@@ -12781,7 +12792,7 @@ export default function App() {
           linea_tiempo_csp: normalizarLineaTiempoCsp(p.lineaTiempoCsp || p.linea_tiempo_csp)
         };
         const payloadAnterior = anterior ? {
-          id: anterior.id, nombre: anterior.nombre, rut: anterior.rut,
+          nombre: anterior.nombre,
           fecha_nacimiento: anterior.fechaNacimiento, telefono: anterior.telefono,
           email: anterior.email, direccion: anterior.direccion, comuna: anterior.comuna,
           puntaje_rsh: anterior.puntajeRSH, integrantes_familiares: anterior.integrantesFamiliares,
@@ -12790,11 +12801,11 @@ export default function App() {
           linea_tiempo_csp: normalizarLineaTiempoCsp(anterior.lineaTiempoCsp || anterior.linea_tiempo_csp)
         } : null;
         if (payloadAnterior && JSON.stringify(payloadAnterior) === JSON.stringify(payload)) continue;
-        await supabase.from("personas").upsert(payload);
+        await supabase.from("personas").update(payload).eq("id", p.id);
         const cambios = resumenCambiosPersona(anterior, p);
         if (cambios.length) {
           await registrarAuditoria("actualizar_solicitantes", "personas", p.id, {
-            solicitante: p.nombre || anterioresPorId.get(p.id)?.nombre || "",
+            solicitante: p.nombre || anterior?.nombre || "",
             cambios,
             resumen: cambios.join("; "),
           });

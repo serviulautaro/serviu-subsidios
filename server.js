@@ -352,6 +352,31 @@ async function migrarArchivosSuapabaseAPG() {
   } catch(e) { console.warn('[migrar] Error:', e.message); }
 }
 let schemaRuntimePromise = null;
+
+const limpiarRutServidor = (rut) => String(rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+const validarRutServidor = (rut) => {
+  const clean = limpiarRutServidor(rut);
+  if (clean.length < 8 || clean.length > 9) return false;
+  const cuerpo = clean.slice(0, -1);
+  const dv = clean.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0;
+  let multiplicador = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += Number(cuerpo[i]) * multiplicador;
+    multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+  }
+  const resto = 11 - (suma % 11);
+  const esperado = resto === 11 ? '0' : resto === 10 ? 'K' : String(resto);
+  return dv === esperado;
+};
+const formatearRutServidor = (rut) => {
+  const clean = limpiarRutServidor(rut);
+  if (clean.length < 2) return clean;
+  const cuerpo = clean.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${cuerpo}-${clean.slice(-1)}`;
+};
+
 async function ensureRuntimeSchema() {
   if (!pgPool) return;
   if (!schemaRuntimePromise) {
@@ -638,6 +663,17 @@ async function pgInsert(table, rows = [], { upsert = false } = {}) {
   await ensureRuntimeSchema();
   let lista = Array.isArray(rows) ? rows : [rows];
   if (!lista.length) return [];
+  if (table === 'personas') {
+    lista = lista.map(row => {
+      if (!Object.prototype.hasOwnProperty.call(row || {}, 'rut')) return row;
+      if (!validarRutServidor(row.rut)) {
+        const err = new Error('La cédula de identidad no es válida. No se guardó el registro.');
+        err.status = 400;
+        throw err;
+      }
+      return { ...row, rut: formatearRutServidor(row.rut) };
+    });
+  }
   if (table === 'solicitudes') {
     lista = [];
     for (const row of (Array.isArray(rows) ? rows : [rows])) {
@@ -1200,20 +1236,43 @@ app.post('/api/db/:table/upsert', async (req, res) => {
 
 app.patch('/api/db/:table/update', async (req, res) => {
   try {
+    const filtros = req.body?.filters || [];
+    let valores = { ...(req.body?.values || {}) };
+    if (req.params.table === 'personas' && Object.prototype.hasOwnProperty.call(valores, 'rut')) {
+      if (req.body?.permitir_cambio_rut !== true) {
+        return res.status(409).json({ ok: false, error: 'El RUT está protegido. Use exclusivamente la opción Editar cédula.' });
+      }
+      if (!validarRutServidor(valores.rut)) {
+        return res.status(400).json({ ok: false, error: 'La cédula de identidad no es válida.' });
+      }
+      const rutCanonico = limpiarRutServidor(valores.rut);
+      const filtroId = filtros.find(f => String(f?.col || '') === 'id' && (!f?.op || f.op === 'eq'));
+      const { rows: duplicados } = await requirePg().query(
+        `SELECT id,nombre FROM personas
+         WHERE regexp_replace(upper(COALESCE(rut,'')), '[^0-9K]', '', 'g')=$1
+           AND ($2::text IS NULL OR id::text<>$2::text)
+         LIMIT 1`,
+        [rutCanonico, filtroId?.value == null ? null : String(filtroId.value)]
+      );
+      if (duplicados.length) {
+        return res.status(409).json({ ok: false, error: `La cédula ya pertenece a ${duplicados[0].nombre || 'otro solicitante'}.` });
+      }
+      valores.rut = formatearRutServidor(valores.rut);
+    }
     let solicitudesAntes = [];
     if (req.params.table === 'solicitudes') {
-      const filtrosAntes = req.body?.filters || [];
+      const filtrosAntes = filtros;
       const valuesAntes = [];
       let sqlAntes = 'SELECT persona_id, programa_id, codigo_comite FROM solicitudes';
       sqlAntes += whereSql(filtrosAntes, valuesAntes);
       solicitudesAntes = (await requirePg().query(sqlAntes, valuesAntes)).rows;
     }
-    const data = await pgUpdate(req.params.table, req.body?.filters || [], req.body?.values || {});
+    const data = await pgUpdate(req.params.table, filtros, valores);
     cacheBootstrap = null;
     if (req.params.table === 'solicitudes') cacheSolicitudes = null;
     await registrarAuditoriaAutomatica(req, 'api_update', req.params.table, data, {
-      filtros: req.body?.filters || [],
-      campos: resumenValoresAuditoria(req.body?.values || {}),
+      filtros,
+      campos: resumenValoresAuditoria(valores),
     });
     res.json({ ok: true, data });
     if (req.params.table === 'solicitudes') {

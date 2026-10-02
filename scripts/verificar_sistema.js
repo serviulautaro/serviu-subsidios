@@ -75,6 +75,11 @@ function main() {
 
   ok("No hay localStorage.clear", !contains(app, "localStorage.clear"));
   ok("No hay window.location.reload forzado", !contains(app, "window.location.reload"));
+  ok("RUT no se copia automáticamente desde documentos", !contains(app, 'agregar(updates, "rut", p[0])'));
+  ok("Fichas completas excluyen el RUT de actualizaciones", contains(app, 'const EXCLUDE = ["id", "rut"'));
+  ok("Guardados generales conservan el RUT existente", contains(app, "return anterior ? { ...p, rut: anterior.rut } : p") && !contains(app, 'await supabase.from("personas").upsert(payload)'));
+  ok("Cambio de RUT exige flujo dedicado en cliente", contains(app, "permitirCambioRut") && contains(app, "Use exclusivamente la opción Editar cédula") && contains(app, "if (!guardadoOk && !incluyeRut)"));
+  ok("Cambio de RUT exige autorización y validación en servidor", contains(server, "permitir_cambio_rut") && contains(server, "validarRutServidor") && contains(server, "La cédula ya pertenece"));
   ok("Update backend sin filtros bloqueado", contains(server, "Update sin filtros bloqueado"));
   ok("Rutas de documentos quedan dentro de carpeta documentos", contains(server, "safeDocsPath"));
   ok("Visor prioriza documentos locales sobre Supabase", contains(app, "/archivo-local/") && contains(app, "esUrlSupabaseStorage") && contains(server, "buscarArchivoLocal"));
