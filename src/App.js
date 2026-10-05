@@ -909,10 +909,17 @@ const deduplicarComitesSistema = (lista = []) => {
 const personaPerteneceAComite = (persona = {}, comiteRef = {}, solicitudes = []) => {
   const refs = referenciasComite(comiteRef);
   const personaIdComite = String(persona.comiteId || persona.comite_id || "");
-  if (personaIdComite && refs.includes(personaIdComite)) return true;
   const nombreComite = normComiteComparar(comiteRef.nombre);
   const nombrePersona = normComiteComparar(persona.comite);
-  if (nombreComite && nombrePersona && nombreComite === nombrePersona) return true;
+  const coincideAsignacionActual =
+    (personaIdComite && refs.includes(personaIdComite)) ||
+    (nombreComite && nombrePersona && nombreComite === nombrePersona);
+
+  // La asignacion guardada en la persona es la fuente de verdad para los
+  // listados actuales. Las solicitudes anteriores se conservan como historial,
+  // pero no deben volver a mostrar al solicitante en un comite de origen.
+  if (personaIdComite || nombrePersona) return Boolean(coincideAsignacionActual);
+
   const esComiteDesmarqueRef = refs.includes("comite_desmarque") ||
     (comiteRef.programaId || comiteRef.programa_id) === "habitabilidad" ||
     nombreComite === normComiteComparar("DESMARQUE DE VIVIENDA");
