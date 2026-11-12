@@ -4704,7 +4704,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
         if (nombreLower.includes("informe") || nombreLower.includes("dom") || nombreLower.includes("inspeccion")) {
           setShowModalInformeDom(true);
         } else if (nombreLower.includes("comprobante") || nombreLower.includes("serviu") || nombreLower.includes("respuesta") || nombreLower.includes("desmarque")) {
-          setShowModalRespuestaServiu(true);
+          abrirResultadoRespuestaServiuConClave(solicitudTrabajoPrincipal?.id || null);
         }
       }
     } catch (err) { alert("Error al subir el archivo: " + (err.message || "")); }
@@ -6351,7 +6351,7 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                       setSubiendo(true);
                       try {
                         await subirArchivoServidor(file, carpeta);
-                        setShowModalRespuestaServiu(true);
+                        abrirResultadoRespuestaServiuConClave(solicitudTrabajoPrincipal?.id || null);
                       } catch (err) { alert("Error al subir Respuesta SERVIU: " + (err.message || "")); }
                       finally { setSubiendo(false); e.target.value = ""; }
                     }} />
@@ -7676,10 +7676,9 @@ ${v.profesional_recibio ? `<div class="field"><div class="field-label">Profesion
                                 {doc.fecha_resp && <span>· Fecha: {doc.fecha_resp}</span>}
                               </div>
                             )}
-                            <button onClick={async () => {
-                                await actualizarDocumentoSolicitud(sol.id, docIdx, { entregado: false, valor: "" }, doc);
-                              }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "#DC2626", color: "#fff", border: "none", cursor: "pointer", marginTop: 4 }}>
-                                Modificar resultado
+                            <button type="button" onClick={() => abrirResultadoRespuestaServiuConClave(sol.id)}
+                              style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "#DC2626", color: "#fff", border: "none", cursor: "pointer", marginTop: 4 }}>
+                                Modificar resultado (clave administrador)
                               </button>
                           </div>
                         )}
